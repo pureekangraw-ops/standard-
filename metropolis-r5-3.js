@@ -1,8 +1,8 @@
 "use strict";
 
-/* YGPH METROPOLIS — three-color live status signal + live-only render boundary */
+/* YGPH STANDARD — three-color live status signal + live-only render boundary */
 
-const METROPOLIS_R5_3_VERSION = "5.3.3-live-authority";
+const METROPOLIS_R5_3_VERSION = "5.3.4-standard-live-authority";
 const STATUS_SIGNALS = Object.freeze({ GREEN: "GREEN", YELLOW: "YELLOW", RED: "RED", HIDDEN: "HIDDEN" });
 
 function statusSignal(item, today) {
@@ -21,8 +21,27 @@ function liveStatusSignal(item, sourceStatus, today) {
   return statusSignal(item, today);
 }
 
+function selectLiveRecords(records) {
+  return Array.isArray(records)
+    ? records.filter(record => String(record?.status || "").toUpperCase() !== "CANCELLED")
+    : [];
+}
+
+function selectLiveCalendar(calendar, sourceStatusOf = () => null, today = "") {
+  return Array.isArray(calendar)
+    ? calendar.filter(item => liveStatusSignal(item, sourceStatusOf(item), today) !== STATUS_SIGNALS.HIDDEN)
+    : [];
+}
+
 if (typeof module === "object" && module.exports) {
-  module.exports = { METROPOLIS_R5_3_VERSION, STATUS_SIGNALS, statusSignal, liveStatusSignal };
+  module.exports = {
+    METROPOLIS_R5_3_VERSION,
+    STATUS_SIGNALS,
+    statusSignal,
+    liveStatusSignal,
+    selectLiveRecords,
+    selectLiveCalendar
+  };
 }
 
 if (typeof window !== "undefined" && typeof document !== "undefined") {
@@ -33,10 +52,14 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       return typeof localISO === "function" ? localISO() : new Date().toISOString().slice(0, 10);
     }
 
+    function sourceStatusOf(item) {
+      if (!item || typeof findSource !== "function") return null;
+      return findSource(item.source, item.sourceId)?.status || null;
+    }
+
     function queueSignal(item) {
       if (!item) return STATUS_SIGNALS.HIDDEN;
-      const source = typeof findSource === "function" ? findSource(item.source, item.sourceId) : null;
-      return liveStatusSignal(item, source?.status, todayKey());
+      return liveStatusSignal(item, sourceStatusOf(item), todayKey());
     }
 
     function signalClass(signal) {
@@ -49,51 +72,13 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       return "รอดำเนินการ";
     }
 
-    function withLiveCalendar(callback) {
-      if (typeof state === "undefined" || !state || !Array.isArray(state.calendar)) return callback();
-      if (typeof queueFilter !== "undefined" && queueFilter === "CANCELLED") queueFilter = "ALL";
-      const original = state.calendar;
-      state.calendar = original.filter(item => queueSignal(item) !== STATUS_SIGNALS.HIDDEN);
-      try {
-        return callback();
-      } finally {
-        state.calendar = original;
-      }
-    }
-
-    function withoutCancelled(records) {
-      return Array.isArray(records)
-        ? records.filter(record => String(record?.status || "").toUpperCase() !== "CANCELLED")
-        : records;
-    }
-
-    function withLiveSourceRecords(callback) {
-      if (typeof state === "undefined" || !state) return callback();
-      const snapshots = {
-        sales: state.store?.sales,
-        purchases: state.store?.purchases,
-        obligations: state.ledger?.obligations
-      };
-
-      if (state.store && Array.isArray(snapshots.sales)) state.store.sales = withoutCancelled(snapshots.sales);
-      if (state.store && Array.isArray(snapshots.purchases)) state.store.purchases = withoutCancelled(snapshots.purchases);
-      if (state.ledger && Array.isArray(snapshots.obligations)) state.ledger.obligations = withoutCancelled(snapshots.obligations);
-
-      try {
-        return callback();
-      } finally {
-        if (state.store && Array.isArray(snapshots.sales)) state.store.sales = snapshots.sales;
-        if (state.store && Array.isArray(snapshots.purchases)) state.store.purchases = snapshots.purchases;
-        if (state.ledger && Array.isArray(snapshots.obligations)) state.ledger.obligations = snapshots.obligations;
-      }
-    }
-
     function paintMonthGrid() {
       if (typeof state === "undefined" || !Array.isArray(state?.calendar)) return;
       const today = todayKey();
+      const selected = selectLiveCalendar(state.calendar, sourceStatusOf, today);
       document.querySelectorAll("#monthGrid .day-cell[data-date]").forEach(cell => {
         const date = cell.dataset.date;
-        const items = state.calendar.filter(item => item.due === date && queueSignal(item) !== STATUS_SIGNALS.HIDDEN);
+        const items = selected.filter(item => item.due === date);
         let count = cell.querySelector(".day-count");
         if (items.length) {
           if (!count) {
@@ -169,22 +154,41 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       });
     }
 
+    function renderLiveSourceLists() {
+      if (typeof state === "undefined" || !state || typeof recordHtml !== "function" || typeof lastFive !== "function") return;
+
+      const sales = selectLiveRecords(state.store?.sales);
+      const purchases = selectLiveRecords(state.store?.purchases);
+      const obligations = selectLiveRecords(state.ledger?.obligations);
+
+      const saleList = document.getElementById("saleList");
+      if (saleList) saleList.innerHTML = sales.length ? lastFive(sales).map(sale => recordHtml("🧾", `${sale.customer} · ${sale.qty} ชิ้น`, `${dateTH(sale.date)} · รับแล้ว ${money(sale.receivedSatang)} · ค้าง ${money(sale.outstandingSatang)}`, `${money(sale.totalSatang)} ฿`, queueFor("STORE", sale.id)?.status || sale.status, "STORE", sale.id)).join("") : '<div class="empty">ยังไม่มีรายการขาย</div>';
+
+      const purchaseList = document.getElementById("purchaseList");
+      if (purchaseList) purchaseList.innerHTML = purchases.length ? lastFive(purchases).map(item => recordHtml("📦", item.name, `${item.qty} ชิ้น · ${dateTH(item.date)}`, `${money(item.costSatang)} ฿`, queueFor("STORE", item.id)?.status || item.status, "STORE", item.id)).join("") : '<div class="empty">ยังไม่มีรายการรับสินค้า</div>';
+
+      const debtList = document.getElementById("debtList");
+      if (debtList) debtList.innerHTML = obligations.length ? lastFive(obligations).map(item => {
+        const paidInstallments = (item.installments || []).filter(entry => entry.status === "COMPLETED").length;
+        return recordHtml("🧷", item.name, `${item.installmentCount} งวด · จ่ายแล้ว ${paidInstallments}/${item.installmentCount} · เหลือ ${money(item.remainingSatang)}`, `${money(item.originalSatang)} ฿`, queueFor("LEDGER", item.id)?.status || item.status, "LEDGER", item.id);
+      }).join("") : '<div class="empty">ยังไม่มีภาระ</div>';
+
+      const countButtons = [
+        ["allSalesBtn", sales],
+        ["allPurchasesBtn", purchases],
+        ["allDebtsBtn", obligations]
+      ];
+      countButtons.forEach(([id, records]) => document.getElementById(id)?.classList.toggle("hidden", records.length <= 5));
+      if (typeof bindGoCalendar === "function") bindGoCalendar();
+    }
+
     function hideCancelledRecordCards() {
       document.querySelectorAll(".record .status.cancelled").forEach(status => status.closest(".record")?.remove());
     }
 
-    function hideCancelledControls() {
-      document.querySelector('[data-filter="CANCELLED"]')?.remove();
-      const count = document.getElementById("calCancelled");
-      const tile = count?.closest(".mini");
-      if (tile?.parentElement) tile.parentElement.classList.add("r53-three-stats");
-      tile?.classList.add("hidden");
-    }
-
     function syncLiveCounters() {
       if (typeof state === "undefined" || !state || !Array.isArray(state.calendar)) return;
-      const active = state.calendar.filter(item =>
-        queueSignal(item) !== STATUS_SIGNALS.HIDDEN &&
+      const active = selectLiveCalendar(state.calendar, sourceStatusOf, todayKey()).filter(item =>
         !["COMPLETED", "CANCELLED"].includes(String(item.status || "").toUpperCase())
       );
       const directionOf = item => typeof queueDirection === "function" ? queueDirection(item) : "OTHER";
@@ -208,49 +212,31 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       setCounter("ledgerPendingCount", `${outgoing} รายการ`);
     }
 
-    function patchLiveRenderers() {
-      if (globalThis.__YGPH_R53_LIVE_RENDERERS_PATCHED__) return;
-
-      if (typeof renderCalendar === "function") {
-        const baseRenderCalendar = renderCalendar;
-        renderCalendar = function(...args) {
-          return withLiveCalendar(() => baseRenderCalendar(...args));
-        };
-      }
-      if (typeof renderStore === "function") {
-        const baseRenderStore = renderStore;
-        renderStore = function(...args) {
-          return withLiveSourceRecords(() => baseRenderStore(...args));
-        };
-      }
-      if (typeof renderLedger === "function") {
-        const baseRenderLedger = renderLedger;
-        renderLedger = function(...args) {
-          return withLiveSourceRecords(() => baseRenderLedger(...args));
-        };
-      }
-      if (typeof historyHtml === "function") {
-        const baseHistoryHtml = historyHtml;
-        historyHtml = function(...args) {
-          return withLiveSourceRecords(() => baseHistoryHtml(...args));
-        };
-      }
-
-      globalThis.__YGPH_R53_LIVE_RENDERERS_PATCHED__ = true;
+    function patchHistoryHtml() {
+      if (globalThis.__YGPH_R53_HISTORY_SELECTOR_PATCHED__ || typeof historyHtml !== "function") return;
+      const baseHistoryHtml = historyHtml;
+      historyHtml = function(kind) {
+        if (typeof state === "undefined" || !state) return baseHistoryHtml(kind);
+        if (kind === "sales") return sortNewest(selectLiveRecords(state.store?.sales)).map(item => recordHtml("🧾", `${item.customer} · ${item.qty} ชิ้น`, `${dateTH(item.date)} · ค้าง ${money(item.outstandingSatang)}`, `${money(item.totalSatang)} ฿`, item.status, "STORE", item.id)).join("");
+        if (kind === "purchases") return sortNewest(selectLiveRecords(state.store?.purchases)).map(item => recordHtml("📦", item.name, `${item.qty} ชิ้น · ${dateTH(item.date)}`, `${money(item.costSatang)} ฿`, item.status, "STORE", item.id)).join("");
+        if (kind === "debts") return sortNewest(selectLiveRecords(state.ledger?.obligations)).map(item => recordHtml("🧷", item.name, `${item.installmentCount} งวด · เหลือ ${money(item.remainingSatang)}`, `${money(item.originalSatang)} ฿`, item.status, "LEDGER", item.id)).join("");
+        return baseHistoryHtml(kind);
+      };
+      globalThis.__YGPH_R53_HISTORY_SELECTOR_PATCHED__ = true;
     }
 
-    function patchFlowCalendarFocus() {
-      if (globalThis.__YGPH_R53_FLOW_FOCUS_PATCHED__ || typeof flowRenderCalendarFocus !== "function") return;
-      const baseFlowCalendarFocus = flowRenderCalendarFocus;
-      flowRenderCalendarFocus = function(...args) {
-        return withLiveCalendar(() => baseFlowCalendarFocus(...args));
+    function patchFlowCalendarItems() {
+      if (globalThis.__YGPH_R53_FLOW_ITEMS_PATCHED__ || typeof flowCalendarItems !== "function") return;
+      const baseFlowCalendarItems = flowCalendarItems;
+      flowCalendarItems = function(...args) {
+        return selectLiveCalendar(baseFlowCalendarItems(...args), sourceStatusOf, todayKey());
       };
-      globalThis.__YGPH_R53_FLOW_FOCUS_PATCHED__ = true;
+      globalThis.__YGPH_R53_FLOW_ITEMS_PATCHED__ = true;
     }
 
     function apply() {
       document.documentElement.dataset.metropolisR53 = METROPOLIS_R5_3_VERSION;
-      hideCancelledControls();
+      renderLiveSourceLists();
       paintMonthGrid();
       paintQueueCards();
       paintHomeTasks();
@@ -268,15 +254,18 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     }
 
     function install() {
-      if (globalThis.__YGPH_METROPOLIS_R53_OBSERVER__) return;
-      patchLiveRenderers();
-      patchFlowCalendarFocus();
+      if (globalThis.__YGPH_STANDARD_R53_RUNTIME__) return;
+      globalThis.__YGPH_STANDARD_R53_RUNTIME__ = true;
+      patchHistoryHtml();
+      patchFlowCalendarItems();
+      if (globalThis.YGPHRuntime?.register) {
+        globalThis.YGPHRuntime.register("STANDARD_R53_LIVE_STATUS", {
+          afterRender: queueApply,
+          afterPageChange: queueApply
+        });
+      }
       apply();
-      const observer = new MutationObserver(queueApply);
-      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "data-metropolis-page"] });
-      globalThis.__YGPH_METROPOLIS_R53_OBSERVER__ = observer;
-      setTimeout(queueApply, 100);
-      setTimeout(queueApply, 400);
+      queueApply();
     }
 
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install, { once: true });
