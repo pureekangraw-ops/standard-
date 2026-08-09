@@ -236,7 +236,7 @@ function flowReconciliation(enriched, previousMeta, currentMeta, balanceEvidence
     const subtype = String(tx.subtype || "").replace(/^REVERSAL_/, "");
     const expectsOwnerRecord = [
       "PURCHASE_PAYMENT", "SALE_INITIAL_RECEIPT", "SALE_RECEIPT", "RECEIVABLE_RECLASSIFICATION",
-      "RIDE_CASH_INCOME", "RIDE_CREDIT_WITHDRAWAL", "RIDE_INCOME", "OBLIGATION_PAYMENT"
+      "OBLIGATION_PAYMENT"
     ].includes(subtype);
     if (!expectsOwnerRecord) return false;
     return !findSource(tx.source, tx.sourceId);

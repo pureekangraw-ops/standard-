@@ -1,9 +1,9 @@
 {
-  "release": "1.0.0-standard-baseline",
+  "release": "1.0.0-defrag-current",
   "product": "YGPH STANDARD",
   "releaseDate": "2026-08-09",
   "sourceProduct": "YGPH METROPOLIS 4.2.4",
-  "sourceCommit": "7329448eef685d72364c42f8d0373483e6e303d0",
+  "sourceCommit": "70600e5811ba266cb57a843bd5ae6a1732fbcb91",
   "stateSchema": 4,
   "domains": [
     "STORE",
@@ -18,18 +18,90 @@
     "vaultFormat": 1
   },
   "serviceWorker": {
-    "releaseId": "v1.0.0-20260809-r1-standard-baseline",
+    "releaseId": "v1.0.0-20260809-r2-defrag-current",
     "cachePrefix": "ygph-standard-app-",
     "metaCache": "ygph-standard-meta"
   },
   "validation": {
     "command": "npm run deploy:gate",
     "scope": [
-      "standard smoke",
+      "defrag runtime contracts",
+      "publication contract",
       "syntax",
       "utf8",
       "no executable ride references"
     ]
   },
-  "note": "New product baseline. No owner runtime data is included."
+  "note": "STANDARD Current follows the verified METROPOLIS shared-logic baseline, removes RIDE from executable contracts, and keeps its own product/data boundary. No owner runtime data is included.",
+  "productionFiles": [
+    {
+      "path": "index.html"
+    },
+    {
+      "path": "manifest.webmanifest"
+    },
+    {
+      "path": "styles.css"
+    },
+    {
+      "path": "flow-era.css"
+    },
+    {
+      "path": "metropolis-v4.css"
+    },
+    {
+      "path": "metropolis-r5.css"
+    },
+    {
+      "path": "metropolis-r5-1.css"
+    },
+    {
+      "path": "metropolis-r5-2.css"
+    },
+    {
+      "path": "metropolis-r5-3.css"
+    },
+    {
+      "path": "metropolis-r5-4.css"
+    },
+    {
+      "path": "sw-bootstrap.js"
+    },
+    {
+      "path": "highway-gate.js"
+    },
+    {
+      "path": "app.js"
+    },
+    {
+      "path": "flow-era.js"
+    },
+    {
+      "path": "metropolis-v4.js"
+    },
+    {
+      "path": "metropolis-r5.js"
+    },
+    {
+      "path": "metropolis-r5-1.js"
+    },
+    {
+      "path": "metropolis-r5-2.js"
+    },
+    {
+      "path": "metropolis-r5-3.js"
+    },
+    {
+      "path": "metropolis-r5-4.js"
+    },
+    {
+      "path": "sw.js"
+    },
+    {
+      "path": "icon-192.png"
+    },
+    {
+      "path": "icon-512.png"
+    }
+  ]
 }

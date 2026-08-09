@@ -9,7 +9,6 @@ node_modules/**
 !/manifest.webmanifest
 !/styles.css
 !/flow-era.css
-!/flow-era-3.5.css
 !/metropolis-v4.css
 !/metropolis-r5.css
 !/metropolis-r5-1.css
@@ -20,7 +19,6 @@ node_modules/**
 !/highway-gate.js
 !/app.js
 !/flow-era.js
-!/flow-era-3.5.js
 !/metropolis-v4.js
 !/metropolis-r5.js
 !/metropolis-r5-1.js
