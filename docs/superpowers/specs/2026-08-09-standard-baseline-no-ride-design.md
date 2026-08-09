@@ -1,15 +1,31 @@
-# STANDARD Baseline — METROPOLIS 4.2.3 without RIDE
+# STANDARD Baseline — METROPOLIS upstream without RIDE
 
 Date: 2026-08-09
 Status: Approved design draft for owner review
-Source baseline: `pureekangraw-ops/ygph-metropolis` at current METROPOLIS 4.2.3
+Source upstream: `pureekangraw-ops/ygph-metropolis`
 Target repository: `pureekangraw-ops/standard-`
 
 ## Goal
 
-Create a clean STANDARD baseline by copying the current METROPOLIS 4.2.3 application into the new repository and removing the RIDE domain completely.
+Create a clean STANDARD baseline by copying the current stable METROPOLIS application into the new repository and removing the RIDE domain completely.
+
+METROPOLIS remains the upstream/source of truth for shared application logic. Any shared behavior change that belongs in both products must be implemented and verified in METROPOLIS first. STANDARD then copies the latest stable METROPOLIS baseline and removes RIDE once, instead of implementing the same shared logic twice.
 
 The target should remain recognizably the same application foundation, with the same core security, persistence, calendar, ledger, store, history/reporting, settings, import/export, dashboard, and offline behavior, but with no RIDE feature or RIDE data model left behind.
+
+## Upstream-first rule
+
+Before the initial STANDARD code copy:
+
+1. Finish pending shared logic changes in METROPOLIS.
+2. Verify those changes in METROPOLIS and advance its normal release/version as required.
+3. Treat that verified METROPOLIS release/commit as the STANDARD source baseline.
+4. Copy the baseline to `standard-`.
+5. Remove RIDE only in STANDARD.
+
+Shared examples include dashboard behavior, obligation/ledger behavior, calendar behavior, navigation, import/export, Vault/security, and other logic that should behave the same in both products.
+
+STANDARD-specific behavior must not be backported into METROPOLIS unless it is genuinely shared.
 
 ## Keep
 
@@ -52,9 +68,9 @@ A fresh STANDARD installation starts with an empty new Vault/state using only th
 
 ## Implementation approach
 
-Use the existing 4.2.3 code as the source of truth and remove RIDE in place rather than rebuilding the app from scratch.
+Do not fork an old fixed release just because it already exists. Wait for the pending shared METROPOLIS logic to be completed and verified, then use that latest stable state as the source baseline.
 
-Work in this order:
+After the baseline is ready, work in this order:
 
 1. Copy the application source and build/release support files required by the retained app.
 2. Remove RIDE from HTML/navigation and user-visible strings.
@@ -74,7 +90,7 @@ Retained-domain YGPH_EXCHANGE records may remain compatible only where their sou
 
 ## Versioning
 
-Do not present the new repository as METROPOLIS 4.2.3 production. Give STANDARD its own visible product/release identity during implementation while preserving attribution to the 4.2.3 source baseline in documentation.
+Do not present the new repository as the same production METROPOLIS release. Give STANDARD its own visible product/release identity during implementation while preserving attribution to the exact METROPOLIS source baseline in documentation.
 
 ## Deployment scope
 
@@ -84,6 +100,7 @@ Deployment of STANDARD is a separate step after the repository passes its focuse
 
 ## Success criteria
 
+- The copied baseline includes all shared logic already verified in METROPOLIS.
 - App boots and creates/unlocks a fresh encrypted Vault.
 - No RIDE page/card/menu exists.
 - Fresh durable state has no `ride` property.
@@ -94,8 +111,9 @@ Deployment of STANDARD is a separate step after the repository passes its focuse
 
 ## Non-goals
 
+- Re-implementing shared logic independently in STANDARD.
 - Redesigning the UI.
 - Refactoring unrelated METROPOLIS architecture.
 - Migrating the owner's live METROPOLIS data.
 - Deploying over the existing METROPOLIS Worker.
-- Adding new STANDARD features in this pass.
+- Adding new STANDARD-only features in this pass.
