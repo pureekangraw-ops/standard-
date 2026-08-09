@@ -1,0 +1,34 @@
+name: Temporary STANDARD Publication Defrag Apply
+
+on:
+  push:
+    branches:
+      - defrag/standard-upstream-sync
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[publication-defragged]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out defrag branch
+        uses: actions/checkout@v4
+        with:
+          ref: defrag/standard-upstream-sync
+      - name: Apply publication defrag
+        run: python3 scripts/apply-standard-publication-defrag.py
+      - name: Verify patch shape
+        run: git diff --check
+      - name: Commit publication Current
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sw.js .assetsignore RELEASE_MANIFEST.json
+          if git diff --cached --quiet; then
+            echo "No publication changes to commit"
+            exit 0
+          fi
+          git commit -m "refactor: align STANDARD publication with Current [publication-defragged]"
+          git push origin HEAD:defrag/standard-upstream-sync
