@@ -398,6 +398,10 @@ function metropolisInstall() {
   metropolisRegisterRuntime();
   metropolisApplyPage(metropolisActivePage());
   metropolisRefresh();
+  YGPHRuntime.run("afterRender", {
+    page: metropolisActivePage(),
+    stateRevision: typeof state !== "undefined" && state ? state.revision : null
+  });
 }
 
 if (document.readyState === "loading") {
