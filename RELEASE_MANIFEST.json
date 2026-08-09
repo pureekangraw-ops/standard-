@@ -1,0 +1,35 @@
+{
+  "release": "1.0.0-standard-baseline",
+  "product": "YGPH STANDARD",
+  "releaseDate": "2026-08-09",
+  "sourceProduct": "YGPH METROPOLIS 4.2.4",
+  "sourceCommit": "7329448eef685d72364c42f8d0373483e6e303d0",
+  "stateSchema": 4,
+  "domains": [
+    "STORE",
+    "LEDGER",
+    "CALENDAR"
+  ],
+  "database": {
+    "name": "ygph-standard-secure",
+    "version": 1,
+    "store": "kv",
+    "vaultKey": "vault",
+    "vaultFormat": 1
+  },
+  "serviceWorker": {
+    "releaseId": "v1.0.0-20260809-r1-standard-baseline",
+    "cachePrefix": "ygph-standard-app-",
+    "metaCache": "ygph-standard-meta"
+  },
+  "validation": {
+    "command": "npm run deploy:gate",
+    "scope": [
+      "standard smoke",
+      "syntax",
+      "utf8",
+      "no executable ride references"
+    ]
+  },
+  "note": "New product baseline. No owner runtime data is included."
+}
