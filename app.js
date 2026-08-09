@@ -1451,8 +1451,8 @@ function applyTheme() {
 function statusClass(status) { return ["OPEN", "PARTIAL", "COMPLETED", "CANCELLED", "VERIFY", "ACTIVE", "SETTLED", "PENDING", "CREDIT"].includes(status) ? status.toLowerCase() : "open"; }
 function statusLabel(status) { return ({ OPEN: "รอดำเนินการ", PARTIAL: "ทำบางส่วนแล้ว", COMPLETED: "เสร็จแล้ว", CANCELLED: "ยกเลิกแล้ว", VERIFY: "ต้องตรวจสอบ", ACTIVE: "ใช้งานอยู่", SETTLED: "เข้าการเงินแล้ว", PENDING: "กำลังดำเนินการ", CREDIT: "เครดิตในแอป" })[status] || status; }
 function sourceLabel(source) { return ({ STORE: "ร้านค้า", LEDGER: "การเงิน", CALENDAR: "ปฏิทิน", OTHER_INCOME: "รายรับอื่น", GENERAL: "ทั่วไป" })[source] || source; }
-function actionLabel(type) { return ({ RECEIVE_CUSTOMER_PAYMENT: "รับเงินลูกค้า", PURCHASE_RETURN_WINDOW: "ตรวจ/คืนสินค้า", SETTLE_RIDE_JOB: "ยืนยันรายได้งานเดิม", CONFIRM_RIDE_CREDIT_WITHDRAWAL: "ยืนยันเงินเครดิตเข้า", PAY_OBLIGATION: "จ่ายภาระ", PAY_OBLIGATION_INSTALLMENT: "จ่ายงวดภาระ", VERIFY_SOURCE: "ตรวจข้อมูลต้นทาง" })[type] || type; }
-function queueDirection(item) { if (["RECEIVE_CUSTOMER_PAYMENT", "SETTLE_RIDE_JOB", "CONFIRM_RIDE_CREDIT_WITHDRAWAL"].includes(item.actionType)) return "IN"; if (["PAY_OBLIGATION", "PAY_OBLIGATION_INSTALLMENT"].includes(item.actionType)) return "OUT"; if (item.actionType === "VERIFY_SOURCE") return "VERIFY"; return "OTHER"; }
+function actionLabel(type) { return ({ RECEIVE_CUSTOMER_PAYMENT: "รับเงินลูกค้า", PURCHASE_RETURN_WINDOW: "ตรวจ/คืนสินค้า", PAY_OBLIGATION: "จ่ายภาระ", PAY_OBLIGATION_INSTALLMENT: "จ่ายงวดภาระ", VERIFY_SOURCE: "ตรวจข้อมูลต้นทาง" })[type] || type; }
+function queueDirection(item) { if (item.actionType === "RECEIVE_CUSTOMER_PAYMENT") return "IN"; if (["PAY_OBLIGATION", "PAY_OBLIGATION_INSTALLMENT"].includes(item.actionType)) return "OUT"; if (item.actionType === "VERIFY_SOURCE") return "VERIFY"; return "OTHER"; }
 function needsLocalVerification(item) { return integrityGate(item).state !== "TRUSTED" || freshnessGate(item).state !== "FRESH"; }
 function gateLabel(item) {
   if (integrityGate(item).state !== "TRUSTED") return { text: "รอบิ๊กตรวจในเครื่อง", cls: "check" };
@@ -1606,7 +1606,7 @@ function queueActionButtons(item) {
     buttons.push(`<button class="${incoming ? "receive" : "pay"}" data-partial="${item.id}">${incoming ? "รับบางส่วน" : "จ่ายบางส่วน"}</button>`);
     buttons.push(`<button class="${incoming ? "receive" : "pay"}" data-full="${item.id}">${incoming ? "รับครบ" : "จ่ายครบ"}</button>`);
   } else {
-    const label = item.actionType === "PURCHASE_RETURN_WINDOW" ? "เก็บสินค้าไว้" : item.actionType === "VERIFY_SOURCE" ? "ตรวจแล้ว" : item.actionType === "CONFIRM_RIDE_CREDIT_WITHDRAWAL" ? "ยืนยันเงินเข้า" : "ยืนยันรายได้";
+    const label = item.actionType === "PURCHASE_RETURN_WINDOW" ? "เก็บสินค้าไว้" : item.actionType === "VERIFY_SOURCE" ? "ตรวจแล้ว" : "ยืนยัน";
     buttons.push(`<button class="settle" data-complete="${item.id}">${label}</button>`);
   }
   buttons.push(`<button class="edit" data-move="${item.id}">เลื่อน</button>`);
@@ -1764,7 +1764,7 @@ function isSafeExchangeField(record, field, value) {
     if (field === "status") return ["OPEN", "VERIFY"].includes(record.status) && ["OPEN", "VERIFY"].includes(value);
     return false;
   }
-  if (["SALE", "PURCHASE", "STOCK_WITHDRAWAL", "RIDE_JOB", "CREDIT_WITHDRAWAL", "OBLIGATION"].includes(record.type)) return ["title", "detail"].includes(field);
+  if (["SALE", "PURCHASE", "STOCK_WITHDRAWAL", "OBLIGATION"].includes(record.type)) return ["title", "detail"].includes(field);
   return false;
 }
 function findExchangeTarget(recordId) {
