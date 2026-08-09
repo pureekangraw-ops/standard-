@@ -42,3 +42,11 @@ test("release manifest, Cloudflare allowlist, and offline shell cannot drift", (
     assert.ok(fs.existsSync(path.join(root, file)), `publication file does not exist: ${file}`);
   }
 });
+
+test("operator guide follows the current STANDARD Worker name", () => {
+  const wrangler = JSON.parse(read("wrangler.jsonc"));
+  const guide = read("UPLOAD_GUIDE.md");
+  assert.equal(wrangler.name, "normalpocket");
+  assert.match(guide, /Worker[^\n]*`normalpocket`/);
+  assert.doesNotMatch(guide, /Worker[^\n]*`ygph-standard`/);
+});
