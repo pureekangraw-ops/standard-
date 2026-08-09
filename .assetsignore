@@ -1,3 +1,9 @@
+node_modules
+node_modules/**
+.wrangler
+.wrangler/**
+.git
+.git/**
 *
 !/index.html
 !/manifest.webmanifest
