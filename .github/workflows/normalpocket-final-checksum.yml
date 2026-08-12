@@ -1,0 +1,31 @@
+name: NormalPocket Final Checksum
+
+on:
+  push:
+    branches:
+      - feat/normalpocket-1.3-one-hand-mobile-flow
+    paths:
+      - .github/workflows/normalpocket-final-checksum.yml
+
+permissions:
+  contents: write
+
+jobs:
+  checksum:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/normalpocket-1.3-one-hand-mobile-flow
+      - name: Regenerate SHA256 manifest
+        run: |
+          git ls-files | grep -v '^SHA256SUMS.txt$' | grep -v '^.github/workflows/normalpocket-final-checksum.yml$' | sort | while IFS= read -r file; do sha256sum "$file"; done > SHA256SUMS.txt
+      - name: Verify release gate
+        run: npm run deploy:gate
+      - name: Commit checksum
+        run: |
+          git config user.name "pureekangraw-ops"
+          git config user.email "pureekangraw@gmail.com"
+          git add SHA256SUMS.txt
+          git commit -m "chore: refresh NormalPocket 1.3 final checksums"
+          git push origin HEAD:feat/normalpocket-1.3-one-hand-mobile-flow
