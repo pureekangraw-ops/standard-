@@ -1,0 +1,34 @@
+name: NormalPocket HADES Hardening Builder
+
+on:
+  push:
+    branches:
+      - feat/normalpocket-1.3-one-hand-mobile-flow
+    paths:
+      - scripts/hades-1.3-hardening-builder.mjs
+      - .github/workflows/normalpocket-hades-hardening-builder.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/normalpocket-1.3-one-hand-mobile-flow
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply HADES hardening
+        run: node scripts/hades-1.3-hardening-builder.mjs
+      - name: Verify release gate
+        run: npm run deploy:gate
+      - name: Commit hardening
+        run: |
+          git config user.name "pureekangraw-ops"
+          git config user.email "pureekangraw@gmail.com"
+          git add normalpocket-products.js normalpocket-simple-flow.js normalpocket-simple-flow.css
+          git commit -m "fix: harden NormalPocket 1.3 one-hand flow"
+          git push origin HEAD:feat/normalpocket-1.3-one-hand-mobile-flow
