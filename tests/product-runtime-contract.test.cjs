@@ -61,8 +61,8 @@ test("sale purchase and withdrawal resolve product plus variant and persist sele
   assert.match(source, /optionSnapshot/);
 });
 
-test("product runtime wraps Store queue cancellation and delegates all unrelated cases to the original", () => {
-  const source = read("normalpocket-products.js");
+test("product-aware cancellation is isolated and delegates unrelated queue actions to the original", () => {
+  const source = read("normalpocket-cancel.js");
   assert.match(source, /const\s+originalCancelQueue\s*=\s*cancelQueue/);
   assert.match(source, /cancelQueue\s*=\s*function\s+normalPocketCancelQueue/);
   assert.match(source, /RECEIVE_CUSTOMER_PAYMENT/);
@@ -70,6 +70,7 @@ test("product runtime wraps Store queue cancellation and delegates all unrelated
   assert.match(source, /restoreSaleStock\(source\)/);
   assert.match(source, /removePurchaseStock\(source\)/);
   assert.match(source, /return\s+originalCancelQueue\(id\)/);
+  assert.doesNotMatch(source, /\bRIDE\b/);
 });
 
 test("product CSS provides compact list and variant editor surfaces", () => {
