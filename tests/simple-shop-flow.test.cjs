@@ -8,14 +8,14 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 
-test("NormalPocket 1.2 has neutral public branding with no owner-specific UI copy", () => {
+test("NormalPocket current release has neutral public branding with no owner-specific UI copy", () => {
   const index = read("index.html");
   const manifest = JSON.parse(read("manifest.webmanifest"));
   const metropolis = read("metropolis-v4.js");
   const simple = read("normalpocket-simple-flow.js");
   const visible = [index, manifest.name, manifest.short_name, manifest.description, metropolis, simple].join("\n");
 
-  assert.match(index, /<title>NormalPocket 1\.2\.0<\/title>/);
+  assert.match(index, /<title>NormalPocket 1\.3\.0<\/title>/);
   assert.equal(manifest.name, "NormalPocket");
   assert.equal(manifest.short_name, "NormalPocket");
   assert.match(visible, /NormalPocket/);
@@ -26,7 +26,7 @@ test("NormalPocket 1.2 has neutral public branding with no owner-specific UI cop
   assert.equal(manifest.icons[0].sizes, "any");
 });
 
-test("NormalPocket 1.2 exposes five simple daily actions", () => {
+test("NormalPocket current release exposes five simple daily actions", () => {
   const source = read("normalpocket-simple-flow.js");
   for (const label of ["ขายสินค้า", "ขายด่วน", "รับสินค้า", "เงิน", "จบวัน"]) {
     assert.match(source, new RegExp(label));
@@ -99,14 +99,14 @@ test("stock adjustment reasons stay small and general-purpose", () => {
   assert.deepEqual(flow.STOCK_ADJUST_REASONS, ["นับใหม่", "เสีย", "หาย", "ใช้เอง", "คืนสินค้า", "อื่นๆ"]);
 });
 
-test("release contract publishes NormalPocket 1.2 simple-flow assets", () => {
+test("release contract publishes the current NormalPocket simple-flow assets", () => {
   const pkg = JSON.parse(read("package.json"));
   const release = JSON.parse(read("RELEASE_MANIFEST.json"));
   const sw = require("../sw.js");
-  assert.equal(pkg.version, "1.2.0");
-  assert.equal(release.release, "1.2.0-simple-shop-flow");
+  assert.equal(pkg.version, "1.3.0");
+  assert.equal(release.release, "1.3.0-one-hand-mobile");
   assert.equal(release.product, "NormalPocket");
-  assert.equal(sw.RELEASE_ID, "v1.2.0-20260812-r4-simple-shop-flow");
+  assert.equal(sw.RELEASE_ID, "v1.3.0-20260812-r5-one-hand-mobile");
   for (const file of ["normalpocket-simple-flow.js", "normalpocket-simple-flow.css", "app-icon.svg"]) {
     assert.ok(release.productionFiles.some(item => item.path === file), `${file} must be published`);
   }

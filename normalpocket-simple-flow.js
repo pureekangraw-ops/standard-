@@ -1,7 +1,7 @@
 "use strict";
 
 (function normalPocketSimpleFlow(root) {
-  const VERSION = "1.2.0";
+  const VERSION = "1.3.0";
   const STOCK_ADJUST_REASONS = Object.freeze(["นับใหม่", "เสีย", "หาย", "ใช้เอง", "คืนสินค้า", "อื่นๆ"]);
 
   const int = (value, label = "จำนวน") => {
@@ -9,6 +9,21 @@
     if (!Number.isSafeInteger(number)) throw new Error(`${label}ต้องเป็นจำนวนเต็ม`);
     return number;
   };
+
+  function firstRunHint({ productCount = 0 } = {}) {
+    const count = Number(productCount || 0);
+    return count < 1
+      ? { empty: true, message: "ยังไม่มีสินค้า เพิ่มสินค้าแรกหรือใช้ขายด่วนได้ทันที" }
+      : { empty: false, message: "" };
+  }
+
+  function upsertDayCloseEvent(existing, summary, { id, at } = {}) {
+    const stamp = at || new Date().toISOString();
+    const snapshot = { ...(summary || {}) };
+    const date = String(snapshot.date || existing?.date || "");
+    if (existing) return { ...existing, type: "DAY_CLOSED", date, summary: snapshot, updatedAt: stamp };
+    return { id: id || `DAY-${Date.now().toString(36)}`, type: "DAY_CLOSED", date, summary: snapshot, createdAt: stamp, updatedAt: stamp };
+  }
 
   function buildQuickSale({ qty, unitPriceSatang, receivedSatang, date, id, at } = {}) {
     const quantity = int(qty, "จำนวน");
@@ -90,7 +105,7 @@
     return amount;
   }
 
-  const api = Object.freeze({ VERSION, STOCK_ADJUST_REASONS, buildQuickSale, daySummary, stockAdjustmentDelta });
+  const api = Object.freeze({ VERSION, STOCK_ADJUST_REASONS, firstRunHint, upsertDayCloseEvent, buildQuickSale, daySummary, stockAdjustmentDelta });
   if (typeof module === "object" && module.exports) module.exports = api;
   root.NormalPocketSimpleFlow = api;
 
@@ -115,6 +130,7 @@
   }
 
   function applyNeutralBranding() {
+    document.body.classList.add("np-one-hand");
     document.title = `NormalPocket ${VERSION}`;
     const setupTitle = document.querySelector("#setupScreen h1");
     const unlockTitle = document.querySelector("#unlockScreen h1");
@@ -128,8 +144,8 @@
     if (mark) mark.innerHTML = pocketMark();
     const statusVersion = document.querySelector(".status-line b");
     const statusDetail = document.querySelector(".status-line span:not(.dot)");
-    if (statusVersion) statusVersion.textContent = `NormalPocket ${VERSION}`;
-    if (statusDetail) statusDetail.textContent = "• ออฟไลน์ • เข้ารหัส • ใช้ในเครื่อง";
+    if (statusVersion) statusVersion.textContent = `v${VERSION}`;
+    if (statusDetail) statusDetail.textContent = "• ออฟไลน์ • เข้ารหัส";
     const sectionTitle = document.querySelector("#homePage .section-title h2");
     if (sectionTitle) sectionTitle.textContent = "งานหลัก";
     const drawer = document.querySelector(".metropolis-system-drawer summary small");
@@ -145,12 +161,13 @@
   }
 
   function quickMetrics() {
-    if (typeof state === "undefined" || !state) return { sales: 0, cash: 0, stock: 0, tasks: 0 };
+    if (typeof state === "undefined" || !state) return { sales: 0, cash: 0, stock: 0, tasks: 0, productCount: 0 };
     const today = typeof localISO === "function" ? localISO() : new Date().toISOString().slice(0, 10);
     const summary = daySummary(state, today);
     let cash = 0;
     try { cash = typeof currentBalanceSatang === "function" ? currentBalanceSatang() : 0; } catch (_) {}
-    return { sales: summary.salesSatang, cash, stock: Number(state.store?.stockQty || 0), tasks: summary.openTasks };
+    const productCount = (state.store?.products || []).filter(item => item.active !== false).length;
+    return { sales: summary.salesSatang, cash, stock: Number(state.store?.stockQty || 0), tasks: summary.openTasks, productCount };
   }
 
   function normalpocketQuickHome() {
@@ -162,7 +179,8 @@
       panel.id = "normalpocketQuickHome";
       panel.className = "np-quick-home";
       panel.innerHTML = `
-        <div class="np-quick-head"><div><small>วันนี้ทำอะไร</small><h2>เริ่มงานได้เลย</h2></div><span>NormalPocket</span></div>
+        <div class="np-quick-head"><div><small>วันนี้ทำอะไร</small><h2>เริ่มงานได้เลย</h2></div></div>
+        <div class="np-first-run" id="npFirstRun" hidden><span id="npFirstRunText"></span><div><button type="button" data-np-first="add">เพิ่มสินค้าแรก</button><button type="button" data-np-first="quick">ขายด่วน</button></div></div>
         <div class="np-daily-actions">
           <button type="button" class="np-action np-primary" data-np-action="sale"><span>ขายสินค้า</span><small>เลือกสินค้าแล้วขาย</small></button>
           <button type="button" class="np-action" data-np-action="quick"><span>ขายด่วน</span><small>ราคา + จำนวน + รับเงิน</small></button>
@@ -184,6 +202,8 @@
           <button type="button" data-np-page="settings">ตั้งค่า</button>
         </div>`;
       home.prepend(panel);
+      panel.querySelector('[data-np-first="add"]').onclick = () => { show("store"); setTimeout(() => document.getElementById("normalpocketAddProductBtn")?.click(), 0); };
+      panel.querySelector('[data-np-first="quick"]').onclick = openQuickSale;
       panel.querySelector('[data-np-action="sale"]').onclick = () => { show("store"); setTimeout(() => document.getElementById("addSaleBtn")?.click(), 0); };
       panel.querySelector('[data-np-action="quick"]').onclick = openQuickSale;
       panel.querySelector('[data-np-action="receive"]').onclick = () => { show("store"); setTimeout(() => document.getElementById("addPurchaseBtn")?.click(), 0); };
@@ -193,6 +213,11 @@
       panel.querySelectorAll("[data-np-page]").forEach(button => button.onclick = () => show(button.dataset.npPage));
     }
     const metrics = quickMetrics();
+    const hint = firstRunHint({ productCount: metrics.productCount });
+    const hintBox = document.getElementById("npFirstRun");
+    const hintText = document.getElementById("npFirstRunText");
+    if (hintBox) hintBox.hidden = !hint.empty;
+    if (hintText) hintText.textContent = hint.message;
     const set = (id, text) => { const node = document.getElementById(id); if (node) node.textContent = text; };
     set("npTodaySales", `${baht(metrics.sales)} บาท`);
     set("npTodayCash", `${baht(metrics.cash)} บาท`);
@@ -294,16 +319,17 @@
     fillAdjustVariants();
   }
 
-  function alreadyClosed(date) {
-    return (state?.events || []).some(item => item?.type === "DAY_CLOSED" && item.date === date);
+  function dayCloseEvent(date) {
+    return (state?.events || []).find(item => item?.type === "DAY_CLOSED" && item.date === date) || null;
   }
 
   function openDayClose() {
     const date = typeof localISO === "function" ? localISO() : new Date().toISOString().slice(0, 10);
     const summary = daySummary(state || {}, date);
+    const existing = dayCloseEvent(date);
     openModal({
       title: "จบวัน",
-      text: alreadyClosed(date) ? "วันนี้บันทึกสรุปไว้แล้ว ข้อมูลจริงยังอยู่ครบ" : "ตรวจตัวเลขก่อนปิดวัน ระบบจะเก็บสรุปโดยไม่ลบสินค้า เงิน หรือประวัติ",
+      text: existing ? "วันนี้มีสรุปแล้ว หากมีรายการเพิ่ม กดยืนยันเพื่ออัปเดตสรุปให้ตรงข้อมูลล่าสุด" : "ตรวจตัวเลขก่อนปิดวัน ระบบจะเก็บสรุปโดยไม่ลบสินค้า เงิน หรือประวัติ",
       body: `<div class="np-day-summary">
         <div><small>ยอดขาย</small><b>${baht(summary.salesSatang)} บาท</b></div>
         <div><small>เงินเข้า</small><b>${baht(summary.cashInSatang)} บาท</b></div>
@@ -312,15 +338,15 @@
         <div><small>งานค้างวันนี้</small><b>${summary.openTasks}</b></div>
         <div><small>สต็อกคงเหลือ</small><b>${summary.stockQty}</b></div>
       </div>`,
-      confirm: alreadyClosed(date) ? "ปิด" : "ยืนยันจบวัน",
+      confirm: existing ? "อัปเดตสรุปวัน" : "ยืนยันจบวัน",
       onConfirm: async () => {
-        if (alreadyClosed(date)) { closeModal(); return; }
         const at = nowIso();
         state.events ||= [];
-        state.events.push({ id: uid("DAY"), type: "DAY_CLOSED", date, summary, createdAt: at, updatedAt: at });
-        addAudit("DAY_CLOSED", `จบวัน ${date} · ยอดขาย ${baht(summary.salesSatang)} บาท`);
+        const event = upsertDayCloseEvent(existing, summary, { id: existing?.id || uid("DAY"), at });
+        if (existing) Object.assign(existing, event); else state.events.push(event);
+        addAudit(existing ? "DAY_CLOSED_UPDATED" : "DAY_CLOSED", `${existing ? "อัปเดต" : "จบ"}วัน ${date} · ยอดขาย ${baht(summary.salesSatang)} บาท`);
         closeModal();
-        await persistAndRender("บันทึกสรุปวันแล้ว");
+        await persistAndRender(existing ? "อัปเดตสรุปวันแล้ว" : "บันทึกสรุปวันแล้ว");
       }
     });
   }
@@ -341,10 +367,10 @@
   }
 
   const install = () => {
-    if (root.__NORMALPOCKET_SIMPLE_FLOW_12__) return;
-    root.__NORMALPOCKET_SIMPLE_FLOW_12__ = true;
+    if (root.__NORMALPOCKET_SIMPLE_FLOW_13__) return;
+    root.__NORMALPOCKET_SIMPLE_FLOW_13__ = true;
     if (root.YGPHRuntime?.register) {
-      root.YGPHRuntime.register("NORMALPOCKET_SIMPLE_FLOW_12", {
+      root.YGPHRuntime.register("NORMALPOCKET_SIMPLE_FLOW_13", {
         afterRender: queueApply,
         afterPageChange: queueApply
       });
