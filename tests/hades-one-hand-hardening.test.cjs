@@ -42,11 +42,15 @@ test("product editor keeps name price and stock primary while secondary metadata
   }
 });
 
-test("one-hand controls keep at least 44px tap targets outside the large daily actions", () => {
+test("one-hand controls keep at least 44px tap targets across home and product editor", () => {
   const css = read("normalpocket-simple-flow.css");
   assert.match(css, /\.np-one-hand \.home-btn\{[^}]*width:44px;[^}]*height:44px/);
   assert.match(css, /\.np-first-run button\{[^}]*min-height:44px/);
   assert.match(css, /\.np-secondary-actions button\{[^}]*min-height:44px/);
+  assert.match(css, /\.normalpocket-product-advanced summary\{[^}]*min-height:44px/);
+  assert.match(css, /\.np-one-hand \.text-btn\{[^}]*min-height:44px/);
+  assert.match(css, /\.np-one-hand \.secondary-btn\{[^}]*min-height:44px/);
+  assert.match(css, /\.np-one-hand \.modal-actions button\{[^}]*min-height:44px/);
 });
 
 test("closing a day is refreshable when records are added after the first close", () => {
