@@ -4,7 +4,7 @@ const APP_CACHE_PREFIX = "ygph-standard-app-";
 const LEGACY_CACHE_PREFIXES = Object.freeze([
   "ygph-standard-0.1.0-preview."
 ]);
-const RELEASE_ID = "v1.2.0-20260812-r4-simple-shop-flow";
+const RELEASE_ID = "v1.3.0-20260812-r5-one-hand-mobile";
 const CURRENT_CACHE = `${APP_CACHE_PREFIX}${RELEASE_ID}`;
 const META_CACHE = "ygph-standard-meta";
 const META_PATH = "__ygph_service_worker_lifecycle__";
