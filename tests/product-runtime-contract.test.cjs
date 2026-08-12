@@ -61,15 +61,16 @@ test("sale purchase and withdrawal resolve product plus variant and persist sele
   assert.match(source, /optionSnapshot/);
 });
 
-test("product-aware cancellation is isolated and delegates unrelated queue actions to the original", () => {
-  const source = read("normalpocket-cancel.js");
-  assert.match(source, /const\s+originalCancelQueue\s*=\s*cancelQueue/);
-  assert.match(source, /cancelQueue\s*=\s*function\s+normalPocketCancelQueue/);
-  assert.match(source, /RECEIVE_CUSTOMER_PAYMENT/);
-  assert.match(source, /PURCHASE_RETURN_WINDOW/);
-  assert.match(source, /restoreSaleStock\(source\)/);
-  assert.match(source, /removePurchaseStock\(source\)/);
-  assert.match(source, /return\s+originalCancelQueue\(id\)/);
+test("cancellation stock reconciliation runs before durable persist and is idempotent", () => {
+  const source = read("normalpocket-reconcile.js");
+  assert.match(source, /const\s+originalPersistAndRender\s*=\s*persistAndRender/);
+  assert.match(source, /persistAndRender\s*=\s*async\s+function\s+normalPocketPersistAndRender/);
+  assert.match(source, /productStockRestored/);
+  assert.match(source, /productStockRemoved/);
+  assert.match(source, /NormalPocketCatalog\.adjustStock/);
+  assert.match(source, /NormalPocketProducts\.syncStoreStock/);
+  assert.doesNotMatch(source, /addTransaction/);
+  assert.doesNotMatch(source, /reverseTransactions/);
   assert.doesNotMatch(source, /\bRIDE\b/);
 });
 
