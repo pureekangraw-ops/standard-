@@ -15,7 +15,7 @@ test("NormalPocket current release has neutral public branding with no owner-spe
   const simple = read("normalpocket-simple-flow.js");
   const visible = [index, manifest.name, manifest.short_name, manifest.description, metropolis, simple].join("\n");
 
-  assert.match(index, /<title>NormalPocket 1\.3\.0<\/title>/);
+  assert.match(index, /<title>NormalPocket 1\.3\.1<\/title>/);
   assert.equal(manifest.name, "NormalPocket");
   assert.equal(manifest.short_name, "NormalPocket");
   assert.match(visible, /NormalPocket/);
@@ -103,10 +103,10 @@ test("release contract publishes the current NormalPocket simple-flow assets", (
   const pkg = JSON.parse(read("package.json"));
   const release = JSON.parse(read("RELEASE_MANIFEST.json"));
   const sw = require("../sw.js");
-  assert.equal(pkg.version, "1.3.0");
-  assert.equal(release.release, "1.3.0-one-hand-mobile");
+  assert.equal(pkg.version, "1.3.1");
+  assert.equal(release.release, "1.3.1-mobile-polish");
   assert.equal(release.product, "NormalPocket");
-  assert.equal(sw.RELEASE_ID, "v1.3.0-20260812-r5-one-hand-mobile");
+  assert.equal(sw.RELEASE_ID, "v1.3.1-20260812-r6-mobile-polish");
   for (const file of ["normalpocket-simple-flow.js", "normalpocket-simple-flow.css", "app-icon.svg"]) {
     assert.ok(release.productionFiles.some(item => item.path === file), `${file} must be published`);
   }
