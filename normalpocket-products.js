@@ -177,12 +177,8 @@
       text: "ข้อมูลพื้นฐานอยู่ด้านบน เปิดสี/ขนาดเฉพาะสินค้าที่มีหลายแบบ",
       body: `<div class="form-grid">
         <div class="field full"><label>ชื่อสินค้า</label><input id="productName" maxlength="160" value="${escProduct(product?.name || "")}"></div>
-        <div class="field"><label>หมวดหมู่</label><input id="productCategory" maxlength="100" value="${escProduct(product?.category || "")}"></div>
-        <div class="field"><label>หน่วย</label><input id="productUnit" maxlength="40" value="${escProduct(product?.unit || "ชิ้น")}"></div>
         <div class="field"><label>ราคาขาย</label><input id="productSalePrice" type="number" min="0" step="0.01" value="${satangToBaht(product?.salePriceSatang ?? state.settings.defaultPriceSatang)}"></div>
-        <div class="field"><label>ต้นทุนต่อหน่วย</label><input id="productCost" type="number" min="0" step="0.01" value="${product?.costSatang == null ? "" : satangToBaht(product.costSatang)}"></div>
         <div class="field"><label>${hasVariants ? "สต็อกรวม" : "จำนวนคงเหลือ"}</label><input id="productStock" type="number" min="0" step="1" value="${baseStock}" ${hasVariants ? "readonly" : ""}></div>
-        <div class="field"><label>สถานะ</label><select id="productActive"><option value="1" ${product?.active === false ? "" : "selected"}>ขายอยู่</option><option value="0" ${product?.active === false ? "selected" : ""}>หยุดขาย</option></select></div>
         <div class="field full normalpocket-variant-toggle"><label><input id="productHasVariants" type="checkbox" ${hasVariants ? "checked" : ""}> สินค้ามีตัวเลือก</label></div>
       </div>
       <section id="productVariantSection" class="${hasVariants ? "" : "hidden"}">
@@ -196,6 +192,10 @@
       <details class="normalpocket-product-advanced">
         <summary>ข้อมูลเพิ่มเติม</summary>
         <div class="form-grid">
+          <div class="field"><label>หมวดหมู่</label><input id="productCategory" maxlength="100" value="${escProduct(product?.category || "")}"></div>
+          <div class="field"><label>หน่วย</label><input id="productUnit" maxlength="40" value="${escProduct(product?.unit || "ชิ้น")}"></div>
+          <div class="field"><label>ต้นทุนต่อหน่วย</label><input id="productCost" type="number" min="0" step="0.01" value="${product?.costSatang == null ? "" : satangToBaht(product.costSatang)}"></div>
+          <div class="field"><label>สถานะ</label><select id="productActive"><option value="1" ${product?.active === false ? "" : "selected"}>ขายอยู่</option><option value="0" ${product?.active === false ? "selected" : ""}>หยุดขาย</option></select></div>
           <div class="field"><label>SKU</label><input id="productSku" maxlength="100" value="${escProduct(product?.sku || "")}"></div>
           <div class="field"><label>บาร์โค้ด</label><input id="productBarcode" maxlength="100" value="${escProduct(product?.barcode || "")}"></div>
           <div class="field full"><label>รายละเอียด</label><textarea id="productDescription" maxlength="600">${escProduct(product?.description || "")}</textarea></div>
@@ -327,14 +327,21 @@
     openModal({
       title: "ขายสินค้า",
       text: "เลือกสินค้าก่อน ถ้ามีสี/ขนาดต้องเลือกแบบที่ขายจริง",
-      body: `<div class="form-grid">${selectionFields("npSale", true)}
+      body: `<div class="form-grid">${selectionFields("npSale")}
         <div class="field"><label>จำนวน</label><input id="npSaleQty" type="number" min="1" value="1"></div>
         <div class="field"><label>รับเงินจริงครั้งนี้</label><input id="npSaleReceived" type="number" min="0" step="0.01" value="0"></div>
-        <div class="field"><label>ลูกค้า</label><input id="npSaleCustomer" maxlength="80"></div>
-        <div class="field full"><label>ช่องทางติดต่อ</label><input id="npSaleContact" maxlength="100"></div>
-        <div class="field full"><label>วันนัดยอดค้าง</label><input id="npSaleDue" type="date" value="${localISO()}"></div>
-        <div class="field full"><label>หมายเหตุ</label><input id="npSaleNote" maxlength="200"></div>
-      </div>`,
+        <div class="field full"><small>ใช้ราคาขายของสินค้าอัตโนมัติ · ถ้ารับไม่ครบ ระบบจะเก็บยอดค้าง</small></div>
+      </div>
+      <details class="np-sale-advanced">
+        <summary>ข้อมูลเพิ่มเติม</summary>
+        <div class="form-grid">
+          <div class="field"><label>ราคาต่อหน่วย</label><input id="npSaleUnitPrice" type="number" min="0" step="0.01"></div>
+          <div class="field"><label>ลูกค้า</label><input id="npSaleCustomer" maxlength="80"></div>
+          <div class="field full"><label>ช่องทางติดต่อ</label><input id="npSaleContact" maxlength="100"></div>
+          <div class="field full"><label>วันนัดยอดค้าง</label><input id="npSaleDue" type="date" value="${localISO()}"></div>
+          <div class="field full"><label>หมายเหตุ</label><input id="npSaleNote" maxlength="200"></div>
+        </div>
+      </details>`,
       confirm: "บันทึกขาย",
       onConfirm: async () => {
         let selection;

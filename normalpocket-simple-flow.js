@@ -17,6 +17,14 @@
       : { empty: false, message: "" };
   }
 
+  function upsertDayCloseEvent(existing, summary, { id, at } = {}) {
+    const stamp = at || new Date().toISOString();
+    const snapshot = { ...(summary || {}) };
+    const date = String(snapshot.date || existing?.date || "");
+    if (existing) return { ...existing, type: "DAY_CLOSED", date, summary: snapshot, updatedAt: stamp };
+    return { id: id || `DAY-${Date.now().toString(36)}`, type: "DAY_CLOSED", date, summary: snapshot, createdAt: stamp, updatedAt: stamp };
+  }
+
   function buildQuickSale({ qty, unitPriceSatang, receivedSatang, date, id, at } = {}) {
     const quantity = int(qty, "จำนวน");
     const price = int(unitPriceSatang, "ราคา");
@@ -97,7 +105,7 @@
     return amount;
   }
 
-  const api = Object.freeze({ VERSION, STOCK_ADJUST_REASONS, firstRunHint, buildQuickSale, daySummary, stockAdjustmentDelta });
+  const api = Object.freeze({ VERSION, STOCK_ADJUST_REASONS, firstRunHint, upsertDayCloseEvent, buildQuickSale, daySummary, stockAdjustmentDelta });
   if (typeof module === "object" && module.exports) module.exports = api;
   root.NormalPocketSimpleFlow = api;
 
@@ -311,16 +319,17 @@
     fillAdjustVariants();
   }
 
-  function alreadyClosed(date) {
-    return (state?.events || []).some(item => item?.type === "DAY_CLOSED" && item.date === date);
+  function dayCloseEvent(date) {
+    return (state?.events || []).find(item => item?.type === "DAY_CLOSED" && item.date === date) || null;
   }
 
   function openDayClose() {
     const date = typeof localISO === "function" ? localISO() : new Date().toISOString().slice(0, 10);
     const summary = daySummary(state || {}, date);
+    const existing = dayCloseEvent(date);
     openModal({
       title: "จบวัน",
-      text: alreadyClosed(date) ? "วันนี้บันทึกสรุปไว้แล้ว ข้อมูลจริงยังอยู่ครบ" : "ตรวจตัวเลขก่อนปิดวัน ระบบจะเก็บสรุปโดยไม่ลบสินค้า เงิน หรือประวัติ",
+      text: existing ? "วันนี้มีสรุปแล้ว หากมีรายการเพิ่ม กดยืนยันเพื่ออัปเดตสรุปให้ตรงข้อมูลล่าสุด" : "ตรวจตัวเลขก่อนปิดวัน ระบบจะเก็บสรุปโดยไม่ลบสินค้า เงิน หรือประวัติ",
       body: `<div class="np-day-summary">
         <div><small>ยอดขาย</small><b>${baht(summary.salesSatang)} บาท</b></div>
         <div><small>เงินเข้า</small><b>${baht(summary.cashInSatang)} บาท</b></div>
@@ -329,15 +338,15 @@
         <div><small>งานค้างวันนี้</small><b>${summary.openTasks}</b></div>
         <div><small>สต็อกคงเหลือ</small><b>${summary.stockQty}</b></div>
       </div>`,
-      confirm: alreadyClosed(date) ? "ปิด" : "ยืนยันจบวัน",
+      confirm: existing ? "อัปเดตสรุปวัน" : "ยืนยันจบวัน",
       onConfirm: async () => {
-        if (alreadyClosed(date)) { closeModal(); return; }
         const at = nowIso();
         state.events ||= [];
-        state.events.push({ id: uid("DAY"), type: "DAY_CLOSED", date, summary, createdAt: at, updatedAt: at });
-        addAudit("DAY_CLOSED", `จบวัน ${date} · ยอดขาย ${baht(summary.salesSatang)} บาท`);
+        const event = upsertDayCloseEvent(existing, summary, { id: existing?.id || uid("DAY"), at });
+        if (existing) Object.assign(existing, event); else state.events.push(event);
+        addAudit(existing ? "DAY_CLOSED_UPDATED" : "DAY_CLOSED", `${existing ? "อัปเดต" : "จบ"}วัน ${date} · ยอดขาย ${baht(summary.salesSatang)} บาท`);
         closeModal();
-        await persistAndRender("บันทึกสรุปวันแล้ว");
+        await persistAndRender(existing ? "อัปเดตสรุปวันแล้ว" : "บันทึกสรุปวันแล้ว");
       }
     });
   }
