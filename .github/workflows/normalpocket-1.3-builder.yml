@@ -1,0 +1,34 @@
+name: NormalPocket 1.3 Builder
+
+on:
+  push:
+    branches:
+      - feat/normalpocket-1.3-one-hand-mobile-flow
+    paths:
+      - scripts/apply-normalpocket-1.3.mjs
+      - .github/workflows/normalpocket-1.3-builder.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/normalpocket-1.3-one-hand-mobile-flow
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply NormalPocket 1.3 changes
+        run: node scripts/apply-normalpocket-1.3.mjs
+      - name: Verify 1.3 RED contracts are GREEN
+        run: node --test tests/one-hand-mobile-flow.test.cjs
+      - name: Commit generated changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json index.html sw.js RELEASE_MANIFEST.json normalpocket-simple-flow.js normalpocket-simple-flow.css
+          git commit -m "feat: implement NormalPocket 1.3 one-hand mobile flow"
+          git push origin HEAD:feat/normalpocket-1.3-one-hand-mobile-flow
