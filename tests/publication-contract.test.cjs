@@ -22,11 +22,12 @@ function cloudflareAllowlist() {
     .map(line => line.slice(2));
 }
 
-test("STANDARD publication metadata follows the defragged Current", () => {
-  const expectedRelease = "v1.0.0-20260809-r2-defrag-current";
+test("STANDARD publication metadata follows the current NormalPocket release", () => {
+  const expectedRelease = "v1.1.0-20260812-r3-product-catalog";
   assert.equal(sw.RELEASE_ID, expectedRelease);
   assert.equal(manifest.serviceWorker.releaseId, expectedRelease);
-  assert.equal(manifest.sourceCommit, "70600e5811ba266cb57a843bd5ae6a1732fbcb91");
+  assert.equal(manifest.sourceCommit, "874cca49624a43a09b48c5155131f974e8d91b61");
+  assert.equal(manifest.release, "1.1.0-product-catalog");
 });
 
 test("release manifest, Cloudflare allowlist, and offline shell cannot drift", () => {
