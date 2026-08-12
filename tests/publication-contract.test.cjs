@@ -22,12 +22,13 @@ function cloudflareAllowlist() {
     .map(line => line.slice(2));
 }
 
-test("STANDARD publication metadata follows the current NormalPocket release", () => {
-  const expectedRelease = "v1.1.0-20260812-r3-product-catalog";
+test("NormalPocket publication metadata follows the current release", () => {
+  const expectedRelease = "v1.2.0-20260812-r4-simple-shop-flow";
   assert.equal(sw.RELEASE_ID, expectedRelease);
   assert.equal(manifest.serviceWorker.releaseId, expectedRelease);
   assert.equal(manifest.sourceCommit, "874cca49624a43a09b48c5155131f974e8d91b61");
-  assert.equal(manifest.release, "1.1.0-product-catalog");
+  assert.equal(manifest.release, "1.2.0-simple-shop-flow");
+  assert.equal(manifest.product, "NormalPocket");
 });
 
 test("release manifest, Cloudflare allowlist, and offline shell cannot drift", () => {
@@ -44,7 +45,7 @@ test("release manifest, Cloudflare allowlist, and offline shell cannot drift", (
   }
 });
 
-test("operator guide follows the current STANDARD Worker name", () => {
+test("operator guide follows the current NormalPocket Worker name", () => {
   const wrangler = JSON.parse(read("wrangler.jsonc"));
   const guide = read("UPLOAD_GUIDE.md");
   assert.equal(wrangler.name, "normalpocket");

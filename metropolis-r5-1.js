@@ -1,6 +1,6 @@
 "use strict";
 
-const METROPOLIS_PRODUCT_VERSION = "1.0.0";
+const METROPOLIS_PRODUCT_VERSION = "1.2.0";
 const METROPOLIS_R5_1_VERSION = "5.1.0-minimal-launcher";
 
 function metropolis41Icon(app) {
@@ -16,9 +16,9 @@ function metropolis41ApplyVersion() {
   if (document.documentElement.dataset.metropolisR52) return;
   document.documentElement.dataset.metropolisVersion = METROPOLIS_PRODUCT_VERSION;
   document.documentElement.dataset.metropolisR51 = METROPOLIS_R5_1_VERSION;
-  document.title = `YGPH STANDARD v${METROPOLIS_PRODUCT_VERSION}`;
+  document.title = `NormalPocket ${METROPOLIS_PRODUCT_VERSION}`;
   const statusVersion = document.querySelector(".status-line b");
-  if (statusVersion) statusVersion.textContent = `STANDARD v${METROPOLIS_PRODUCT_VERSION}`;
+  if (statusVersion) statusVersion.textContent = `NormalPocket ${METROPOLIS_PRODUCT_VERSION}`;
 }
 
 function metropolis41PolishLauncher() {

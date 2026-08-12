@@ -1,10 +1,14 @@
-# YGPH STANDARD
+# NormalPocket
 
-ฐานแอปส่วนตัวที่แยกมาจาก YGPH METROPOLIS 4.2.4 (source commit `7329448eef685d72364c42f8d0373483e6e303d0`) และคงเฉพาะ Store, Ledger, Calendar, Reports/History, Settings, Vault และ Import/Export.
+แอปร้านค้าพื้นฐานสำหรับใช้งานทั่วไป เน้นทำงานประจำวันให้สั้นและตรง: ขายสินค้า รับสินค้า ดูเงิน ปรับสต็อก และสรุปจบวัน โดยเก็บข้อมูลเข้ารหัสไว้ในเครื่องและรองรับการใช้งานออฟไลน์
 
-- Product version: **1.0.0**
-- Fresh install starts with an empty encrypted Vault.
-- ไม่ได้บรรจุข้อมูลส่วนตัวหรือ Vault จาก METROPOLIS.
-- Worker/cache identity แยกเป็น `ygph-standard`.
+- Product version: **1.2.0**
+- Worker: `normalpocket`
+- มีรายการสินค้าและตัวเลือกสี/ขนาดแบบไม่บังคับ
+- มีขายด่วนสำหรับรายการที่ยังไม่ได้สร้างเป็นสินค้า
+- สต็อก เงิน และประวัติเดิมไม่ถูกลบเมื่อจบวัน
+- Fresh install เริ่มด้วย Vault เข้ารหัสว่าง
+- ไม่บรรจุข้อมูลส่วนตัวหรือ Vault จากระบบอ้างอิง
+- โครงข้อมูลเดิมและชื่อฐานข้อมูลภายในบางส่วนคงไว้เพื่อความเข้ากันได้ของข้อมูลเก่า
 
 ตรวจแพ็กก่อน deploy: `npm run deploy:gate`

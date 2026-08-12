@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="flow-era.css">
   <link rel="stylesheet" href="metropolis-v4.css">
-  <title>YGPH STANDARD v1.0.0</title>
+  <title>NormalPocket 1.2.0</title>
 </head>
 <body>
   <section id="securityGate" class="gate hidden" aria-live="polite">
@@ -21,8 +21,8 @@
 
   <section id="setupScreen" class="gate hidden">
     <div class="gate-card">
-      <div class="gate-icon">🌳</div>
-      <h1>ตั้งค่า YGPH STANDARD</h1>
+      <div class="gate-icon">◒</div>
+      <h1>ตั้งค่า NormalPocket</h1>
       <p>ข้อมูลทั้งหมดจะถูกเข้ารหัสและเก็บในเครื่อง รหัสนี้ไม่มีระบบกู้คืน</p>
       <form id="setupForm" autocomplete="off">
         <div class="field"><label for="setupPassphrase">ตั้งรหัสปลดล็อก</label><input id="setupPassphrase" type="password" minlength="8" maxlength="128" autocomplete="new-password" required></div>
@@ -37,7 +37,7 @@
 
   <section id="unlockScreen" class="gate hidden">
     <div class="gate-card">
-      <div class="gate-icon">🌿</div><h1>YGPH STANDARD</h1><p>ใส่รหัสเพื่อปลดล็อกข้อมูลในเครื่อง</p>
+      <div class="gate-icon">◒</div><h1>NormalPocket</h1><p>ใส่รหัสเพื่อปลดล็อกข้อมูลในเครื่อง</p>
       <form id="unlockForm" autocomplete="off">
         <div class="field"><label for="unlockPassphrase">รหัสปลดล็อก</label><input id="unlockPassphrase" type="password" maxlength="128" autocomplete="current-password" required></div>
         <button id="unlockBtn" class="primary-btn wide" type="submit">ปลดล็อก</button>
@@ -50,8 +50,8 @@
 
   <div id="appShell" class="shell hidden">
     <header class="topbar">
-      <div class="brand"><div class="brand-mark">🌳</div><div class="brand-copy"><h1>YGPH STANDARD</h1><p>Store • Ledger • Calendar — ฐานงานส่วนตัว</p></div><button class="home-btn" id="headerHome" aria-label="กลับหน้าหลัก">⌂</button><button class="home-btn" id="headerLockBtn" aria-label="ล็อกแอป">🔒</button></div>
-      <div class="status-line"><span class="dot"></span><b>STANDARD v1.0.0</b><span>• 3 แอป • ออฟไลน์ • เข้ารหัส</span><time id="clock">--:--</time></div>
+      <div class="brand"><div class="brand-mark">◒</div><div class="brand-copy"><h1>NormalPocket</h1><p>ร้านค้า • เงิน • งานประจำวัน</p></div><button class="home-btn" id="headerHome" aria-label="กลับหน้าหลัก">⌂</button><button class="home-btn" id="headerLockBtn" aria-label="ล็อกแอป">🔒</button></div>
+      <div class="status-line"><span class="dot"></span><b>NormalPocket 1.2.0</b><span>• ออฟไลน์ • เข้ารหัส • ใช้ในเครื่อง</span><time id="clock">--:--</time></div>
     </header>
     <main>
 <section class="page active" id="homePage">
@@ -67,7 +67,7 @@
           <div class="hub-grid"><div class="hub-mini"><small>รอรับเงิน</small><b id="homeWaitIn">0</b></div><div class="hub-mini"><small>รอจ่าย</small><b id="homeWaitOut">0</b></div><div class="hub-mini"><small>ต้องตรวจสอบ</small><b id="homeVerify">0</b></div><div class="hub-mini"><small>ยกเลิกแล้ว</small><b id="homeCancelled">0</b></div></div>
           <button class="hub-open" data-page="calendar">เปิดปฏิทินและจัดการคิว</button>
         </div>
-        <div class="card content-card exchange-card"><h3>รับ–ส่งข้อมูลกับโก</h3><div class="exchange-grid"><button class="exchange-action" id="homeExportBtn"><span>⬆️</span><b>ส่งไฟล์ให้โกตรวจ</b><small>สร้าง FLOW EVENT EXCHANGE v3</small></button><button class="exchange-action" id="homeImportBtn"><span>⬇️</span><b>รับผลตรวจกลับเข้าแอป</b><small>ตรวจ Route ก่อนแสดง Review Center</small></button></div><div class="exchange-status"><div><small>ส่งล่าสุด</small><b id="homeLastExport">—</b></div><div><small>รับล่าสุด</small><b id="homeLastImport">—</b></div><div><small>รอยืนยัน</small><b id="homePendingImport">0 รายการ</b></div></div></div>
+        <div class="card content-card exchange-card"><h3>รับ–ส่งข้อมูลสำรอง</h3><div class="exchange-grid"><button class="exchange-action" id="homeExportBtn"><span>⬆️</span><b>ส่งไฟล์ออกเพื่อตรวจหรือสำรอง</b><small>สร้าง FLOW EVENT EXCHANGE v3</small></button><button class="exchange-action" id="homeImportBtn"><span>⬇️</span><b>รับผลตรวจกลับเข้าแอป</b><small>ตรวจ Route ก่อนแสดง Review Center</small></button></div><div class="exchange-status"><div><small>ส่งล่าสุด</small><b id="homeLastExport">—</b></div><div><small>รับล่าสุด</small><b id="homeLastImport">—</b></div><div><small>รอยืนยัน</small><b id="homePendingImport">0 รายการ</b></div></div></div>
         <div class="home-actions two"><button class="soft-green" data-page="report">▥ ดึงรายงาน</button><button class="soft-blue" data-page="settings">⚙ ตั้งค่า</button></div>
       </section>
 <section class="page" id="storePage">
@@ -104,12 +104,12 @@
       </section>
 <section class="page" id="syncPage">
         <div class="hero report"><h2>รับ–ส่งข้อมูลตามเส้นทาง</h2><p>Event Envelope + Route Gate + Idempotency + Review Center</p><div class="hero-value">FLOW EXCHANGE v3</div><div class="hero-grid"><div class="mini"><small>ส่งล่าสุด</small><b id="syncLastExport">—</b></div><div class="mini"><small>รับล่าสุด</small><b id="syncLastImport">—</b></div><div class="mini"><small>รอยืนยัน</small><b id="syncPendingCount">0 รายการ</b></div><div class="mini"><small>รุ่นข้อมูล</small><b id="syncRevision">0</b></div></div></div>
-        <div class="card content-card"><div class="exchange-grid"><button class="exchange-action" id="exportJsonBtn"><span>⬆️</span><b>ส่งไฟล์ให้โกตรวจ</b><small>ข้อมูลต้นทาง + Route + ผลอนุญาต/ห้าม</small></button><button class="exchange-action" id="importProposalBtn"><span>⬇️</span><b>รับผลตรวจกลับเข้าแอป</b><small>ตรวจ Schema, Route และกันข้อมูลซ้ำ</small></button></div><input id="importProposalInput" type="file" accept="application/json,.json" hidden></div>
+        <div class="card content-card"><div class="exchange-grid"><button class="exchange-action" id="exportJsonBtn"><span>⬆️</span><b>ส่งไฟล์ออกเพื่อตรวจหรือสำรอง</b><small>ข้อมูลต้นทาง + Route + ผลอนุญาต/ห้าม</small></button><button class="exchange-action" id="importProposalBtn"><span>⬇️</span><b>รับผลตรวจกลับเข้าแอป</b><small>ตรวจ Schema, Route และกันข้อมูลซ้ำ</small></button></div><input id="importProposalInput" type="file" accept="application/json,.json" hidden></div>
         <div class="card content-card"><h3>Review Center</h3><div id="importPreview"><div class="sync-result-row"><b>สถานะ</b><span class="warn">ยังไม่ได้เลือกไฟล์</span></div></div><div class="import-actions"><button class="secondary-btn" id="cancelImportBtn" disabled>ยกเลิก</button><button class="primary-btn" id="applyImportBtn" disabled>ตกลง นำเข้าข้อมูล</button></div></div>
       </section>
 
       <section class="page" id="settingsPage">
-        <div class="hero report"><h2>ตั้งค่าและเครื่องมือ</h2><p>การแสดงผล ข้อมูล สำรอง ความปลอดภัย และตรวจสอบระบบ</p><div class="hero-value">YGPH STANDARD v1.0.0</div></div>
+        <div class="hero report"><h2>ตั้งค่าและเครื่องมือ</h2><p>การแสดงผล ข้อมูล สำรอง ความปลอดภัย และตรวจสอบระบบ</p><div class="hero-value">NormalPocket 1.2.0</div></div>
         <div class="card content-card"><h3>ตรวจยอดเงินปัจจุบัน</h3><div class="flow-note" id="balanceStatusNote"></div><button class="primary-btn wide" id="verifyBalanceBtn">กระทบยอดจากเงินจริง</button></div>
         <div class="card content-card"><h3>การใช้งาน</h3><form id="settingsForm"><div class="form-grid"><div class="field"><label>ราคาขายตั้งต้น</label><input id="defaultPrice" type="number" min="0" step="0.01"></div><div class="field"><label>เตือนสต็อกต่ำกว่า</label><input id="lowStockThreshold" type="number" min="0" step="1"></div><div class="field"><label>ล็อกอัตโนมัติ</label><select id="lockMinutes"><option value="1">1 นาที</option><option value="5">5 นาที</option><option value="15">15 นาที</option><option value="30">30 นาที</option></select></div><div class="field"><label>สีหลัก</label><select id="themeColor"><option value="navy">น้ำเงินเข้ม</option><option value="green">เขียว</option><option value="orange">ส้ม</option><option value="purple">ม่วง</option></select></div><div class="field full"><button class="primary-btn wide" type="submit">บันทึกการตั้งค่า</button></div></div></form></div>
         <div class="card content-card"><h3>สำรองและกู้คืน</h3><div class="action-row inner"><button class="primary" id="exportBackupBtn">ส่งออกไฟล์สำรอง</button><button class="soft-blue" id="restoreBackupBtn">กู้คืนจากไฟล์</button></div><input id="restoreBackupInput" type="file" accept="application/json,.json" hidden><div class="flow-note">ไฟล์สำรองถูกเข้ารหัสและบันทึกลงโทรศัพท์หรือ SD Card ได้ ไม่ต้องเชื่อม Cloud กรุณาเก็บรหัสและไฟล์แยกกัน</div></div>

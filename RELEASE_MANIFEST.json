@@ -1,6 +1,6 @@
 {
-  "release": "1.1.0-product-catalog",
-  "product": "NormalPocket / YGPH STANDARD",
+  "release": "1.2.0-simple-shop-flow",
+  "product": "NormalPocket",
   "releaseDate": "2026-08-12",
   "sourceProduct": "YGPH METROPOLIS current main (read-only engineering reference)",
   "sourceCommit": "874cca49624a43a09b48c5155131f974e8d91b61",
@@ -11,10 +11,13 @@
     "CALENDAR"
   ],
   "features": [
+    "simple daily home actions",
     "general product catalog",
     "optional color and size variants",
-    "per-variant stock ownership",
-    "legacy aggregate stock normalization"
+    "quick cash sale without catalog stock mutation",
+    "simple stock adjustment",
+    "day-close summary without destructive reset",
+    "neutral public branding"
   ],
   "database": {
     "name": "ygph-standard-secure",
@@ -24,15 +27,16 @@
     "vaultFormat": 1
   },
   "serviceWorker": {
-    "releaseId": "v1.1.0-20260812-r3-product-catalog",
+    "releaseId": "v1.2.0-20260812-r4-simple-shop-flow",
     "cachePrefix": "ygph-standard-app-",
     "metaCache": "ygph-standard-meta"
   },
   "validation": {
     "command": "npm run deploy:gate",
     "scope": [
-      "NormalPocket product catalog contracts",
-      "variant and stock-owner contracts",
+      "NormalPocket simple shop flow contracts",
+      "neutral public branding contract",
+      "product catalog and stock-owner contracts",
       "publication contract",
       "STANDARD regression contracts",
       "syntax",
@@ -40,35 +44,100 @@
       "no executable ride references"
     ]
   },
-  "note": "NormalPocket 1.1.0 keeps the STANDARD encrypted Store/Ledger/Calendar foundation and adds a general product catalog for ordinary shops. METROPOLIS is read-only reference only; no owner runtime data or RIDE execution is included.",
+  "note": "NormalPocket 1.2.0 simplifies daily shop work and removes owner-specific visible identity while preserving the encrypted local Store/Ledger/Calendar foundation.",
   "productionFiles": [
-    { "path": "index.html" },
-    { "path": "manifest.webmanifest" },
-    { "path": "styles.css" },
-    { "path": "flow-era.css" },
-    { "path": "metropolis-v4.css" },
-    { "path": "metropolis-r5.css" },
-    { "path": "metropolis-r5-1.css" },
-    { "path": "metropolis-r5-2.css" },
-    { "path": "metropolis-r5-3.css" },
-    { "path": "metropolis-r5-4.css" },
-    { "path": "normalpocket-products.css" },
-    { "path": "sw-bootstrap.js" },
-    { "path": "normalpocket-bootstrap.js" },
-    { "path": "normalpocket-catalog-core.js" },
-    { "path": "normalpocket-products.js" },
-    { "path": "normalpocket-reconcile.js" },
-    { "path": "highway-gate.js" },
-    { "path": "app.js" },
-    { "path": "flow-era.js" },
-    { "path": "metropolis-v4.js" },
-    { "path": "metropolis-r5.js" },
-    { "path": "metropolis-r5-1.js" },
-    { "path": "metropolis-r5-2.js" },
-    { "path": "metropolis-r5-3.js" },
-    { "path": "metropolis-r5-4.js" },
-    { "path": "sw.js" },
-    { "path": "icon-192.png" },
-    { "path": "icon-512.png" }
+    {
+      "path": "index.html"
+    },
+    {
+      "path": "manifest.webmanifest"
+    },
+    {
+      "path": "styles.css"
+    },
+    {
+      "path": "flow-era.css"
+    },
+    {
+      "path": "metropolis-v4.css"
+    },
+    {
+      "path": "metropolis-r5.css"
+    },
+    {
+      "path": "metropolis-r5-1.css"
+    },
+    {
+      "path": "metropolis-r5-2.css"
+    },
+    {
+      "path": "metropolis-r5-3.css"
+    },
+    {
+      "path": "metropolis-r5-4.css"
+    },
+    {
+      "path": "normalpocket-products.css"
+    },
+    {
+      "path": "sw-bootstrap.js"
+    },
+    {
+      "path": "normalpocket-bootstrap.js"
+    },
+    {
+      "path": "normalpocket-catalog-core.js"
+    },
+    {
+      "path": "normalpocket-products.js"
+    },
+    {
+      "path": "normalpocket-reconcile.js"
+    },
+    {
+      "path": "highway-gate.js"
+    },
+    {
+      "path": "app.js"
+    },
+    {
+      "path": "flow-era.js"
+    },
+    {
+      "path": "metropolis-v4.js"
+    },
+    {
+      "path": "metropolis-r5.js"
+    },
+    {
+      "path": "metropolis-r5-1.js"
+    },
+    {
+      "path": "metropolis-r5-2.js"
+    },
+    {
+      "path": "metropolis-r5-3.js"
+    },
+    {
+      "path": "metropolis-r5-4.js"
+    },
+    {
+      "path": "sw.js"
+    },
+    {
+      "path": "icon-192.png"
+    },
+    {
+      "path": "icon-512.png"
+    },
+    {
+      "path": "normalpocket-simple-flow.js"
+    },
+    {
+      "path": "normalpocket-simple-flow.css"
+    },
+    {
+      "path": "app-icon.svg"
+    }
   ]
 }
