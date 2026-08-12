@@ -23,11 +23,11 @@ function cloudflareAllowlist() {
 }
 
 test("NormalPocket publication metadata follows the current release", () => {
-  const expectedRelease = "v1.3.0-20260812-r5-one-hand-mobile";
+  const expectedRelease = "v1.3.1-20260812-r6-mobile-polish";
   assert.equal(sw.RELEASE_ID, expectedRelease);
   assert.equal(manifest.serviceWorker.releaseId, expectedRelease);
   assert.equal(manifest.sourceCommit, "874cca49624a43a09b48c5155131f974e8d91b61");
-  assert.equal(manifest.release, "1.3.0-one-hand-mobile");
+  assert.equal(manifest.release, "1.3.1-mobile-polish");
   assert.equal(manifest.product, "NormalPocket");
 });
 

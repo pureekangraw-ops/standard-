@@ -1,7 +1,7 @@
 "use strict";
 
 (function normalPocketSimpleFlow(root) {
-  const VERSION = "1.3.0";
+  const VERSION = "1.3.1";
   const STOCK_ADJUST_REASONS = Object.freeze(["นับใหม่", "เสีย", "หาย", "ใช้เอง", "คืนสินค้า", "อื่นๆ"]);
 
   const int = (value, label = "จำนวน") => {
@@ -13,8 +13,12 @@
   function firstRunHint({ productCount = 0 } = {}) {
     const count = Number(productCount || 0);
     return count < 1
-      ? { empty: true, message: "ยังไม่มีสินค้า เพิ่มสินค้าแรกหรือใช้ขายด่วนได้ทันที" }
+      ? { empty: true, message: "ยังไม่มีสินค้า เพิ่มสินค้าแรกได้เลย" }
       : { empty: false, message: "" };
+  }
+
+  function shouldShowTodaySummary({ productCount = 0, sales = 0, cash = 0, stock = 0, tasks = 0 } = {}) {
+    return Number(productCount || 0) > 0 || Number(sales || 0) != 0 || Number(cash || 0) != 0 || Number(stock || 0) != 0 || Number(tasks || 0) > 0;
   }
 
   function upsertDayCloseEvent(existing, summary, { id, at } = {}) {
@@ -105,7 +109,7 @@
     return amount;
   }
 
-  const api = Object.freeze({ VERSION, STOCK_ADJUST_REASONS, firstRunHint, upsertDayCloseEvent, buildQuickSale, daySummary, stockAdjustmentDelta });
+  const api = Object.freeze({ VERSION, STOCK_ADJUST_REASONS, firstRunHint, shouldShowTodaySummary, upsertDayCloseEvent, buildQuickSale, daySummary, stockAdjustmentDelta });
   if (typeof module === "object" && module.exports) module.exports = api;
   root.NormalPocketSimpleFlow = api;
 
@@ -180,15 +184,15 @@
       panel.className = "np-quick-home";
       panel.innerHTML = `
         <div class="np-quick-head"><div><small>วันนี้ทำอะไร</small><h2>เริ่มงานได้เลย</h2></div></div>
-        <div class="np-first-run" id="npFirstRun" hidden><span id="npFirstRunText"></span><div><button type="button" data-np-first="add">เพิ่มสินค้าแรก</button><button type="button" data-np-first="quick">ขายด่วน</button></div></div>
+        <div class="np-first-run" id="npFirstRun" hidden><span id="npFirstRunText"></span><div><button type="button" data-np-first="add">เพิ่มสินค้าแรก</button></div></div>
         <div class="np-daily-actions">
           <button type="button" class="np-action np-primary" data-np-action="sale"><span>ขายสินค้า</span><small>เลือกสินค้าแล้วขาย</small></button>
-          <button type="button" class="np-action" data-np-action="quick"><span>ขายด่วน</span><small>ราคา + จำนวน + รับเงิน</small></button>
+          <button type="button" class="np-action" data-np-action="quick"><span>ขายด่วน</span><small>ราคา · จำนวน · รับเงิน</small></button>
           <button type="button" class="np-action" data-np-action="receive"><span>รับสินค้า</span><small>เพิ่มของเข้าสต็อก</small></button>
           <button type="button" class="np-action" data-np-action="money"><span>เงิน</span><small>ดูเงินเข้าออก</small></button>
           <button type="button" class="np-action np-close" data-np-action="close"><span>จบวัน</span><small>สรุปก่อนปิดร้าน</small></button>
         </div>
-        <div class="np-today-strip">
+        <div class="np-today-strip" id="npTodayStrip">
           <div><small>ยอดขายวันนี้</small><b id="npTodaySales">0 บาท</b></div>
           <div><small>เงินปัจจุบัน</small><b id="npTodayCash">0 บาท</b></div>
           <div><small>สต็อก</small><b id="npTodayStock">0</b></div>
@@ -203,7 +207,6 @@
         </div>`;
       home.prepend(panel);
       panel.querySelector('[data-np-first="add"]').onclick = () => { show("store"); setTimeout(() => document.getElementById("normalpocketAddProductBtn")?.click(), 0); };
-      panel.querySelector('[data-np-first="quick"]').onclick = openQuickSale;
       panel.querySelector('[data-np-action="sale"]').onclick = () => { show("store"); setTimeout(() => document.getElementById("addSaleBtn")?.click(), 0); };
       panel.querySelector('[data-np-action="quick"]').onclick = openQuickSale;
       panel.querySelector('[data-np-action="receive"]').onclick = () => { show("store"); setTimeout(() => document.getElementById("addPurchaseBtn")?.click(), 0); };
@@ -218,6 +221,9 @@
     const hintText = document.getElementById("npFirstRunText");
     if (hintBox) hintBox.hidden = !hint.empty;
     if (hintText) hintText.textContent = hint.message;
+    const summaryVisible = shouldShowTodaySummary(metrics);
+    const npTodayStrip = document.getElementById("npTodayStrip");
+    if (npTodayStrip) npTodayStrip.hidden = !summaryVisible;
     const set = (id, text) => { const node = document.getElementById(id); if (node) node.textContent = text; };
     set("npTodaySales", `${baht(metrics.sales)} บาท`);
     set("npTodayCash", `${baht(metrics.cash)} บาท`);

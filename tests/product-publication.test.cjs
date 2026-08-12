@@ -23,15 +23,15 @@ test("NormalPocket bootstrap loads catalog then simple-flow assets after the bas
   assert.match(bootstrap, /DOMContentLoaded/);
 });
 
-test("release metadata publishes NormalPocket 1.3.0 while retaining catalog files", () => {
+test("release metadata publishes NormalPocket 1.3.1 while retaining catalog files", () => {
   const pkg = JSON.parse(read("package.json"));
-  assert.equal(pkg.version, "1.3.0");
+  assert.equal(pkg.version, "1.3.1");
   for (const file of ["normalpocket-bootstrap.js", "normalpocket-catalog-core.js", "normalpocket-products.js", "normalpocket-reconcile.js", "normalpocket-simple-flow.js"]) {
     assert.match(pkg.scripts["check:syntax"], new RegExp(file.replaceAll(".", "\\.")));
   }
 
   const manifest = JSON.parse(read("RELEASE_MANIFEST.json"));
-  assert.equal(manifest.release, "1.3.0-one-hand-mobile");
+  assert.equal(manifest.release, "1.3.1-mobile-polish");
   assert.equal(manifest.product, "NormalPocket");
   assert.equal(manifest.sourceCommit, "874cca49624a43a09b48c5155131f974e8d91b61");
   const files = new Set(manifest.productionFiles.map(item => item.path));
@@ -42,7 +42,7 @@ test("release metadata publishes NormalPocket 1.3.0 while retaining catalog file
 
 test("service worker precaches the complete NormalPocket 1.3 release", () => {
   const sw = require("../sw.js");
-  assert.equal(sw.RELEASE_ID, "v1.3.0-20260812-r5-one-hand-mobile");
+  assert.equal(sw.RELEASE_ID, "v1.3.1-20260812-r6-mobile-polish");
   for (const file of ["normalpocket-bootstrap.js", "normalpocket-catalog-core.js", "normalpocket-products.js", "normalpocket-reconcile.js", "normalpocket-products.css", "normalpocket-simple-flow.js", "normalpocket-simple-flow.css", "app-icon.svg"]) {
     assert.ok(sw.APP_SHELL.includes(file), `${file} must be offline`);
   }
