@@ -33,6 +33,7 @@
     loadScript("metropolis-r5-4.js", "data-metropolis-r5-4");
   }
 
+  loadScript("normalpocket-bootstrap.js", "data-normalpocket-bootstrap");
   loadMetropolisLayers();
 
   const supported = "serviceWorker" in navigator

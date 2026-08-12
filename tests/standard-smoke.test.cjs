@@ -94,8 +94,8 @@ test("STANDARD dashboard uses explicit cash and retained Calendar directions", (
 });
 
 test("STANDARD offline shell represents the current release and rejects incomplete precache readback", () => {
-  assert.equal(sw.RELEASE_ID, "v1.0.0-20260809-r2-defrag-current");
-  for (const file of ["index.html", "highway-gate.js", "app.js", "metropolis-r5-4.js", "icon-192.png", "icon-512.png"]) {
+  assert.equal(sw.RELEASE_ID, "v1.1.0-20260812-r3-product-catalog");
+  for (const file of ["index.html", "highway-gate.js", "app.js", "normalpocket-catalog-core.js", "normalpocket-products.js", "metropolis-r5-4.js", "icon-192.png", "icon-512.png"]) {
     assert.ok(sw.APP_SHELL.includes(file), `${file} must be available offline`);
   }
   assert.equal(sw.assertShellReadback(sw.APP_SHELL.map(() => ({ ok: true }))), true);

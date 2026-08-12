@@ -15,7 +15,12 @@ node_modules/**
 !/metropolis-r5-2.css
 !/metropolis-r5-3.css
 !/metropolis-r5-4.css
+!/normalpocket-products.css
 !/sw-bootstrap.js
+!/normalpocket-bootstrap.js
+!/normalpocket-catalog-core.js
+!/normalpocket-products.js
+!/normalpocket-reconcile.js
 !/highway-gate.js
 !/app.js
 !/flow-era.js
