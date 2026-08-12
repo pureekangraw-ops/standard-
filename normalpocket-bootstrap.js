@@ -33,9 +33,11 @@
 
   async function start() {
     ensureStyle("normalpocket-products.css");
+    ensureStyle("normalpocket-simple-flow.css");
     await loadScript("normalpocket-catalog-core.js");
     await loadScript("normalpocket-products.js");
     await loadScript("normalpocket-reconcile.js");
+    await loadScript("normalpocket-simple-flow.js");
   }
 
   const run = () => start().catch(error => console.error("NORMALPOCKET_BOOTSTRAP_FAILED", error));

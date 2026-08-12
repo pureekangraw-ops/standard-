@@ -4,7 +4,7 @@ const APP_CACHE_PREFIX = "ygph-standard-app-";
 const LEGACY_CACHE_PREFIXES = Object.freeze([
   "ygph-standard-0.1.0-preview."
 ]);
-const RELEASE_ID = "v1.1.0-20260812-r3-product-catalog";
+const RELEASE_ID = "v1.2.0-20260812-r4-simple-shop-flow";
 const CURRENT_CACHE = `${APP_CACHE_PREFIX}${RELEASE_ID}`;
 const META_CACHE = "ygph-standard-meta";
 const META_PATH = "__ygph_service_worker_lifecycle__";
@@ -21,11 +21,13 @@ const APP_SHELL = [
   "metropolis-r5-3.css",
   "metropolis-r5-4.css",
   "normalpocket-products.css",
+  "normalpocket-simple-flow.css",
   "sw-bootstrap.js",
   "normalpocket-bootstrap.js",
   "normalpocket-catalog-core.js",
   "normalpocket-products.js",
   "normalpocket-reconcile.js",
+  "normalpocket-simple-flow.js",
   "highway-gate.js",
   "app.js",
   "flow-era.js",
@@ -35,6 +37,7 @@ const APP_SHELL = [
   "metropolis-r5-2.js",
   "metropolis-r5-3.js",
   "metropolis-r5-4.js",
+  "app-icon.svg",
   "icon-192.png",
   "icon-512.png"
 ];

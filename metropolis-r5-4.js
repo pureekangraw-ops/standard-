@@ -2,7 +2,7 @@
 
 /* YGPH STANDARD 1.0.0 — STANDARD baseline + visible release authority */
 
-const STANDARD_PRODUCT_VERSION = "1.0.0";
+const STANDARD_PRODUCT_VERSION = "1.2.0";
 const METROPOLIS_R5_4_VERSION = "standard-1.0.1-runtime-authority";
 
 function r54Today() {
@@ -50,12 +50,12 @@ function r54ApplyVisibleVersion() {
   if (typeof document === "undefined") return;
   document.documentElement.dataset.metropolisR54 = METROPOLIS_R5_4_VERSION;
   document.documentElement.dataset.metropolisVersion = STANDARD_PRODUCT_VERSION;
-  const expectedTitle = `YGPH STANDARD v${STANDARD_PRODUCT_VERSION}`;
+  const expectedTitle = `NormalPocket ${STANDARD_PRODUCT_VERSION}`;
   if (document.title !== expectedTitle) document.title = expectedTitle;
   const statusVersion = document.querySelector(".status-line b");
   if (statusVersion) {
-    const expectedVersion = `STANDARD v${STANDARD_PRODUCT_VERSION}`;
-    if (statusVersion.textContent !== expectedVersion) statusVersion.textContent = `STANDARD v${STANDARD_PRODUCT_VERSION}`;
+    const expectedVersion = `NormalPocket ${STANDARD_PRODUCT_VERSION}`;
+    if (statusVersion.textContent !== expectedVersion) statusVersion.textContent = `NormalPocket ${STANDARD_PRODUCT_VERSION}`;
     statusVersion.setAttribute("aria-label", expectedVersion);
   }
 }

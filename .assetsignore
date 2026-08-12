@@ -33,3 +33,6 @@ node_modules/**
 !/sw.js
 !/icon-192.png
 !/icon-512.png
+!/normalpocket-simple-flow.js
+!/normalpocket-simple-flow.css
+!/app-icon.svg

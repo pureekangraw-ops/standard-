@@ -1,15 +1,15 @@
 "use strict";
 
 /*
-  YGPH STANDARD v1.0.0
+  NormalPocket v1.0.0
   UI architecture layer only:
   - Three app experiences: STORE / LEDGER / CALENDAR
   - One encrypted local state and the existing Source/Route rules
   - No migration, formula, vault, IndexedDB or transaction mutation
 */
 
-const METROPOLIS_VERSION = "1.0.0";
-const METROPOLIS_NAME = "YGPH STANDARD";
+const METROPOLIS_VERSION = "1.2.0";
+const METROPOLIS_NAME = "NormalPocket";
 const METROPOLIS_ARCHITECTURE = "THREE_APP_CONNECTED_SUITE";
 
 const METROPOLIS_APPS = {
@@ -133,7 +133,7 @@ function metropolisBuildLauncher() {
   home.insertBefore(cityHero, firstSection);
 
   const title = firstSection.querySelector(".section-title h2");
-  if (title) title.textContent = "แอปของบิ๊ก";
+  if (title) title.textContent = "งานหลัก";
   const sectionTitle = firstSection.querySelector(".section-title");
   if (sectionTitle && !sectionTitle.querySelector(".metropolis-section-note")) {
     const note = document.createElement("p");
@@ -218,7 +218,7 @@ function metropolisBuildLauncher() {
   drawer.className = "metropolis-system-drawer";
   drawer.innerHTML = `
     <summary>
-      <span><b>ศูนย์เชื่อมระบบ</b><small>คิวรวม รายงาน และการรับ–ส่งข้อมูลกับโก</small></span>
+      <span><b>ศูนย์เชื่อมระบบ</b><small>คิว รายงาน และเครื่องมือข้อมูลเพิ่มเติม</small></span>
       <span class="metropolis-summary-arrow" aria-hidden="true">⌄</span>
     </summary>
     <div class="metropolis-system-content"></div>`;
@@ -289,14 +289,14 @@ function metropolisApplyBranding() {
   const brandTitle = document.querySelector(".brand-copy h1");
   const brandSub = document.querySelector(".brand-copy p");
   if (brandTitle) brandTitle.textContent = METROPOLIS_NAME;
-  if (brandSub) brandSub.textContent = "Store • Ledger • Calendar — ฐานงานส่วนตัว";
+  if (brandSub) brandSub.textContent = "ร้านค้า • เงิน • งานประจำวัน";
 
   const status = document.querySelector(".status-line");
   if (status) {
     const version = status.querySelector("b");
     const detail = status.querySelector("span:not(.dot)");
-    if (version) version.textContent = `STANDARD v${METROPOLIS_VERSION}`;
-    if (detail) detail.textContent = "• 3 แอป • ออฟไลน์ • เข้ารหัส";
+    if (version) version.textContent = `NormalPocket ${METROPOLIS_VERSION}`;
+    if (detail) detail.textContent = "• ออฟไลน์ • เข้ารหัส • ใช้ในเครื่อง";
   }
 }
 
@@ -315,7 +315,7 @@ function metropolisApplyPage(page = metropolisActivePage()) {
 
   const meta = METROPOLIS_APPS[normalized] || {
     title: "ระบบกลาง",
-    english: "STANDARD",
+    english: "NORMALPOCKET",
     tagline: "ข้อมูลเชื่อมกันผ่านระบบกลาง",
     emoji: "🏙️"
   };
