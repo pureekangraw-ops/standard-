@@ -12,7 +12,8 @@ test("NormalPocket 1.2 has neutral public branding with no owner-specific UI cop
   const index = read("index.html");
   const manifest = JSON.parse(read("manifest.webmanifest"));
   const metropolis = read("metropolis-v4.js");
-  const visible = [index, manifest.name, manifest.short_name, manifest.description, metropolis].join("\n");
+  const simple = read("normalpocket-simple-flow.js");
+  const visible = [index, manifest.name, manifest.short_name, manifest.description, metropolis, simple].join("\n");
 
   assert.match(index, /<title>NormalPocket 1\.2\.0<\/title>/);
   assert.equal(manifest.name, "NormalPocket");
@@ -21,6 +22,8 @@ test("NormalPocket 1.2 has neutral public branding with no owner-specific UI cop
   for (const ownerCopy of ["แอปของบิ๊ก", "กับโก", "YGPH STANDARD", "ฐานงานส่วนตัว"]) {
     assert.doesNotMatch(visible, new RegExp(ownerCopy));
   }
+  assert.equal(manifest.icons[0].src, "app-icon.svg");
+  assert.equal(manifest.icons[0].sizes, "any");
 });
 
 test("NormalPocket 1.2 exposes five simple daily actions", () => {
@@ -32,6 +35,21 @@ test("NormalPocket 1.2 exposes five simple daily actions", () => {
   assert.match(source, /openQuickSale/);
   assert.match(source, /openDayClose/);
   assert.match(source, /openStockAdjust/);
+});
+
+test("simple home hides the legacy launcher and duplicate dashboard", () => {
+  const css = read("normalpocket-simple-flow.css");
+  assert.match(css, /#homePage>\.section/);
+  assert.match(css, /#homePage>\.metro-owner-dashboard/);
+  assert.match(css, /display:none/);
+});
+
+test("legacy runtime layers load before NormalPocket authority", () => {
+  const bootstrap = read("sw-bootstrap.js");
+  assert.match(bootstrap, /async function loadRuntimeLayers/);
+  assert.match(bootstrap, /await loadMetropolisLayers\(\)/);
+  assert.match(bootstrap, /await loadScript\("normalpocket-bootstrap\.js"/);
+  assert.ok(bootstrap.indexOf("await loadMetropolisLayers()") < bootstrap.indexOf('await loadScript("normalpocket-bootstrap.js"'));
 });
 
 test("quick sale is cash-first and never mutates product stock", () => {
