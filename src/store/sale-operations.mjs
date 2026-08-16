@@ -39,7 +39,11 @@ export function buildSaleEffects(input) {
     updatedAt: input.at,
     revision: 1,
     cancelledAt: null,
-    stockRestored: false
+    stockRestored: false,
+    productId: input.productId || null,
+    variantId: input.variantId || null,
+    optionSnapshot: input.optionSnapshot ? structuredClone(input.optionSnapshot) : {},
+    productName: String(input.productName || "")
   };
   const transactions = [];
   if (receivedSatang > 0) transactions.push({ owner: "FINANCE", direction: "IN", amountSatang: receivedSatang, subtype: "SALE_INITIAL_RECEIPT", actionKey: `${input.id}:initial` });
