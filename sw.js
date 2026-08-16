@@ -25,6 +25,7 @@ const APP_SHELL = [
   "normalpocket-simple-flow.css",
   "sw-bootstrap.js",
   "normalpocket-runtime.js",
+  "normalpocket-state-port.js",
   "normalpocket-bootstrap.js",
   "normalpocket-catalog-core.js",
   "normalpocket-products.js",
