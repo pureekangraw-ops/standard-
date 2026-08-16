@@ -1,11 +1,18 @@
 /*
   NormalPocket current UI authority.
-  Legacy styles remain temporary migration dependencies only.
-  Production HTML must load this file, not the dependencies directly.
+  All presentation layers are ordered here. Runtime bootstraps must not inject CSS.
+  Legacy files remain migration dependencies until their rules are consolidated.
 */
 @import url("styles.css");
 @import url("flow-era.css");
 @import url("metropolis-v4.css");
+@import url("metropolis-r5.css");
+@import url("metropolis-r5-1.css");
+@import url("metropolis-r5-2.css");
+@import url("metropolis-r5-3.css");
+@import url("metropolis-r5-4.css");
+@import url("normalpocket-products.css");
+@import url("normalpocket-simple-flow.css");
 
 :root {
   --normalpocket-ui-authority: "normalpocket-current";
