@@ -1,4 +1,4 @@
-import { scheduleDueDates, shiftDueOneInterval } from "./installment-schedule.mjs";
+import { derivePerInstallmentSchedule, scheduleDueDates, shiftDueOneInterval } from "./installment-schedule.mjs";
 
 const CLOSED = new Set(["COMPLETED", "CANCELLED"]);
 
@@ -94,8 +94,94 @@ export function skipInstallmentInterval({ obligation, queues, queueId }) {
   return { obligation: recomputeObligation(nextObligation), queues: nextQueues };
 }
 
+export function settleInstallmentsEarly({ obligation, queues }) {
+  const nextObligation = clone(obligation);
+  const nextQueues = clone(queues || []);
+  if (!nextObligation || nextObligation.scheduleMode !== "PER_INSTALLMENT") throw new Error("ไม่พบตารางงวด");
+  const cancelledOutstanding = (nextObligation.installments || []).some(item => item.status === "CANCELLED" && Number(item.amountSatang || 0) > Number(item.paidSatang || 0));
+  if (cancelledOutstanding) throw new Error("มีงวดที่ยกเลิกค้างอยู่");
+  const pairs = activePairs(nextObligation, nextQueues, 1);
+  if (!pairs.length) throw new Error("ไม่มีงวดคงเหลือ");
+  const transactions = [];
+  for (const pair of pairs) {
+    const remaining = Math.max(0, Number(pair.installment.amountSatang || 0) - Number(pair.installment.paidSatang || 0));
+    if (remaining > 0) {
+      transactions.push({
+        owner: "FINANCE",
+        type: "RECORD_INSTALLMENT_PAYMENT",
+        direction: "OUT",
+        amountSatang: remaining,
+        source: "LEDGER",
+        sourceId: nextObligation.id,
+        installmentNumber: Number(pair.installment.number),
+        actionKey: `${pair.queue.id}:payment:early-close`
+      });
+      pair.installment.paidSatang = Number(pair.installment.paidSatang || 0) + remaining;
+      pair.queue.paidSatang = Number(pair.queue.paidSatang || 0) + remaining;
+    }
+    pair.installment.status = "COMPLETED";
+    pair.queue.status = "COMPLETED";
+  }
+  const completed = recomputeObligation(nextObligation);
+  completed.remainingSatang = 0;
+  completed.status = "COMPLETED";
+  return { obligation: completed, queues: nextQueues, transactions };
+}
+
+export function reconcileInstallmentSchedule({ obligation, queues, idFactory = () => `CAL-${Date.now()}` }) {
+  const nextObligation = clone(obligation);
+  const nextQueues = clone(queues || []);
+  if (!nextObligation || nextObligation.scheduleMode !== "PER_INSTALLMENT") {
+    return { obligation: nextObligation, queues: nextQueues, calendarEffects: [] };
+  }
+  const schedule = derivePerInstallmentSchedule(nextObligation);
+  nextObligation.installments = Array.isArray(nextObligation.installments) ? nextObligation.installments : [];
+  const calendarEffects = [];
+
+  for (const expected of schedule) {
+    let installment = nextObligation.installments.find(item => Number(item.number) === expected.number);
+    if (!installment) {
+      installment = {
+        number: expected.number,
+        amountSatang: expected.amountSatang,
+        paidSatang: 0,
+        due: expected.due,
+        status: "PENDING",
+        queueId: null,
+        paidAt: null
+      };
+      nextObligation.installments.push(installment);
+    }
+    let queue = installment.queueId ? nextQueues.find(item => item.id === installment.queueId) : null;
+    queue ||= nextQueues.find(item => item.source === "LEDGER" && item.sourceId === nextObligation.id && Number(item.installmentNumber) === expected.number);
+    if (!queue) {
+      queue = {
+        id: idFactory("CAL"),
+        source: "LEDGER",
+        sourceId: nextObligation.id,
+        actionType: Number(nextObligation.installmentCount) >= 2 ? "PAY_OBLIGATION_INSTALLMENT" : "PAY_OBLIGATION",
+        status: Number(installment.paidSatang || 0) > 0 ? "PARTIAL" : "OPEN",
+        amountSatang: Number(installment.amountSatang || expected.amountSatang),
+        paidSatang: Number(installment.paidSatang || 0),
+        due: installment.due || expected.due,
+        installmentNumber: expected.number,
+        installmentCount: Number(nextObligation.installmentCount || schedule.length)
+      };
+      nextQueues.push(queue);
+      installment.queueId = queue.id;
+      calendarEffects.push({ owner: "CALENDAR", type: "UPSERT_INSTALLMENT_QUEUE", queue: clone(queue) });
+    } else if (!installment.queueId) {
+      installment.queueId = queue.id;
+    }
+  }
+  nextObligation.installments.sort((a, b) => Number(a.number) - Number(b.number));
+  return { obligation: recomputeObligation(nextObligation), queues: nextQueues, calendarEffects };
+}
+
 export const INSTALLMENT_OPERATIONS = Object.freeze({
   recomputeObligation,
   editInstallmentSchedule,
-  skipInstallmentInterval
+  skipInstallmentInterval,
+  settleInstallmentsEarly,
+  reconcileInstallmentSchedule
 });
