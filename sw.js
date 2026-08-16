@@ -48,6 +48,7 @@ const APP_SHELL = [
   "src/shell/shell-boundary.mjs",
   "src/store/store-boundary.mjs",
   "src/finance/installment-schedule.mjs",
+  "src/finance/installment-operations.mjs",
   "src/finance/finance-boundary.mjs",
   "src/calendar/calendar-boundary.mjs",
   "app-icon.svg",
