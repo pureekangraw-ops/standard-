@@ -32,3 +32,20 @@ export function selectLiveCalendar(calendar, sourceStatusOf = () => null, today 
     ? calendar.filter(item => liveStatusSignal(item, sourceStatusOf(item), today) !== STATUS_SIGNALS.HIDDEN)
     : [];
 }
+
+export function deriveLiveCounters(rows, today = "") {
+  const active = Array.isArray(rows) ? rows.filter(row => {
+    const status = String(row?.item?.status || "").toUpperCase();
+    if (["COMPLETED", "CANCELLED"].includes(status)) return false;
+    return liveStatusSignal(row?.item, row?.sourceStatus, today) !== STATUS_SIGNALS.HIDDEN;
+  }) : [];
+
+  return {
+    incoming: active.filter(row => row?.direction === "IN").length,
+    outgoing: active.filter(row => row?.direction === "OUT").length,
+    verify: active.filter(row =>
+      String(row?.item?.status || "").toUpperCase() === "VERIFY" ||
+      String(row?.integrityState || "TRUSTED").toUpperCase() !== "TRUSTED"
+    ).length
+  };
+}
