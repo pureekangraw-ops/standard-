@@ -21,7 +21,10 @@
     "quick cash sale without catalog stock mutation",
     "simple stock adjustment",
     "day-close summary without destructive reset",
-    "neutral public branding"
+    "neutral public branding",
+    "single current stylesheet authority",
+    "explicit Store/Finance/Calendar/Shell structural boundaries",
+    "current release authority bridge"
   ],
   "database": {
     "name": "ygph-standard-secure",
@@ -42,6 +45,8 @@
       "NormalPocket simple shop flow contracts",
       "neutral public branding contract",
       "product catalog and stock-owner contracts",
+      "structural authority contracts",
+      "current UI authority contract",
       "publication contract",
       "STANDARD regression contracts",
       "syntax",
@@ -49,100 +54,46 @@
       "no executable ride references"
     ]
   },
-  "note": "NormalPocket 1.3.1 polishes the one-hand mobile home by removing duplicated first-run actions and hiding zero-value summary cards while the shop is empty, preserving encrypted local Store/Ledger/Calendar data ownership.",
+  "note": "NormalPocket 1.3.1 keeps existing encrypted Store/Ledger/Calendar behavior while introducing explicit structural authority boundaries and one current UI entrypoint. Legacy assets remain temporary migration dependencies until behavior-equivalent hard cuts are verified.",
   "productionFiles": [
-    {
-      "path": "index.html"
-    },
-    {
-      "path": "manifest.webmanifest"
-    },
-    {
-      "path": "styles.css"
-    },
-    {
-      "path": "flow-era.css"
-    },
-    {
-      "path": "metropolis-v4.css"
-    },
-    {
-      "path": "metropolis-r5.css"
-    },
-    {
-      "path": "metropolis-r5-1.css"
-    },
-    {
-      "path": "metropolis-r5-2.css"
-    },
-    {
-      "path": "metropolis-r5-3.css"
-    },
-    {
-      "path": "metropolis-r5-4.css"
-    },
-    {
-      "path": "normalpocket-products.css"
-    },
-    {
-      "path": "sw-bootstrap.js"
-    },
-    {
-      "path": "normalpocket-bootstrap.js"
-    },
-    {
-      "path": "normalpocket-catalog-core.js"
-    },
-    {
-      "path": "normalpocket-products.js"
-    },
-    {
-      "path": "normalpocket-reconcile.js"
-    },
-    {
-      "path": "highway-gate.js"
-    },
-    {
-      "path": "app.js"
-    },
-    {
-      "path": "flow-era.js"
-    },
-    {
-      "path": "metropolis-v4.js"
-    },
-    {
-      "path": "metropolis-r5.js"
-    },
-    {
-      "path": "metropolis-r5-1.js"
-    },
-    {
-      "path": "metropolis-r5-2.js"
-    },
-    {
-      "path": "metropolis-r5-3.js"
-    },
-    {
-      "path": "metropolis-r5-4.js"
-    },
-    {
-      "path": "sw.js"
-    },
-    {
-      "path": "icon-192.png"
-    },
-    {
-      "path": "icon-512.png"
-    },
-    {
-      "path": "normalpocket-simple-flow.js"
-    },
-    {
-      "path": "normalpocket-simple-flow.css"
-    },
-    {
-      "path": "app-icon.svg"
-    }
+    { "path": "index.html" },
+    { "path": "manifest.webmanifest" },
+    { "path": "normalpocket-current.css" },
+    { "path": "styles.css" },
+    { "path": "flow-era.css" },
+    { "path": "metropolis-v4.css" },
+    { "path": "metropolis-r5.css" },
+    { "path": "metropolis-r5-1.css" },
+    { "path": "metropolis-r5-2.css" },
+    { "path": "metropolis-r5-3.css" },
+    { "path": "metropolis-r5-4.css" },
+    { "path": "normalpocket-products.css" },
+    { "path": "sw-bootstrap.js" },
+    { "path": "normalpocket-bootstrap.js" },
+    { "path": "normalpocket-catalog-core.js" },
+    { "path": "normalpocket-products.js" },
+    { "path": "normalpocket-reconcile.js" },
+    { "path": "highway-gate.js" },
+    { "path": "app.js" },
+    { "path": "flow-era.js" },
+    { "path": "metropolis-v4.js" },
+    { "path": "metropolis-r5.js" },
+    { "path": "metropolis-r5-1.js" },
+    { "path": "metropolis-r5-2.js" },
+    { "path": "metropolis-r5-3.js" },
+    { "path": "metropolis-r5-4.js" },
+    { "path": "src/current-bootstrap.mjs" },
+    { "path": "src/architecture/authority.mjs" },
+    { "path": "src/architecture/release-authority.mjs" },
+    { "path": "src/shell/shell-boundary.mjs" },
+    { "path": "src/store/store-boundary.mjs" },
+    { "path": "src/finance/finance-boundary.mjs" },
+    { "path": "src/calendar/calendar-boundary.mjs" },
+    { "path": "sw.js" },
+    { "path": "icon-192.png" },
+    { "path": "icon-512.png" },
+    { "path": "normalpocket-simple-flow.js" },
+    { "path": "normalpocket-simple-flow.css" },
+    { "path": "app-icon.svg" }
   ]
 }
