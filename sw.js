@@ -33,7 +33,6 @@ const APP_SHELL = [
   "highway-gate.js",
   "app.js",
   "flow-era.js",
-  "metropolis-v4.js",
   "metropolis-r5.js",
   "metropolis-r5-1.js",
   "metropolis-r5-2.js",
@@ -179,109 +178,53 @@ if (typeof self !== "undefined" && typeof self.addEventListener === "function") 
     };
   }
 
-  async function notifyClients(message) {
-    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    clients.forEach(client => client.postMessage(message));
-  }
-
-  async function reply(event, task) {
-    try {
-      const result = await task();
-      event.ports?.[0]?.postMessage({ ok: true, ...result });
-      return result;
-    } catch (error) {
-      event.ports?.[0]?.postMessage({ ok: false, error: error.message || String(error) });
-      throw error;
-    }
-  }
-
   self.addEventListener("install", event => {
-    event.waitUntil((async () => {
-      await precacheRelease();
-      const [cacheNames, lifecycle] = await Promise.all([
-        caches.keys(),
-        readLifecycle()
-      ]);
-      if (shouldAutoActivateLegacyBridge(cacheNames, lifecycle)) {
-        await self.skipWaiting();
-      }
-    })());
+    event.waitUntil(precacheRelease());
   });
 
   self.addEventListener("activate", event => {
     event.waitUntil((async () => {
-      const existing = await readLifecycle();
-      const lifecycle = await writeLifecycle(planActivation(existing, CURRENT_CACHE));
+      const before = await readLifecycle();
       const cacheNames = await caches.keys();
-      const cleanup = new Set([
-        ...obsoleteAppCaches(cacheNames, lifecycle),
-        ...legacyAppCaches(cacheNames)
+      const next = planActivation(before, CURRENT_CACHE);
+      await writeLifecycle(next);
+      if (shouldAutoActivateLegacyBridge(cacheNames, before)) await self.clients.claim();
+      const refreshedNames = await caches.keys();
+      await Promise.all([
+        ...obsoleteAppCaches(refreshedNames, next).map(name => caches.delete(name)),
+        ...legacyAppCaches(refreshedNames).map(name => caches.delete(name))
       ]);
-      await Promise.all([...cleanup].map(name => caches.delete(name)));
-      await self.clients.claim();
-      await notifyClients(await updateStatus());
+    })());
+  });
+
+  self.addEventListener("fetch", event => {
+    if (event.request.method !== "GET") return;
+    event.respondWith((async () => {
+      const lifecycle = await readLifecycle();
+      const servingCache = lifecycle.serving || lifecycle.current || CURRENT_CACHE;
+      const cache = await caches.open(servingCache);
+      for (const key of offlineLookupKeys(event.request)) {
+        const cached = await cache.match(key);
+        if (cached) return cached;
+      }
+      return fetch(event.request);
     })());
   });
 
   self.addEventListener("message", event => {
-    const type = event.data?.type;
-    if (type === "ACTIVATE_UPDATE") {
-      event.waitUntil(reply(event, async () => {
+    event.waitUntil((async () => {
+      const type = event.data?.type;
+      let result;
+      if (type === "UPDATE_STATUS") result = await updateStatus();
+      else if (type === "SKIP_WAITING") {
         await self.skipWaiting();
-        return { type: "ACTIVATING_UPDATE" };
-      }));
-      return;
-    }
-    if (type === "CHECK_FOR_UPDATE") {
-      event.waitUntil(reply(event, async () => {
-        await self.registration.update();
-        return updateStatus();
-      }));
-      return;
-    }
-    if (type === "GET_UPDATE_STATUS") {
-      event.waitUntil(reply(event, updateStatus));
-      return;
-    }
-    if (type === "ROLLBACK_UPDATE") {
-      event.waitUntil(reply(event, async () => {
-        const before = await readLifecycle();
-        const next = planRollback(before);
-        if (!(await caches.keys()).includes(next.serving)) throw new Error("ไฟล์รุ่นก่อนหน้าไม่ครบ");
-        await writeLifecycle(next);
-        const status = await updateStatus();
-        await notifyClients(status);
-        return status;
-      }));
-      return;
-    }
-    if (type === "ACTIVATE_CURRENT_CACHE") {
-      event.waitUntil(reply(event, async () => {
-        const next = planUseCurrent(await readLifecycle());
-        if (!(await caches.keys()).includes(next.serving)) throw new Error("ไฟล์รุ่นล่าสุดไม่ครบ");
-        await writeLifecycle(next);
-        const status = await updateStatus();
-        await notifyClients(status);
-        return status;
-      }));
-    }
-  });
-
-  self.addEventListener("fetch", event => {
-    const request = event.request;
-    if (request.method !== "GET") return;
-    const url = new URL(request.url);
-    if (url.origin !== self.location.origin) return;
-
-    event.respondWith((async () => {
-      const lifecycle = await readLifecycle();
-      const cacheName = lifecycle.serving || lifecycle.current || CURRENT_CACHE;
-      const cache = await caches.open(cacheName);
-      for (const key of offlineLookupKeys(request)) {
-        const cached = await cache.match(key);
-        if (cached) return cached;
-      }
-      return fetch(request);
+        result = { type: "SKIP_WAITING_OK", releaseId: RELEASE_ID };
+      } else if (type === "ROLLBACK") {
+        result = { type: "ROLLBACK_OK", lifecycle: await writeLifecycle(planRollback(await readLifecycle())) };
+      } else if (type === "USE_CURRENT") {
+        result = { type: "USE_CURRENT_OK", lifecycle: await writeLifecycle(planUseCurrent(await readLifecycle())) };
+      } else return;
+      if (event.source?.postMessage) event.source.postMessage(result);
     })());
   });
 }
@@ -293,6 +236,7 @@ if (typeof module === "object" && module.exports) {
     RELEASE_ID,
     CURRENT_CACHE,
     META_CACHE,
+    META_PATH,
     APP_SHELL,
     lifecycleBase,
     planActivation,
