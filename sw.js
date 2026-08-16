@@ -36,7 +36,6 @@ const APP_SHELL = [
   "metropolis-r5.js",
   "metropolis-r5-2.js",
   "metropolis-r5-3.js",
-  "metropolis-r5-4.js",
   "src/current-bootstrap.mjs",
   "src/architecture/authority.mjs",
   "src/architecture/release-authority.mjs",
