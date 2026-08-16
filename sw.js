@@ -42,6 +42,8 @@ const APP_SHELL = [
   "src/architecture/release-authority.mjs",
   "src/workflows/command-authority.mjs",
   "src/workflows/workflow-coordinator.mjs",
+  "src/projection/live-records.mjs",
+  "src/projection/live-projection.mjs",
   "src/shell/shell-boundary.mjs",
   "src/store/store-boundary.mjs",
   "src/finance/finance-boundary.mjs",
@@ -102,14 +104,12 @@ function obsoleteAppCaches(cacheNames, lifecycle) {
 }
 
 function legacyAppCaches(cacheNames = []) {
-  return cacheNames.filter(name =>
-    LEGACY_CACHE_PREFIXES.some(prefix => name.startsWith(prefix))
-  );
+  return cacheNames.filter(name => LEGACY_CACHE_PREFIXES.some(prefix => name.startsWith(prefix)));
 }
 
 function shouldAutoActivateLegacyBridge(cacheNames, lifecycle) {
-  const state = lifecycleBase(lifecycle);
-  const hasSafeGeneration = Boolean(state.current || state.serving || state.previous);
+  const current = lifecycleBase(lifecycle);
+  const hasSafeGeneration = Boolean(current.current || current.serving || current.previous);
   return !hasSafeGeneration && legacyAppCaches(cacheNames).length > 0;
 }
 
@@ -132,11 +132,8 @@ if (typeof self !== "undefined" && typeof self.addEventListener === "function") 
     const cache = await caches.open(META_CACHE);
     const response = await cache.match(lifecycleRequest());
     if (!response) return lifecycleBase();
-    try {
-      return lifecycleBase(await response.json());
-    } catch {
-      return lifecycleBase();
-    }
+    try { return lifecycleBase(await response.json()); }
+    catch { return lifecycleBase(); }
   }
 
   async function writeLifecycle(value) {
@@ -177,10 +174,7 @@ if (typeof self !== "undefined" && typeof self.addEventListener === "function") 
     };
   }
 
-  self.addEventListener("install", event => {
-    event.waitUntil(precacheRelease());
-  });
-
+  self.addEventListener("install", event => { event.waitUntil(precacheRelease()); });
   self.addEventListener("activate", event => {
     event.waitUntil((async () => {
       const before = await readLifecycle();
