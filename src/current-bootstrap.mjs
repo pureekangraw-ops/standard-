@@ -7,6 +7,7 @@ import { createCalendarBoundary } from "./calendar/calendar-boundary.mjs";
 
 await import("../normalpocket-runtime.js");
 if (globalThis.NormalPocketRuntimeReady) await globalThis.NormalPocketRuntimeReady;
+await import("./projection/live-projection.mjs");
 
 function syncVisibleRelease() {
   document.title = `${NORMALPOCKET_RELEASE.product} ${NORMALPOCKET_RELEASE.version}`;
