@@ -15,12 +15,15 @@ test("production HTML has one stylesheet authority", () => {
   assert.doesNotMatch(html, /href="metropolis-v4\.css"/);
 });
 
-test("production HTML loads the structural bootstrap after legacy compatibility runtime", () => {
+test("production HTML loads current authority after retained base compatibility runtime", () => {
   const html = read("index.html");
-  const legacyIndex = html.indexOf('<script src="metropolis-v4.js"></script>');
+  const appIndex = html.indexOf('<script src="app.js"></script>');
+  const flowIndex = html.indexOf('<script src="flow-era.js"></script>');
   const currentIndex = html.indexOf('<script type="module" src="src/current-bootstrap.mjs"></script>');
-  assert.ok(legacyIndex >= 0);
-  assert.ok(currentIndex > legacyIndex);
+  assert.ok(appIndex >= 0);
+  assert.ok(flowIndex > appIndex);
+  assert.ok(currentIndex > flowIndex);
+  assert.doesNotMatch(html, /<script src="metropolis-v4\.js"><\/script>/);
 });
 
 test("visible production branding contains no stale 1.2.0 version", () => {
