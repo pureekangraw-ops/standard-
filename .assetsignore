@@ -18,6 +18,7 @@ node_modules/**
 !/metropolis-r5-4.css
 !/normalpocket-products.css
 !/sw-bootstrap.js
+!/normalpocket-runtime.js
 !/normalpocket-bootstrap.js
 !/normalpocket-catalog-core.js
 !/normalpocket-products.js
@@ -34,6 +35,8 @@ node_modules/**
 !/src/current-bootstrap.mjs
 !/src/architecture/authority.mjs
 !/src/architecture/release-authority.mjs
+!/src/workflows/command-authority.mjs
+!/src/workflows/workflow-coordinator.mjs
 !/src/shell/shell-boundary.mjs
 !/src/store/store-boundary.mjs
 !/src/finance/finance-boundary.mjs
