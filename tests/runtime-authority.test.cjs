@@ -11,10 +11,11 @@ test("production HTML has one current runtime authority entry after base compati
   const html = read("index.html");
   assert.match(html, /<script type="module" src="src\/current-bootstrap\.mjs"><\/script>/);
   assert.doesNotMatch(html, /<script src="normalpocket-runtime\.js"><\/script>/);
-  for (const legacyDynamic of ["metropolis-r5.js", "metropolis-r5-2.js", "metropolis-r5-3.js", "metropolis-r5-4.js", "normalpocket-bootstrap.js"]) {
+  for (const legacyDynamic of ["metropolis-r5.js", "metropolis-r5-2.js", "metropolis-r5-3.js", "normalpocket-bootstrap.js"]) {
     assert.doesNotMatch(html, new RegExp(`<script[^>]+${legacyDynamic.replaceAll(".", "\\.")}`));
   }
   assert.doesNotMatch(html, /metropolis-r5-1\.js/);
+  assert.doesNotMatch(html, /metropolis-r5-4\.js/);
 });
 
 test("current bootstrap owns compatibility loader and waits for it before structural bridge", () => {
@@ -29,7 +30,6 @@ test("compatibility loader owns deterministic retained runtime order only", () =
     "metropolis-r5.js",
     "metropolis-r5-2.js",
     "metropolis-r5-3.js",
-    "metropolis-r5-4.js",
     "normalpocket-bootstrap.js"
   ];
   let previous = -1;
@@ -39,6 +39,7 @@ test("compatibility loader owns deterministic retained runtime order only", () =
     previous = index;
   }
   assert.doesNotMatch(runtime, /metropolis-r5-1\.js/);
+  assert.doesNotMatch(runtime, /metropolis-r5-4\.js/);
   assert.doesNotMatch(runtime, /current-bootstrap\.mjs/);
 });
 
