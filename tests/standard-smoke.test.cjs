@@ -95,9 +95,10 @@ test("STANDARD dashboard uses explicit cash and retained Calendar directions", (
 
 test("NormalPocket offline shell represents the current release and rejects incomplete precache readback", () => {
   assert.equal(sw.RELEASE_ID, "v1.3.1-20260812-r6-mobile-polish");
-  for (const file of ["index.html", "highway-gate.js", "app.js", "normalpocket-catalog-core.js", "normalpocket-products.js", "normalpocket-simple-flow.js", "metropolis-r5-4.js", "app-icon.svg", "icon-192.png", "icon-512.png"]) {
+  for (const file of ["index.html", "highway-gate.js", "app.js", "normalpocket-catalog-core.js", "normalpocket-products.js", "normalpocket-simple-flow.js", "normalpocket-runtime.js", "app-icon.svg", "icon-192.png", "icon-512.png"]) {
     assert.ok(sw.APP_SHELL.includes(file), `${file} must be available offline`);
   }
+  assert.ok(!sw.APP_SHELL.includes("metropolis-r5-4.js"));
   assert.equal(sw.assertShellReadback(sw.APP_SHELL.map(() => ({ ok: true }))), true);
   assert.throws(() => sw.assertShellReadback([{ ok: true }]), /ไฟล์ออฟไลน์ไม่ครบ/);
 });
