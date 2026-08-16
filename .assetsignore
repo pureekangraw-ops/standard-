@@ -7,6 +7,7 @@ node_modules/**
 *
 !/index.html
 !/manifest.webmanifest
+!/normalpocket-current.css
 !/styles.css
 !/flow-era.css
 !/metropolis-v4.css
@@ -30,6 +31,13 @@ node_modules/**
 !/metropolis-r5-2.js
 !/metropolis-r5-3.js
 !/metropolis-r5-4.js
+!/src/current-bootstrap.mjs
+!/src/architecture/authority.mjs
+!/src/architecture/release-authority.mjs
+!/src/shell/shell-boundary.mjs
+!/src/store/store-boundary.mjs
+!/src/finance/finance-boundary.mjs
+!/src/calendar/calendar-boundary.mjs
 !/sw.js
 !/icon-192.png
 !/icon-512.png
