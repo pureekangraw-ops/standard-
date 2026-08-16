@@ -28,6 +28,51 @@
     return { obligation: copy(obligation), queues: copy(queues) };
   }
 
+  function createInstallmentObligation({ name, detail, installmentAmountSatang, installmentCount, scheduleFrequency, firstDue, dues }) {
+    requireRuntime();
+    if (typeof uid !== "function" || typeof nowIso !== "function" || typeof addQueue !== "function") throw new Error("Finance create port ยังไม่พร้อม");
+    const id = uid("OBL");
+    const createdAt = nowIso();
+    const originalSatang = Number(installmentAmountSatang) * Number(installmentCount);
+    const obligation = {
+      id,
+      name: String(name || "ภาระ").trim() || "ภาระ",
+      detail: String(detail || "").trim(),
+      scheduleMode: "PER_INSTALLMENT",
+      scheduleFrequency,
+      installmentAmountSatang,
+      originalSatang,
+      paidSatang: 0,
+      remainingSatang: originalSatang,
+      installmentCount,
+      firstDue,
+      installments: [],
+      status: "OPEN",
+      createdAt,
+      updatedAt: createdAt,
+      revision: 1,
+      cancelledAt: null
+    };
+    state.ledger.obligations.push(obligation);
+    dues.forEach((due, index) => {
+      const number = index + 1;
+      const queue = addQueue({
+        source: "LEDGER",
+        sourceId: id,
+        actionType: installmentCount >= 2 ? "PAY_OBLIGATION_INSTALLMENT" : "PAY_OBLIGATION",
+        status: "OPEN",
+        amountSatang: installmentAmountSatang,
+        due,
+        effects: { complete: "หักเงินจริงและลดยอดภาระ", cancel: "ยกเลิกคิวและย้อนเฉพาะยอดที่จ่ายจากคิวนี้" }
+      });
+      queue.installmentNumber = number;
+      queue.installmentCount = installmentCount;
+      obligation.installments.push({ number, amountSatang: installmentAmountSatang, paidSatang: 0, due, status: "PENDING", queueId: queue.id, paidAt: null });
+    });
+    if (typeof bumpSource === "function") bumpSource(obligation);
+    return copy(obligation);
+  }
+
   function replaceObligation(next) {
     const current = findSource("LEDGER", next?.id);
     if (!current) throw new Error("ไม่พบภาระสำหรับบันทึก");
@@ -104,6 +149,7 @@
   globalThis.NormalPocketFinancePort = Object.freeze({
     contextForQueue,
     contextForObligation,
+    createInstallmentObligation,
     applyScheduleResult,
     applyReconciliation,
     applyEarlySettlement
