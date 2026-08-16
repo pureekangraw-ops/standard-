@@ -45,11 +45,17 @@ test("simple home hides the legacy launcher and duplicate dashboard", () => {
 });
 
 test("legacy runtime layers load before NormalPocket authority", () => {
-  const bootstrap = read("sw-bootstrap.js");
-  assert.match(bootstrap, /async function loadRuntimeLayers/);
-  assert.match(bootstrap, /await loadMetropolisLayers\(\)/);
-  assert.match(bootstrap, /await loadScript\("normalpocket-bootstrap\.js"/);
-  assert.ok(bootstrap.indexOf("await loadMetropolisLayers()") < bootstrap.indexOf('await loadScript("normalpocket-bootstrap.js"'));
+  const runtime = read("normalpocket-runtime.js");
+  const current = read("src/current-bootstrap.mjs");
+  const ordered = ["metropolis-r5.js", "metropolis-r5-1.js", "metropolis-r5-2.js", "metropolis-r5-3.js", "metropolis-r5-4.js", "normalpocket-bootstrap.js"];
+  let previous = -1;
+  for (const file of ordered) {
+    const index = runtime.indexOf(file);
+    assert.ok(index > previous, `${file} must load after previous compatibility layer`);
+    previous = index;
+  }
+  assert.match(current, /await import\("\.\.\/normalpocket-runtime\.js"\)/);
+  assert.match(current, /await globalThis\.NormalPocketRuntimeReady/);
 });
 
 test("quick sale is cash-first and never mutates product stock", () => {
