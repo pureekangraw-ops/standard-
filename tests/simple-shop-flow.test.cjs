@@ -50,7 +50,8 @@ test("retained runtime layers load before NormalPocket authority", () => {
   const ordered = [
     "normalpocket-state-port.js",
     "metropolis-r5.js",
-    "metropolis-r5-2.js",
+    "normalpocket-finance-port.js",
+    "normalpocket-installment-ui.js",
     "normalpocket-flow-calendar-bridge.js",
     "normalpocket-live-source-bridge.js",
     "normalpocket-bootstrap.js"
@@ -62,6 +63,7 @@ test("retained runtime layers load before NormalPocket authority", () => {
     previous = index;
   }
   assert.doesNotMatch(runtime, /metropolis-r5-1\.js/);
+  assert.doesNotMatch(runtime, /metropolis-r5-2\.js/);
   assert.doesNotMatch(runtime, /metropolis-r5-3\.js/);
   assert.doesNotMatch(runtime, /metropolis-r5-4\.js/);
   assert.match(current, /await import\("\.\.\/normalpocket-runtime\.js"\)/);
