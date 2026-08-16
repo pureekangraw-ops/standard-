@@ -26,7 +26,6 @@ node_modules/**
 !/highway-gate.js
 !/app.js
 !/flow-era.js
-!/metropolis-v4.js
 !/metropolis-r5.js
 !/metropolis-r5-1.js
 !/metropolis-r5-2.js
