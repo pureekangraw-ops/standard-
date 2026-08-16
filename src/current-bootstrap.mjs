@@ -18,45 +18,23 @@ function syncVisibleRelease() {
   if (settingsVersion) settingsVersion.textContent = `${NORMALPOCKET_RELEASE.product} ${NORMALPOCKET_RELEASE.version}`;
 }
 
-function installLegacyReleaseBridge() {
-  const originalStampPackage = globalThis.metropolisStampPackage;
-  if (typeof originalStampPackage === "function") {
-    globalThis.metropolisStampPackage = pack => {
-      const stamped = originalStampPackage(pack);
+function installCurrentRuntimeHooks() {
+  if (!globalThis.YGPHRuntime?.register) return;
+  globalThis.YGPHRuntime.register("NORMALPOCKET_CURRENT", {
+    afterRender: syncVisibleRelease,
+    afterPageChange: syncVisibleRelease,
+    exchange(pack) {
       const checksum = typeof globalThis.flowChecksum === "function" ? globalThis.flowChecksum : undefined;
-      const corrected = restampPackage(stamped, checksum);
+      const corrected = restampPackage(pack, checksum);
       Object.assign(pack, corrected);
       return pack;
-    };
-  }
-
-  const originalStampAudit = globalThis.metropolisStampAudit;
-  if (typeof originalStampAudit === "function") {
-    globalThis.metropolisStampAudit = report => {
-      const stamped = originalStampAudit(report);
-      const corrected = restampAudit(stamped);
+    },
+    audit(report) {
+      const corrected = restampAudit(report);
       Object.assign(report, corrected);
       return report;
-    };
-  }
-
-  const originalApplyBranding = globalThis.metropolisApplyBranding;
-  if (typeof originalApplyBranding === "function") {
-    globalThis.metropolisApplyBranding = (...args) => {
-      const result = originalApplyBranding(...args);
-      syncVisibleRelease();
-      return result;
-    };
-  }
-
-  const originalApplyPage = globalThis.metropolisApplyPage;
-  if (typeof originalApplyPage === "function") {
-    globalThis.metropolisApplyPage = (...args) => {
-      const result = originalApplyPage(...args);
-      syncVisibleRelease();
-      return result;
-    };
-  }
+    }
+  });
 }
 
 const shell = createShellBoundary({
@@ -86,5 +64,5 @@ Object.defineProperty(globalThis, "NormalPocketArchitecture", {
   writable: false
 });
 
-installLegacyReleaseBridge();
+installCurrentRuntimeHooks();
 syncVisibleRelease();
