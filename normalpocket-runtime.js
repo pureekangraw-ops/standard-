@@ -24,7 +24,6 @@
     const compatibility = [
       "normalpocket-state-port.js",
       "normalpocket-store-port.js",
-      "normalpocket-sale-ui.js",
       "normalpocket-finance-port.js",
       "normalpocket-installment-ui.js",
       "normalpocket-import-bridge.js",
@@ -35,6 +34,7 @@
     ];
     for (const src of compatibility) await loadClassicScript(src);
     if (globalThis.NormalPocketCompatibilityReady) await globalThis.NormalPocketCompatibilityReady;
+    await loadClassicScript("normalpocket-catalog-sale-ui.js");
   }
 
   globalThis.NormalPocketRuntimeReady = loadCompatibilityRuntime().catch(error => {
