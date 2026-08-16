@@ -11,7 +11,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
 test("controller dispatches business commands through workflow authority", () => {
   const source = read("controller.js");
   assert.match(source, /createWorkflowCoordinator/);
-  assert.match(source, /coordinator\.execute\(currentState, command/);
+  assert.match(source, /coordinator\.execute\(currentState, authorizedCommand/);
   assert.doesNotMatch(source, /const proposed = applyCommand\(currentState, command/);
 });
 
