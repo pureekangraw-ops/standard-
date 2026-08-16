@@ -28,6 +28,7 @@
       "normalpocket-state-port.js",
       "metropolis-r5.js",
       "metropolis-r5-2.js",
+      "normalpocket-flow-calendar-bridge.js",
       "metropolis-r5-3.js",
       "normalpocket-bootstrap.js"
     ];
