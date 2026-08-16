@@ -29,7 +29,6 @@ test("compatibility loader owns deterministic retained runtime order only", () =
   const ordered = [
     "normalpocket-state-port.js",
     "normalpocket-store-port.js",
-    "normalpocket-sale-ui.js",
     "normalpocket-finance-port.js",
     "normalpocket-installment-ui.js",
     "normalpocket-import-bridge.js",
@@ -44,6 +43,10 @@ test("compatibility loader owns deterministic retained runtime order only", () =
     assert.ok(index > previous, `${file} must appear after previous runtime layer`);
     previous = index;
   }
+  const wait = runtime.indexOf("await globalThis.NormalPocketCompatibilityReady");
+  const catalogSale = runtime.indexOf('loadClassicScript("normalpocket-catalog-sale-ui.js")');
+  assert.ok(wait >= 0 && catalogSale > wait, "catalog sale authority must install after catalog bootstrap readiness");
+  assert.doesNotMatch(runtime, /normalpocket-sale-ui\.js/);
   assert.doesNotMatch(runtime, /metropolis-r5(?:-[1-4])?\.js/);
   assert.doesNotMatch(runtime, /current-bootstrap\.mjs/);
 });
