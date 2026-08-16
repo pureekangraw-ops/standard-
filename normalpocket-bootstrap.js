@@ -29,7 +29,12 @@
     await loadScript("normalpocket-simple-flow.js");
   }
 
-  const run = () => start().catch(error => console.error("NORMALPOCKET_BOOTSTRAP_FAILED", error));
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run, { once: true });
-  else run();
+  globalThis.NormalPocketCompatibilityReady = new Promise((resolve, reject) => {
+    const run = () => start().then(resolve, reject);
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run, { once: true });
+    else run();
+  }).catch(error => {
+    console.error("NORMALPOCKET_BOOTSTRAP_FAILED", error);
+    throw error;
+  });
 })();
