@@ -56,7 +56,6 @@
         <div class="section"><div class="section-title"><h2>ภาพรวมวันนี้</h2></div>
           <div class="source-grid">
             <button class="source-card store" data-page="store"><i>🏪</i><b>ร้านค้า</b><strong id="homeStoreValue">0</strong><small>ยอดขายวันนี้</small></button>
-            
             <button class="source-card ledger" data-page="ledger"><i>📒</i><b>การเงิน</b><strong id="homeLedgerValue">0</strong><small>เงินปัจจุบัน</small></button>
           </div>
         </div>
@@ -90,33 +89,13 @@
         <div class="card content-card"><h3>รายการของวันที่เลือก</h3><div id="queueList"></div></div>
       </section>
 <section class="page" id="reportPage">
-        <div class="hero report"><h2>ดึงรายงานทั้งระบบ</h2><p id="reportRangeLabel">เลือกวันที่เริ่มต้นและวันที่สิ้นสุด</p><div class="hero-value"><span id="reportBalance">0</span> บาท</div><div class="hero-grid"><div class="mini"><small>ขายสินค้า</small><b id="reportStoreSales">0</b></div><div class="mini"><small>เงินจริงเข้า</small><b id="reportIn">0</b></div><div class="mini"><small>เงินจริงออก</small><b id="reportOut">0</b></div></div></div>
-        <div class="card content-card"><h3>ช่วงวันที่</h3><div class="report-controls"><div class="field"><label>วันที่เริ่มต้น</label><input id="reportStart" type="date"></div><div class="field"><label>วันที่สิ้นสุด</label><input id="reportEnd" type="date"></div></div><button class="primary-btn wide" id="buildReportBtn">ดึงรายงานทั้งระบบ</button></div>
-        <div id="reportResult" class="hidden">
-          <div class="card content-card"><h3>ร้านค้า</h3><div id="storeReport"></div></div>
-          <div class="card content-card"><h3>การเงินจริง</h3><div id="ledgerReport"></div></div>
-          <div class="card content-card"><h3>ปฏิทินและคิว</h3><div id="queueReport"></div></div>
-          <div class="card content-card"><h3>ประวัติระบบล่าสุดในช่วง</h3><div id="auditList"></div><button class="secondary-btn wide history-more" id="allAuditBtn">ดูทั้งหมด</button></div>
-          <button class="secondary-btn wide report-download" id="downloadReportBtn">ดาวน์โหลดรายงาน JSON</button>
-        </div>
+        <div class="hero report"><h2>ดึงรายงานทั้งระบบ</h2><p id="reportRangeLabel">เลือกวันที่เริ่มต้นและวันที่สิ้นสุด</p><div class="hero-value"><span id="reportBalance">0</span> บาท</div></div>
+        <div class="card content-card"><div id="reportContent"></div></div>
       </section>
-<section class="page" id="syncPage">
-        <div class="hero report"><h2>รับ–ส่งข้อมูลตามเส้นทาง</h2><p>Event Envelope + Route Gate + Idempotency + Review Center</p><div class="hero-value">FLOW EXCHANGE v3</div><div class="hero-grid"><div class="mini"><small>ส่งล่าสุด</small><b id="syncLastExport">—</b></div><div class="mini"><small>รับล่าสุด</small><b id="syncLastImport">—</b></div><div class="mini"><small>รอยืนยัน</small><b id="syncPendingCount">0 รายการ</b></div><div class="mini"><small>รุ่นข้อมูล</small><b id="syncRevision">0</b></div></div></div>
-        <div class="card content-card"><div class="exchange-grid"><button class="exchange-action" id="exportJsonBtn"><span>⬆️</span><b>ส่งไฟล์ออกเพื่อตรวจหรือสำรอง</b><small>ข้อมูลต้นทาง + Route + ผลอนุญาต/ห้าม</small></button><button class="exchange-action" id="importProposalBtn"><span>⬇️</span><b>รับผลตรวจกลับเข้าแอป</b><small>ตรวจ Schema, Route และกันข้อมูลซ้ำ</small></button></div><input id="importProposalInput" type="file" accept="application/json,.json" hidden></div>
-        <div class="card content-card"><h3>Review Center</h3><div id="importPreview"><div class="sync-result-row"><b>สถานะ</b><span class="warn">ยังไม่ได้เลือกไฟล์</span></div></div><div class="import-actions"><button class="secondary-btn" id="cancelImportBtn" disabled>ยกเลิก</button><button class="primary-btn" id="applyImportBtn" disabled>ตกลง นำเข้าข้อมูล</button></div></div>
-      </section>
-
-      <section class="page" id="settingsPage">
-        <div class="hero report"><h2>ตั้งค่าและเครื่องมือ</h2><p>การแสดงผล ข้อมูล สำรอง ความปลอดภัย และตรวจสอบระบบ</p><div class="hero-value">NormalPocket 1.3.1</div></div>
-        <div class="card content-card"><h3>ตรวจยอดเงินปัจจุบัน</h3><div class="flow-note" id="balanceStatusNote"></div><button class="primary-btn wide" id="verifyBalanceBtn">กระทบยอดจากเงินจริง</button></div>
-        <div class="card content-card"><h3>การใช้งาน</h3><form id="settingsForm"><div class="form-grid"><div class="field"><label>ราคาขายตั้งต้น</label><input id="defaultPrice" type="number" min="0" step="0.01"></div><div class="field"><label>เตือนสต็อกต่ำกว่า</label><input id="lowStockThreshold" type="number" min="0" step="1"></div><div class="field"><label>ล็อกอัตโนมัติ</label><select id="lockMinutes"><option value="1">1 นาที</option><option value="5">5 นาที</option><option value="15">15 นาที</option><option value="30">30 นาที</option></select></div><div class="field"><label>สีหลัก</label><select id="themeColor"><option value="navy">น้ำเงินเข้ม</option><option value="green">เขียว</option><option value="orange">ส้ม</option><option value="purple">ม่วง</option></select></div><div class="field full"><button class="primary-btn wide" type="submit">บันทึกการตั้งค่า</button></div></div></form></div>
-        <div class="card content-card"><h3>สำรองและกู้คืน</h3><div class="action-row inner"><button class="primary" id="exportBackupBtn">ส่งออกไฟล์สำรอง</button><button class="soft-blue" id="restoreBackupBtn">กู้คืนจากไฟล์</button></div><input id="restoreBackupInput" type="file" accept="application/json,.json" hidden><div class="flow-note">ไฟล์สำรองถูกเข้ารหัสและบันทึกลงโทรศัพท์หรือ SD Card ได้ ไม่ต้องเชื่อม Cloud กรุณาเก็บรหัสและไฟล์แยกกัน</div></div>
-        <div class="card content-card"><h3>ความปลอดภัยและการติดตั้ง</h3><button class="secondary-btn wide" id="changePassBtn">เปลี่ยนรหัสปลดล็อก</button><button class="secondary-btn wide spaced" id="persistBtn">ขอพื้นที่จัดเก็บถาวร</button><button class="secondary-btn wide spaced" id="installBtn" disabled>ติดตั้งแอปบนมือถือ</button><small id="installHint" class="subtle">เปิดผ่านเบราว์เซอร์ที่รองรับเพื่อดูตัวเลือกติดตั้ง</small></div>
-        <div class="card content-card"><h3>อัปเดตและย้อนกลับ</h3><div class="flow-note" id="swUpdateStatus">กำลังตรวจรุ่นแอป</div><div class="action-row inner"><button class="secondary-btn" id="checkUpdateBtn">ตรวจอัปเดต</button><button class="primary-btn" id="activateUpdateBtn" disabled>ใช้รุ่นใหม่</button></div><div class="action-row inner"><button class="secondary-btn" id="rollbackUpdateBtn" disabled>ย้อนกลับรุ่นก่อน</button><button class="secondary-btn" id="activateCurrentVersionBtn" disabled>กลับมาใช้รุ่นล่าสุด</button></div></div>
-        <details class="tech-details card content-card"><summary>ข้อมูลสำหรับช่างและระบบหลังบ้าน</summary><div class="tech-body" id="technicalStatus"></div></details>
+<section class="page" id="settingsPage">
+        <div class="hero settings"><h2>ตั้งค่า</h2><p>สำรอง กู้คืน และความปลอดภัย</p><div class="hero-value">NormalPocket 1.3.1</div></div>
       </section>
     </main>
-
     <nav class="bottom-nav"><button class="nav-btn" data-page="store"><i>🏪</i><span>ร้านค้า</span></button><button class="nav-btn home-center active" data-page="home"><i>⌂</i><span>หน้าหลัก</span></button><button class="nav-btn" data-page="ledger"><i>📒</i><span>การเงิน</span></button><button class="nav-btn" data-page="calendar"><i>📅</i><span>ปฏิทิน</span></button></nav>
   </div>
 
@@ -127,7 +106,6 @@
   <script src="highway-gate.js"></script>
   <script src="app.js"></script>
   <script src="flow-era.js"></script>
-  <script src="metropolis-v4.js"></script>
   <script type="module" src="src/current-bootstrap.mjs"></script>
 </body>
 </html>
