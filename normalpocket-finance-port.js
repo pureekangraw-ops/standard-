@@ -6,9 +6,24 @@
   const copy = value => structuredClone(value);
 
   function requireRuntime() {
-    if (typeof state === "undefined" || !state || typeof findQueue !== "function" || typeof findSource !== "function") {
-      throw new Error("Finance runtime ยังไม่พร้อม");
-    }
+    if (typeof state === "undefined" || !state || typeof findQueue !== "function" || typeof findSource !== "function") throw new Error("Finance runtime ยังไม่พร้อม");
+  }
+
+  function recordDirectTransaction(input) {
+    requireRuntime();
+    if (typeof addTransaction !== "function") throw new Error("Finance transaction port ยังไม่พร้อม");
+    if (!input || !["IN", "OUT"].includes(input.direction)) throw new Error("ทิศทางธุรกรรมไม่ถูกต้อง");
+    const amountSatang = Number(input.amountSatang);
+    if (!Number.isSafeInteger(amountSatang) || amountSatang < 1) throw new Error("ยอดธุรกรรมไม่ถูกต้อง");
+    return addTransaction({
+      direction: input.direction,
+      amountSatang,
+      label: String(input.label || (input.direction === "IN" ? "รายรับ" : "รายจ่าย")),
+      source: String(input.source || "GENERAL"),
+      sourceId: String(input.sourceId || ""),
+      subtype: String(input.subtype || "DIRECT_TRANSACTION"),
+      actionKey: String(input.actionKey || "")
+    });
   }
 
   function contextForQueue(queueId) {
@@ -35,36 +50,16 @@
     const createdAt = nowIso();
     const originalSatang = Number(installmentAmountSatang) * Number(installmentCount);
     const obligation = {
-      id,
-      name: String(name || "ภาระ").trim() || "ภาระ",
-      detail: String(detail || "").trim(),
-      scheduleMode: "PER_INSTALLMENT",
-      scheduleFrequency,
-      installmentAmountSatang,
-      originalSatang,
-      paidSatang: 0,
-      remainingSatang: originalSatang,
-      installmentCount,
-      firstDue,
-      installments: [],
-      status: "OPEN",
-      createdAt,
-      updatedAt: createdAt,
-      revision: 1,
-      cancelledAt: null
+      id, name: String(name || "ภาระ").trim() || "ภาระ", detail: String(detail || "").trim(),
+      scheduleMode: "PER_INSTALLMENT", scheduleFrequency, installmentAmountSatang, originalSatang,
+      paidSatang: 0, remainingSatang: originalSatang, installmentCount, firstDue, installments: [],
+      status: "OPEN", createdAt, updatedAt: createdAt, revision: 1, cancelledAt: null
     };
     state.ledger.obligations.push(obligation);
     dues.forEach((due, index) => {
       const number = index + 1;
-      const queue = addQueue({
-        source: "LEDGER",
-        sourceId: id,
-        actionType: installmentCount >= 2 ? "PAY_OBLIGATION_INSTALLMENT" : "PAY_OBLIGATION",
-        status: "OPEN",
-        amountSatang: installmentAmountSatang,
-        due,
-        effects: { complete: "หักเงินจริงและลดยอดภาระ", cancel: "ยกเลิกคิวและย้อนเฉพาะยอดที่จ่ายจากคิวนี้" }
-      });
+      const queue = addQueue({ source: "LEDGER", sourceId: id, actionType: installmentCount >= 2 ? "PAY_OBLIGATION_INSTALLMENT" : "PAY_OBLIGATION", status: "OPEN", amountSatang: installmentAmountSatang, due,
+        effects: { complete: "หักเงินจริงและลดยอดภาระ", cancel: "ยกเลิกคิวและย้อนเฉพาะยอดที่จ่ายจากคิวนี้" } });
       queue.installmentNumber = number;
       queue.installmentCount = installmentCount;
       obligation.installments.push({ number, amountSatang: installmentAmountSatang, paidSatang: 0, due, status: "PENDING", queueId: queue.id, paidAt: null });
@@ -105,15 +100,8 @@
       const spec = effect.queue;
       if (findQueue(spec.id)) continue;
       if (typeof addQueue !== "function") throw new Error("Calendar write port ยังไม่พร้อม");
-      const actual = addQueue({
-        source: "LEDGER",
-        sourceId: nextObligation.id,
-        actionType: spec.actionType,
-        status: spec.status || "OPEN",
-        amountSatang: Number(spec.amountSatang || 0),
-        due: spec.due,
-        effects: { complete: "หักเงินจริงและลดยอดภาระ", cancel: "ยกเลิกคิวและย้อนเฉพาะยอดที่จ่ายจากคิวนี้" }
-      });
+      const actual = addQueue({ source: "LEDGER", sourceId: nextObligation.id, actionType: spec.actionType, status: spec.status || "OPEN", amountSatang: Number(spec.amountSatang || 0), due: spec.due,
+        effects: { complete: "หักเงินจริงและลดยอดภาระ", cancel: "ยกเลิกคิวและย้อนเฉพาะยอดที่จ่ายจากคิวนี้" } });
       actual.paidSatang = Number(spec.paidSatang || 0);
       actual.installmentNumber = Number(spec.installmentNumber || 1);
       actual.installmentCount = Number(spec.installmentCount || nextObligation.installmentCount || 1);
@@ -127,18 +115,9 @@
 
   function applyEarlySettlement(result) {
     requireRuntime();
-    if (typeof addTransaction !== "function") throw new Error("Finance transaction port ยังไม่พร้อม");
     for (const intent of result.transactions || []) {
       if (intent.owner !== "FINANCE" || intent.type !== "RECORD_INSTALLMENT_PAYMENT") throw new Error("Finance intent ไม่ถูกต้อง");
-      const tx = addTransaction({
-        direction: "OUT",
-        amountSatang: intent.amountSatang,
-        label: `ปิดภาระงวด ${intent.installmentNumber}`,
-        source: "LEDGER",
-        sourceId: intent.sourceId,
-        subtype: "OBLIGATION_PAYMENT",
-        actionKey: intent.actionKey
-      });
+      const tx = recordDirectTransaction({ direction: "OUT", amountSatang: intent.amountSatang, label: `ปิดภาระงวด ${intent.installmentNumber}`, source: "LEDGER", sourceId: intent.sourceId, subtype: "OBLIGATION_PAYMENT", actionKey: intent.actionKey });
       if (!tx) throw new Error(`บันทึกจ่ายงวด ${intent.installmentNumber} ไม่สำเร็จ`);
     }
     replaceObligation(result.obligation);
@@ -147,6 +126,7 @@
   }
 
   globalThis.NormalPocketFinancePort = Object.freeze({
+    recordDirectTransaction,
     contextForQueue,
     contextForObligation,
     createInstallmentObligation,
