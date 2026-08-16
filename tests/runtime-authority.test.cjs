@@ -7,16 +7,22 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 
-test("production HTML has one runtime authority entry after base compatibility scripts", () => {
+test("production HTML has one current runtime authority entry after base compatibility scripts", () => {
   const html = read("index.html");
-  assert.match(html, /<script src="normalpocket-runtime\.js"><\/script>/);
-  assert.doesNotMatch(html, /<script type="module" src="src\/current-bootstrap\.mjs"><\/script>/);
+  assert.match(html, /<script type="module" src="src\/current-bootstrap\.mjs"><\/script>/);
+  assert.doesNotMatch(html, /<script src="normalpocket-runtime\.js"><\/script>/);
   for (const legacyDynamic of ["metropolis-r5.js", "metropolis-r5-1.js", "metropolis-r5-2.js", "metropolis-r5-3.js", "metropolis-r5-4.js", "normalpocket-bootstrap.js"]) {
     assert.doesNotMatch(html, new RegExp(`<script[^>]+${legacyDynamic.replaceAll(".", "\\.")}`));
   }
 });
 
-test("current runtime owns deterministic compatibility order and ends at structural bootstrap", () => {
+test("current bootstrap owns compatibility loader and waits for it before structural bridge", () => {
+  const current = read("src/current-bootstrap.mjs");
+  assert.match(current, /import\("\.\.\/normalpocket-runtime\.js"\)/);
+  assert.match(current, /NormalPocketRuntimeReady/);
+});
+
+test("compatibility loader owns deterministic legacy runtime order only", () => {
   const runtime = read("normalpocket-runtime.js");
   const ordered = [
     "metropolis-r5.js",
@@ -24,8 +30,7 @@ test("current runtime owns deterministic compatibility order and ends at structu
     "metropolis-r5-2.js",
     "metropolis-r5-3.js",
     "metropolis-r5-4.js",
-    "normalpocket-bootstrap.js",
-    "src/current-bootstrap.mjs"
+    "normalpocket-bootstrap.js"
   ];
   let previous = -1;
   for (const file of ordered) {
@@ -33,6 +38,7 @@ test("current runtime owns deterministic compatibility order and ends at structu
     assert.ok(index > previous, `${file} must appear after previous runtime layer`);
     previous = index;
   }
+  assert.doesNotMatch(runtime, /current-bootstrap\.mjs/);
 });
 
 test("service-worker bootstrap owns service worker only, not application runtime layers", () => {
