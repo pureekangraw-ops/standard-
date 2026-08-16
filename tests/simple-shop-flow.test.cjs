@@ -47,7 +47,14 @@ test("simple home hides the legacy launcher and duplicate dashboard", () => {
 test("retained runtime layers load before NormalPocket authority", () => {
   const runtime = read("normalpocket-runtime.js");
   const current = read("src/current-bootstrap.mjs");
-  const ordered = ["metropolis-r5.js", "metropolis-r5-2.js", "metropolis-r5-3.js", "normalpocket-bootstrap.js"];
+  const ordered = [
+    "normalpocket-state-port.js",
+    "metropolis-r5.js",
+    "metropolis-r5-2.js",
+    "normalpocket-flow-calendar-bridge.js",
+    "normalpocket-live-source-bridge.js",
+    "normalpocket-bootstrap.js"
+  ];
   let previous = -1;
   for (const file of ordered) {
     const index = runtime.indexOf(file);
@@ -55,6 +62,7 @@ test("retained runtime layers load before NormalPocket authority", () => {
     previous = index;
   }
   assert.doesNotMatch(runtime, /metropolis-r5-1\.js/);
+  assert.doesNotMatch(runtime, /metropolis-r5-3\.js/);
   assert.doesNotMatch(runtime, /metropolis-r5-4\.js/);
   assert.match(current, /await import\("\.\.\/normalpocket-runtime\.js"\)/);
   assert.match(current, /await globalThis\.NormalPocketRuntimeReady/);
