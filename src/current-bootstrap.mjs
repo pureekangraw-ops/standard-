@@ -5,6 +5,9 @@ import { createStoreBoundary } from "./store/store-boundary.mjs";
 import { createFinanceBoundary } from "./finance/finance-boundary.mjs";
 import { createCalendarBoundary } from "./calendar/calendar-boundary.mjs";
 
+await import("../normalpocket-runtime.js");
+if (globalThis.NormalPocketRuntimeReady) await globalThis.NormalPocketRuntimeReady;
+
 function syncVisibleRelease() {
   document.title = `${NORMALPOCKET_RELEASE.product} ${NORMALPOCKET_RELEASE.version}`;
   document.documentElement.dataset.normalpocketAuthority = "current";
