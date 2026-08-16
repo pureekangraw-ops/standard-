@@ -28,7 +28,6 @@
       "metropolis-r5.js",
       "metropolis-r5-2.js",
       "metropolis-r5-3.js",
-      "metropolis-r5-4.js",
       "normalpocket-bootstrap.js"
     ];
 
