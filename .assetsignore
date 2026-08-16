@@ -20,8 +20,12 @@ node_modules/**
 !/sw-bootstrap.js
 !/normalpocket-runtime.js
 !/normalpocket-state-port.js
+!/normalpocket-store-port.js
+!/normalpocket-sale-ui.js
 !/normalpocket-finance-port.js
 !/normalpocket-installment-ui.js
+!/normalpocket-import-bridge.js
+!/normalpocket-report-bridge.js
 !/normalpocket-flow-calendar-bridge.js
 !/normalpocket-live-source-bridge.js
 !/normalpocket-bootstrap.js
@@ -31,7 +35,6 @@ node_modules/**
 !/highway-gate.js
 !/app.js
 !/flow-era.js
-!/metropolis-r5.js
 !/src/current-bootstrap.mjs
 !/src/architecture/authority.mjs
 !/src/architecture/release-authority.mjs
@@ -41,6 +44,7 @@ node_modules/**
 !/src/projection/live-projection.mjs
 !/src/shell/shell-boundary.mjs
 !/src/store/store-boundary.mjs
+!/src/store/sale-operations.mjs
 !/src/finance/installment-schedule.mjs
 !/src/finance/installment-operations.mjs
 !/src/finance/finance-boundary.mjs
