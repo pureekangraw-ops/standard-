@@ -5,8 +5,7 @@ function normalPocketStateSnapshot() {
   return structuredClone(state);
 }
 
-function normalPocketFindSourceSnapshot(source, id) {
-  const snapshot = normalPocketStateSnapshot();
+function normalPocketFindSourceInSnapshot(snapshot, source, id) {
   if (!snapshot || !id) return null;
   const groups = source === "STORE"
     ? [snapshot.store?.sales, snapshot.store?.purchases, snapshot.store?.withdrawals]
@@ -15,7 +14,12 @@ function normalPocketFindSourceSnapshot(source, id) {
       : source === "CALENDAR"
         ? [snapshot.calendar]
         : [];
-  const found = groups.flatMap(items => Array.isArray(items) ? items : []).find(item => item?.id === id) || null;
+  return groups.flatMap(items => Array.isArray(items) ? items : []).find(item => item?.id === id) || null;
+}
+
+function normalPocketFindSourceSnapshot(source, id) {
+  const snapshot = normalPocketStateSnapshot();
+  const found = normalPocketFindSourceInSnapshot(snapshot, source, id);
   return found ? structuredClone(found) : null;
 }
 
@@ -25,8 +29,31 @@ function normalPocketFindQueueSnapshot(id) {
   return found ? structuredClone(found) : null;
 }
 
+function normalPocketCalendarProjectionSnapshot() {
+  const snapshot = normalPocketStateSnapshot();
+  if (!Array.isArray(snapshot?.calendar)) return [];
+  return snapshot.calendar.map(item => {
+    const source = normalPocketFindSourceInSnapshot(snapshot, item.source, item.sourceId);
+    let direction = "OTHER";
+    let integrityState = "TRUSTED";
+    try {
+      if (typeof queueDirection === "function") direction = queueDirection(item);
+    } catch {}
+    try {
+      if (typeof integrityGate === "function") integrityState = integrityGate(item)?.state || "TRUSTED";
+    } catch {}
+    return {
+      item: structuredClone(item),
+      sourceStatus: source?.status || null,
+      direction,
+      integrityState
+    };
+  });
+}
+
 window.NormalPocketRuntimePort = Object.freeze({
   getStateSnapshot: normalPocketStateSnapshot,
   findSourceSnapshot: normalPocketFindSourceSnapshot,
-  findQueueSnapshot: normalPocketFindQueueSnapshot
+  findQueueSnapshot: normalPocketFindQueueSnapshot,
+  getCalendarProjectionSnapshot: normalPocketCalendarProjectionSnapshot
 });
