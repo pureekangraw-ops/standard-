@@ -27,7 +27,8 @@
     const compatibility = [
       "normalpocket-state-port.js",
       "metropolis-r5.js",
-      "metropolis-r5-2.js",
+      "normalpocket-finance-port.js",
+      "normalpocket-installment-ui.js",
       "normalpocket-flow-calendar-bridge.js",
       "normalpocket-live-source-bridge.js",
       "normalpocket-bootstrap.js"
