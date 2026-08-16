@@ -25,6 +25,7 @@
 
   async function loadCompatibilityRuntime() {
     const compatibility = [
+      "normalpocket-state-port.js",
       "metropolis-r5.js",
       "metropolis-r5-2.js",
       "metropolis-r5-3.js",
