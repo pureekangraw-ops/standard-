@@ -22,7 +22,9 @@ node_modules/**
 !/normalpocket-state-port.js
 !/normalpocket-store-port.js
 !/normalpocket-catalog-sale-ui.js
+!/normalpocket-catalog-stock-ui.js
 !/normalpocket-finance-port.js
+!/normalpocket-finance-direct-ui.js
 !/normalpocket-installment-ui.js
 !/normalpocket-import-bridge.js
 !/normalpocket-report-bridge.js
@@ -45,6 +47,7 @@ node_modules/**
 !/src/shell/shell-boundary.mjs
 !/src/store/store-boundary.mjs
 !/src/store/sale-operations.mjs
+!/src/store/inventory-operations.mjs
 !/src/finance/installment-schedule.mjs
 !/src/finance/installment-operations.mjs
 !/src/finance/finance-boundary.mjs
