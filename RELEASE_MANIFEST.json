@@ -15,6 +15,8 @@
     "general product catalog",
     "optional color and size variants",
     "shipping-aware catalog Store sale authority",
+    "bounded catalog Store purchase and withdrawal authority",
+    "bounded Finance direct income and expense authority",
     "bounded import compatibility bridge",
     "bounded receivable and report bridge",
     "simple stock adjustment",
@@ -69,7 +71,7 @@
       "no executable ride references"
     ]
   },
-  "note": "NormalPocket 1.3.1 uses Current runtime adapters for catalog Store sale/shipping, Finance installment operations, import compatibility, reports and projections. Catalog sale authority is installed after the catalog compatibility bootstrap so no later legacy/catalog handler can overwrite it. metropolis-r5*.js files remain source evidence only and are not production runtime assets. app.js and flow-era.js remain the retained encrypted-vault/base compatibility platform behind bounded Current ports until a separate persistence-core extraction is proven equivalent.",
+  "note": "NormalPocket 1.3.1 installs final Store sale, purchase and withdrawal handlers plus direct Finance income/expense handlers after the catalog compatibility bootstrap. Their durable writes are bounded through NormalPocketStorePort and NormalPocketFinancePort. metropolis-r5*.js files remain source evidence only and are not production runtime assets. app.js and flow-era.js are retained as encrypted-vault/base compatibility substrate behind Current ports rather than final business UI authority.",
   "productionFiles": [
     { "path": "index.html" },
     { "path": "manifest.webmanifest" },
@@ -88,7 +90,9 @@
     { "path": "normalpocket-state-port.js" },
     { "path": "normalpocket-store-port.js" },
     { "path": "normalpocket-catalog-sale-ui.js" },
+    { "path": "normalpocket-catalog-stock-ui.js" },
     { "path": "normalpocket-finance-port.js" },
+    { "path": "normalpocket-finance-direct-ui.js" },
     { "path": "normalpocket-installment-ui.js" },
     { "path": "normalpocket-import-bridge.js" },
     { "path": "normalpocket-report-bridge.js" },
@@ -111,6 +115,7 @@
     { "path": "src/shell/shell-boundary.mjs" },
     { "path": "src/store/store-boundary.mjs" },
     { "path": "src/store/sale-operations.mjs" },
+    { "path": "src/store/inventory-operations.mjs" },
     { "path": "src/finance/installment-schedule.mjs" },
     { "path": "src/finance/installment-operations.mjs" },
     { "path": "src/finance/finance-boundary.mjs" },
