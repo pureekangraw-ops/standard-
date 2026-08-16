@@ -28,7 +28,8 @@
     "explicit cross-domain workflow authority",
     "current release authority hooks",
     "metropolis-v4 production runtime hard cut",
-    "metropolis-r5-1 javascript runtime hard cut"
+    "metropolis-r5-1 javascript runtime hard cut",
+    "metropolis-r5-4 dashboard/version runtime hard cut"
   ],
   "database": {
     "name": "ygph-standard-secure",
@@ -60,7 +61,7 @@
       "no executable ride references"
     ]
   },
-  "note": "NormalPocket 1.3.1 keeps existing encrypted Store/Ledger/Calendar behavior while introducing explicit structural and workflow authorities plus single current UI/runtime entrypoints. metropolis-v4.js and metropolis-r5-1.js are no longer part of production runtime; app.js, flow-era.js and the remaining r5 compatibility layers remain temporary migration dependencies until behavior-equivalent hard cuts are verified.",
+  "note": "NormalPocket 1.3.1 keeps existing encrypted Store/Ledger/Calendar behavior while introducing explicit structural and workflow authorities plus single current UI/runtime entrypoints. metropolis-v4.js, metropolis-r5-1.js and metropolis-r5-4.js are no longer part of production runtime; app.js, flow-era.js, metropolis-r5.js, r5-2 and r5-3 remain temporary migration dependencies until behavior-equivalent hard cuts are verified.",
   "productionFiles": [
     { "path": "index.html" },
     { "path": "manifest.webmanifest" },
@@ -86,7 +87,6 @@
     { "path": "metropolis-r5.js" },
     { "path": "metropolis-r5-2.js" },
     { "path": "metropolis-r5-3.js" },
-    { "path": "metropolis-r5-4.js" },
     { "path": "src/current-bootstrap.mjs" },
     { "path": "src/architecture/authority.mjs" },
     { "path": "src/architecture/release-authority.mjs" },
