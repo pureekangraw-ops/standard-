@@ -28,9 +28,12 @@ test("compatibility loader owns deterministic retained runtime order only", () =
   const runtime = read("normalpocket-runtime.js");
   const ordered = [
     "normalpocket-state-port.js",
-    "metropolis-r5.js",
+    "normalpocket-store-port.js",
+    "normalpocket-sale-ui.js",
     "normalpocket-finance-port.js",
     "normalpocket-installment-ui.js",
+    "normalpocket-import-bridge.js",
+    "normalpocket-report-bridge.js",
     "normalpocket-flow-calendar-bridge.js",
     "normalpocket-live-source-bridge.js",
     "normalpocket-bootstrap.js"
@@ -41,10 +44,7 @@ test("compatibility loader owns deterministic retained runtime order only", () =
     assert.ok(index > previous, `${file} must appear after previous runtime layer`);
     previous = index;
   }
-  assert.doesNotMatch(runtime, /metropolis-r5-1\.js/);
-  assert.doesNotMatch(runtime, /metropolis-r5-2\.js/);
-  assert.doesNotMatch(runtime, /metropolis-r5-3\.js/);
-  assert.doesNotMatch(runtime, /metropolis-r5-4\.js/);
+  assert.doesNotMatch(runtime, /metropolis-r5(?:-[1-4])?\.js/);
   assert.doesNotMatch(runtime, /current-bootstrap\.mjs/);
 });
 
