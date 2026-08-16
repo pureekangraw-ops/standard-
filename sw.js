@@ -27,7 +27,7 @@ const APP_SHELL = [
   "normalpocket-runtime.js",
   "normalpocket-state-port.js",
   "normalpocket-store-port.js",
-  "normalpocket-sale-ui.js",
+  "normalpocket-catalog-sale-ui.js",
   "normalpocket-finance-port.js",
   "normalpocket-installment-ui.js",
   "normalpocket-import-bridge.js",
