@@ -21,6 +21,7 @@ node_modules/**
 !/normalpocket-runtime.js
 !/normalpocket-state-port.js
 !/normalpocket-flow-calendar-bridge.js
+!/normalpocket-live-source-bridge.js
 !/normalpocket-bootstrap.js
 !/normalpocket-catalog-core.js
 !/normalpocket-products.js
@@ -30,7 +31,6 @@ node_modules/**
 !/flow-era.js
 !/metropolis-r5.js
 !/metropolis-r5-2.js
-!/metropolis-r5-3.js
 !/src/current-bootstrap.mjs
 !/src/architecture/authority.mjs
 !/src/architecture/release-authority.mjs
