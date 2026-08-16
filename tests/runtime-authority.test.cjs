@@ -29,7 +29,8 @@ test("compatibility loader owns deterministic retained runtime order only", () =
   const ordered = [
     "normalpocket-state-port.js",
     "metropolis-r5.js",
-    "metropolis-r5-2.js",
+    "normalpocket-finance-port.js",
+    "normalpocket-installment-ui.js",
     "normalpocket-flow-calendar-bridge.js",
     "normalpocket-live-source-bridge.js",
     "normalpocket-bootstrap.js"
@@ -41,6 +42,7 @@ test("compatibility loader owns deterministic retained runtime order only", () =
     previous = index;
   }
   assert.doesNotMatch(runtime, /metropolis-r5-1\.js/);
+  assert.doesNotMatch(runtime, /metropolis-r5-2\.js/);
   assert.doesNotMatch(runtime, /metropolis-r5-3\.js/);
   assert.doesNotMatch(runtime, /metropolis-r5-4\.js/);
   assert.doesNotMatch(runtime, /current-bootstrap\.mjs/);
