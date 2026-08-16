@@ -26,8 +26,10 @@
     "readonly runtime state projection port",
     "current live record selectors and projection runtime",
     "bounded live calendar compatibility bridge",
+    "bounded live source and history compatibility bridge",
     "metropolis-v4 production runtime hard cut",
     "metropolis-r5-1 javascript runtime hard cut",
+    "metropolis-r5-3 javascript runtime hard cut",
     "metropolis-r5-4 dashboard/version runtime hard cut"
   ],
   "database": {
@@ -60,7 +62,7 @@
       "no executable ride references"
     ]
   },
-  "note": "NormalPocket 1.3.1 keeps existing encrypted Store/Ledger/Calendar behavior while introducing explicit structural and workflow authorities plus single current UI/runtime entrypoints. Current projection code reads cloned legacy state only through normalpocket-state-port.js. Live calendar source filtering now runs through normalpocket-flow-calendar-bridge.js so flow-era.js remains untouched while r5-3 is reduced to source-list/history compatibility. metropolis-v4.js, metropolis-r5-1.js and metropolis-r5-4.js are no longer part of production runtime.",
+  "note": "NormalPocket 1.3.1 keeps existing encrypted Store/Ledger/Calendar behavior while introducing explicit structural and workflow authorities plus single current UI/runtime entrypoints. Current projection code reads cloned legacy state only through normalpocket-state-port.js. Calendar live filtering and source/history compatibility now run through bounded NormalPocket bridges; metropolis-r5-3.js remains source evidence only and is no longer a production runtime asset. metropolis-v4.js, metropolis-r5-1.js and metropolis-r5-4.js are also no longer part of production runtime.",
   "productionFiles": [
     { "path": "index.html" },
     { "path": "manifest.webmanifest" },
@@ -78,6 +80,7 @@
     { "path": "normalpocket-runtime.js" },
     { "path": "normalpocket-state-port.js" },
     { "path": "normalpocket-flow-calendar-bridge.js" },
+    { "path": "normalpocket-live-source-bridge.js" },
     { "path": "normalpocket-bootstrap.js" },
     { "path": "normalpocket-catalog-core.js" },
     { "path": "normalpocket-products.js" },
@@ -87,7 +90,6 @@
     { "path": "flow-era.js" },
     { "path": "metropolis-r5.js" },
     { "path": "metropolis-r5-2.js" },
-    { "path": "metropolis-r5-3.js" },
     { "path": "src/current-bootstrap.mjs" },
     { "path": "src/architecture/authority.mjs" },
     { "path": "src/architecture/release-authority.mjs" },
