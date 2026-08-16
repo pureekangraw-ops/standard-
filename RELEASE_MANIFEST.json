@@ -23,7 +23,9 @@
     "day-close summary without destructive reset",
     "neutral public branding",
     "single current stylesheet authority",
+    "single current runtime authority",
     "explicit Store/Finance/Calendar/Shell structural boundaries",
+    "explicit cross-domain workflow authority",
     "current release authority bridge"
   ],
   "database": {
@@ -46,7 +48,9 @@
       "neutral public branding contract",
       "product catalog and stock-owner contracts",
       "structural authority contracts",
+      "workflow authority contracts",
       "current UI authority contract",
+      "current runtime authority contract",
       "publication contract",
       "STANDARD regression contracts",
       "syntax",
@@ -54,7 +58,7 @@
       "no executable ride references"
     ]
   },
-  "note": "NormalPocket 1.3.1 keeps existing encrypted Store/Ledger/Calendar behavior while introducing explicit structural authority boundaries and one current UI entrypoint. Legacy assets remain temporary migration dependencies until behavior-equivalent hard cuts are verified.",
+  "note": "NormalPocket 1.3.1 keeps existing encrypted Store/Ledger/Calendar behavior while introducing explicit structural and workflow authorities plus single current UI/runtime entrypoints. Legacy assets remain temporary migration dependencies until behavior-equivalent hard cuts are verified.",
   "productionFiles": [
     { "path": "index.html" },
     { "path": "manifest.webmanifest" },
@@ -69,6 +73,7 @@
     { "path": "metropolis-r5-4.css" },
     { "path": "normalpocket-products.css" },
     { "path": "sw-bootstrap.js" },
+    { "path": "normalpocket-runtime.js" },
     { "path": "normalpocket-bootstrap.js" },
     { "path": "normalpocket-catalog-core.js" },
     { "path": "normalpocket-products.js" },
@@ -85,6 +90,8 @@
     { "path": "src/current-bootstrap.mjs" },
     { "path": "src/architecture/authority.mjs" },
     { "path": "src/architecture/release-authority.mjs" },
+    { "path": "src/workflows/command-authority.mjs" },
+    { "path": "src/workflows/workflow-coordinator.mjs" },
     { "path": "src/shell/shell-boundary.mjs" },
     { "path": "src/store/store-boundary.mjs" },
     { "path": "src/finance/finance-boundary.mjs" },
