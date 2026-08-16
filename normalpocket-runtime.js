@@ -23,7 +23,7 @@
     });
   }
 
-  async function startCurrentRuntime() {
+  async function loadCompatibilityRuntime() {
     const compatibility = [
       "metropolis-r5.js",
       "metropolis-r5-1.js",
@@ -37,11 +37,10 @@
     if (globalThis.NormalPocketCompatibilityReady) {
       await globalThis.NormalPocketCompatibilityReady;
     }
-    await import("./src/current-bootstrap.mjs");
   }
 
-  globalThis.NormalPocketRuntimeReady = startCurrentRuntime().catch(error => {
-    console.error("NORMALPOCKET_CURRENT_RUNTIME_FAILED", error);
+  globalThis.NormalPocketRuntimeReady = loadCompatibilityRuntime().catch(error => {
+    console.error("NORMALPOCKET_COMPATIBILITY_RUNTIME_FAILED", error);
     throw error;
   });
 })();
