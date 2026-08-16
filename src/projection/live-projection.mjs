@@ -1,5 +1,6 @@
 import {
   STATUS_SIGNALS,
+  deriveLiveCounters,
   liveStatusSignal,
   selectLiveCalendar
 } from "./live-records.mjs";
@@ -113,11 +114,31 @@ function hideCancelledRecordCards() {
   document.querySelectorAll(".record .status.cancelled").forEach(status => status.closest(".record")?.remove());
 }
 
+function syncLiveCounters() {
+  const rows = runtimePort()?.getCalendarProjectionSnapshot?.() || [];
+  const counters = deriveLiveCounters(rows, todayKey());
+  const values = {
+    homeWaitIn: counters.incoming,
+    homeWaitOut: counters.outgoing,
+    homeVerify: counters.verify,
+    calWaitIn: counters.incoming,
+    calWaitOut: counters.outgoing,
+    calVerify: counters.verify,
+    ledgerPendingCount: `${counters.outgoing} รายการ`
+  };
+  Object.entries(values).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    const text = String(value);
+    if (element && element.textContent !== text) element.textContent = text;
+  });
+}
+
 function applyProjection() {
   paintMonthGrid();
   paintQueueCards();
   paintHomeTasks();
   hideCancelledRecordCards();
+  syncLiveCounters();
 }
 
 function queueApply() {
