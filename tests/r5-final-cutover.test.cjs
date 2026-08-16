@@ -40,7 +40,8 @@ test("legacy import and report behavior have bounded replacements", () => {
 test("production runtime no longer loads metropolis r5", () => {
   const runtime = read("normalpocket-runtime.js");
   assert.match(runtime, /normalpocket-store-port\.js/);
-  assert.match(runtime, /normalpocket-sale-ui\.js/);
+  assert.match(runtime, /normalpocket-catalog-sale-ui\.js/);
+  assert.doesNotMatch(runtime, /normalpocket-sale-ui\.js/);
   assert.match(runtime, /normalpocket-import-bridge\.js/);
   assert.match(runtime, /normalpocket-report-bridge\.js/);
   assert.doesNotMatch(runtime, /metropolis-r5\.js/);
