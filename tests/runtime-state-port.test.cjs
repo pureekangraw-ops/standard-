@@ -26,10 +26,12 @@ test("state port exposes only projection-safe lookup helpers", () => {
   assert.doesNotMatch(source, /replaceState/);
 });
 
-test("current runtime loads state port before retained projection layers", () => {
+test("current runtime loads state port before retained compatibility and bridge layers", () => {
   const runtime = read("normalpocket-runtime.js");
   const port = runtime.indexOf("normalpocket-state-port.js");
   const r5 = runtime.indexOf("metropolis-r5.js");
-  const r53 = runtime.indexOf("metropolis-r5-3.js");
-  assert.ok(port >= 0 && port < r5 && port < r53);
+  const calendarBridge = runtime.indexOf("normalpocket-flow-calendar-bridge.js");
+  const sourceBridge = runtime.indexOf("normalpocket-live-source-bridge.js");
+  assert.ok(port >= 0 && port < r5 && port < calendarBridge && port < sourceBridge);
+  assert.doesNotMatch(runtime, /metropolis-r5-3\.js/);
 });
