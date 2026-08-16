@@ -35,6 +35,8 @@
     for (const src of compatibility) await loadClassicScript(src);
     if (globalThis.NormalPocketCompatibilityReady) await globalThis.NormalPocketCompatibilityReady;
     await loadClassicScript("normalpocket-catalog-sale-ui.js");
+    await loadClassicScript("normalpocket-catalog-stock-ui.js");
+    await loadClassicScript("normalpocket-finance-direct-ui.js");
   }
 
   globalThis.NormalPocketRuntimeReady = loadCompatibilityRuntime().catch(error => {
