@@ -48,15 +48,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
   (() => {
     let queued = false;
 
-    function todayKey() {
-      return typeof localISO === "function" ? localISO() : new Date().toISOString().slice(0, 10);
-    }
-
-    function sourceStatusOf(item) {
-      if (!item || typeof findSource !== "function") return null;
-      return findSource(item.source, item.sourceId)?.status || null;
-    }
-
     function renderLiveSourceLists() {
       if (typeof state === "undefined" || !state || typeof recordHtml !== "function" || typeof lastFive !== "function") return;
 
@@ -98,15 +89,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       globalThis.__YGPH_R53_HISTORY_SELECTOR_PATCHED__ = true;
     }
 
-    function patchFlowCalendarItems() {
-      if (globalThis.__YGPH_R53_FLOW_ITEMS_PATCHED__ || typeof flowCalendarItems !== "function") return;
-      const baseFlowCalendarItems = flowCalendarItems;
-      flowCalendarItems = function(...args) {
-        return selectLiveCalendar(baseFlowCalendarItems(...args), sourceStatusOf, todayKey());
-      };
-      globalThis.__YGPH_R53_FLOW_ITEMS_PATCHED__ = true;
-    }
-
     function apply() {
       document.documentElement.dataset.metropolisR53 = METROPOLIS_R5_3_VERSION;
       renderLiveSourceLists();
@@ -125,7 +107,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       if (globalThis.__YGPH_STANDARD_R53_RUNTIME__) return;
       globalThis.__YGPH_STANDARD_R53_RUNTIME__ = true;
       patchHistoryHtml();
-      patchFlowCalendarItems();
       if (globalThis.YGPHRuntime?.register) {
         globalThis.YGPHRuntime.register("STANDARD_R53_LIVE_STATUS", {
           afterRender: queueApply,
