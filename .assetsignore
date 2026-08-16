@@ -35,6 +35,8 @@ node_modules/**
 !/src/architecture/release-authority.mjs
 !/src/workflows/command-authority.mjs
 !/src/workflows/workflow-coordinator.mjs
+!/src/projection/live-records.mjs
+!/src/projection/live-projection.mjs
 !/src/shell/shell-boundary.mjs
 !/src/store/store-boundary.mjs
 !/src/finance/finance-boundary.mjs
