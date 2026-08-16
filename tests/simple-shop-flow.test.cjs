@@ -14,7 +14,6 @@ test("NormalPocket current release has neutral public branding with no owner-spe
   const metropolis = read("metropolis-v4.js");
   const simple = read("normalpocket-simple-flow.js");
   const visible = [index, manifest.name, manifest.short_name, manifest.description, metropolis, simple].join("\n");
-
   assert.match(index, /<title>NormalPocket 1\.3\.1<\/title>/);
   assert.equal(manifest.name, "NormalPocket");
   assert.equal(manifest.short_name, "NormalPocket");
@@ -46,7 +45,6 @@ test("current runtime layers load before NormalPocket authority", () => {
   const ordered = [
     "normalpocket-state-port.js",
     "normalpocket-store-port.js",
-    "normalpocket-sale-ui.js",
     "normalpocket-finance-port.js",
     "normalpocket-installment-ui.js",
     "normalpocket-import-bridge.js",
@@ -61,6 +59,10 @@ test("current runtime layers load before NormalPocket authority", () => {
     assert.ok(index > previous, `${file} must load after previous runtime layer`);
     previous = index;
   }
+  const wait = runtime.indexOf("await globalThis.NormalPocketCompatibilityReady");
+  const sale = runtime.indexOf('loadClassicScript("normalpocket-catalog-sale-ui.js")');
+  assert.ok(sale > wait, "catalog sale authority must load after compatibility catalog");
+  assert.doesNotMatch(runtime, /normalpocket-sale-ui\.js/);
   assert.doesNotMatch(runtime, /metropolis-r5(?:-[1-4])?\.js/);
   assert.match(current, /await import\("\.\.\/normalpocket-runtime\.js"\)/);
   assert.match(current, /await globalThis\.NormalPocketRuntimeReady/);
