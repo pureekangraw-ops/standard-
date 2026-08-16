@@ -15,10 +15,7 @@
         script.dataset.normalpocketRuntime = src;
         document.head.appendChild(script);
       }
-      script.addEventListener("load", () => {
-        script.dataset.loaded = "true";
-        resolve();
-      }, { once: true });
+      script.addEventListener("load", () => { script.dataset.loaded = "true"; resolve(); }, { once: true });
       script.addEventListener("error", () => reject(new Error(`โหลด runtime ${src} ไม่สำเร็จ`)), { once: true });
     });
   }
@@ -26,18 +23,18 @@
   async function loadCompatibilityRuntime() {
     const compatibility = [
       "normalpocket-state-port.js",
-      "metropolis-r5.js",
+      "normalpocket-store-port.js",
+      "normalpocket-sale-ui.js",
       "normalpocket-finance-port.js",
       "normalpocket-installment-ui.js",
+      "normalpocket-import-bridge.js",
+      "normalpocket-report-bridge.js",
       "normalpocket-flow-calendar-bridge.js",
       "normalpocket-live-source-bridge.js",
       "normalpocket-bootstrap.js"
     ];
-
     for (const src of compatibility) await loadClassicScript(src);
-    if (globalThis.NormalPocketCompatibilityReady) {
-      await globalThis.NormalPocketCompatibilityReady;
-    }
+    if (globalThis.NormalPocketCompatibilityReady) await globalThis.NormalPocketCompatibilityReady;
   }
 
   globalThis.NormalPocketRuntimeReady = loadCompatibilityRuntime().catch(error => {
