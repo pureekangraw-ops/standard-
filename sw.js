@@ -26,8 +26,12 @@ const APP_SHELL = [
   "sw-bootstrap.js",
   "normalpocket-runtime.js",
   "normalpocket-state-port.js",
+  "normalpocket-store-port.js",
+  "normalpocket-sale-ui.js",
   "normalpocket-finance-port.js",
   "normalpocket-installment-ui.js",
+  "normalpocket-import-bridge.js",
+  "normalpocket-report-bridge.js",
   "normalpocket-flow-calendar-bridge.js",
   "normalpocket-live-source-bridge.js",
   "normalpocket-bootstrap.js",
@@ -38,7 +42,6 @@ const APP_SHELL = [
   "highway-gate.js",
   "app.js",
   "flow-era.js",
-  "metropolis-r5.js",
   "src/current-bootstrap.mjs",
   "src/architecture/authority.mjs",
   "src/architecture/release-authority.mjs",
@@ -48,6 +51,7 @@ const APP_SHELL = [
   "src/projection/live-projection.mjs",
   "src/shell/shell-boundary.mjs",
   "src/store/store-boundary.mjs",
+  "src/store/sale-operations.mjs",
   "src/finance/installment-schedule.mjs",
   "src/finance/installment-operations.mjs",
   "src/finance/finance-boundary.mjs",
@@ -70,9 +74,7 @@ function lifecycleBase(value = {}) {
 
 function planActivation(existing, installedCache, at = new Date().toISOString()) {
   const before = lifecycleBase(existing);
-  if (before.current === installedCache) {
-    return { ...before, serving: before.serving || installedCache, updatedAt: at };
-  }
+  if (before.current === installedCache) return { ...before, serving: before.serving || installedCache, updatedAt: at };
   const previous = before.serving && before.serving !== installedCache
     ? before.serving
     : before.current && before.current !== installedCache
@@ -80,14 +82,7 @@ function planActivation(existing, installedCache, at = new Date().toISOString())
       : before.previous && before.previous !== installedCache
         ? before.previous
         : null;
-  return {
-    version: 1,
-    current: installedCache,
-    serving: installedCache,
-    previous,
-    rolledBack: false,
-    updatedAt: at
-  };
+  return { version: 1, current: installedCache, serving: installedCache, previous, rolledBack: false, updatedAt: at };
 }
 
 function planRollback(existing, at = new Date().toISOString()) {
@@ -118,9 +113,7 @@ function shouldAutoActivateLegacyBridge(cacheNames, lifecycle) {
 }
 
 function assertShellReadback(responses) {
-  if (!Array.isArray(responses) || responses.length !== APP_SHELL.length || responses.some(response => !response || !response.ok)) {
-    throw new Error("ไฟล์ออฟไลน์ไม่ครบ");
-  }
+  if (!Array.isArray(responses) || responses.length !== APP_SHELL.length || responses.some(response => !response || !response.ok)) throw new Error("ไฟล์ออฟไลน์ไม่ครบ");
   return true;
 }
 
@@ -216,11 +209,9 @@ if (typeof self !== "undefined" && typeof self.addEventListener === "function") 
       else if (type === "SKIP_WAITING") {
         await self.skipWaiting();
         result = { type: "SKIP_WAITING_OK", releaseId: RELEASE_ID };
-      } else if (type === "ROLLBACK") {
-        result = { type: "ROLLBACK_OK", lifecycle: await writeLifecycle(planRollback(await readLifecycle())) };
-      } else if (type === "USE_CURRENT") {
-        result = { type: "USE_CURRENT_OK", lifecycle: await writeLifecycle(planUseCurrent(await readLifecycle())) };
-      } else return;
+      } else if (type === "ROLLBACK") result = { type: "ROLLBACK_OK", lifecycle: await writeLifecycle(planRollback(await readLifecycle())) };
+      else if (type === "USE_CURRENT") result = { type: "USE_CURRENT_OK", lifecycle: await writeLifecycle(planUseCurrent(await readLifecycle())) };
+      else return;
       if (event.source?.postMessage) event.source.postMessage(result);
     })());
   });
@@ -228,21 +219,8 @@ if (typeof self !== "undefined" && typeof self.addEventListener === "function") 
 
 if (typeof module === "object" && module.exports) {
   module.exports = {
-    APP_CACHE_PREFIX,
-    LEGACY_CACHE_PREFIXES,
-    RELEASE_ID,
-    CURRENT_CACHE,
-    META_CACHE,
-    META_PATH,
-    APP_SHELL,
-    lifecycleBase,
-    planActivation,
-    planRollback,
-    planUseCurrent,
-    obsoleteAppCaches,
-    legacyAppCaches,
-    shouldAutoActivateLegacyBridge,
-    assertShellReadback,
-    offlineLookupKeys
+    APP_CACHE_PREFIX, LEGACY_CACHE_PREFIXES, RELEASE_ID, CURRENT_CACHE, META_CACHE, META_PATH, APP_SHELL,
+    lifecycleBase, planActivation, planRollback, planUseCurrent, obsoleteAppCaches, legacyAppCaches,
+    shouldAutoActivateLegacyBridge, assertShellReadback, offlineLookupKeys
   };
 }
