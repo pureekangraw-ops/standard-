@@ -13,6 +13,7 @@
 @import url("metropolis-r5-4.css");
 @import url("normalpocket-products.css");
 @import url("normalpocket-simple-flow.css");
+@import url("normalpocket-design.css");
 
 :root {
   --normalpocket-ui-authority: "normalpocket-current";
