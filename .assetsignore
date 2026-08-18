@@ -17,6 +17,7 @@ node_modules/**
 !/metropolis-r5-3.css
 !/metropolis-r5-4.css
 !/normalpocket-products.css
+!/normalpocket-design.css
 !/sw-bootstrap.js
 !/normalpocket-runtime.js
 !/normalpocket-state-port.js
