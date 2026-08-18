@@ -1,0 +1,119 @@
+/* NormalPocket final presentation authority. No business or durable-state behavior lives here. */
+:root{
+  --np-surface:#ffffff;
+  --np-surface-muted:#f5f7f6;
+  --np-surface-strong:#eef3f1;
+  --np-border:rgba(18,45,42,.12);
+  --np-text:#17312e;
+  --np-muted:#667773;
+  --np-primary:#176b4f;
+  --np-primary-soft:rgba(23,107,79,.09);
+  --np-danger:#a33b36;
+  --np-radius-card:18px;
+  --np-radius-control:12px;
+  --np-shadow-card:0 8px 24px rgba(17,45,41,.07);
+  --np-space-1:4px;
+  --np-space-2:8px;
+  --np-space-3:12px;
+  --np-space-4:16px;
+  --np-space-5:20px;
+}
+
+body{color:var(--np-text);text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
+
+.np-quick-home,
+.normalpocket-product-card,
+.normalpocket-variant-row,
+.content-card,
+.card{
+  border-color:var(--np-border);
+  border-radius:var(--np-radius-card);
+}
+
+.np-quick-home,
+.normalpocket-product-card{
+  background:var(--np-surface);
+  box-shadow:var(--np-shadow-card);
+}
+
+.np-quick-head h2,
+.normalpocket-product-head h3,
+.content-card h3{
+  color:var(--np-text);
+  letter-spacing:-.012em;
+}
+
+.np-quick-head small,
+.np-action small,
+.np-today-strip small,
+.np-day-summary small,
+.normalpocket-product-main small,
+.normalpocket-product-metrics small,
+.normalpocket-option-summary{
+  color:var(--np-muted);
+}
+
+.np-daily-actions{gap:var(--np-space-2)}
+.np-action{
+  min-height:72px;
+  border-color:var(--np-border);
+  border-radius:var(--np-radius-control);
+  background:var(--np-surface);
+  transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease,background-color .14s ease;
+}
+.np-action.np-primary{background:var(--np-primary-soft);border-color:rgba(23,107,79,.24)}
+.np-action.np-close{background:var(--np-surface-muted)}
+.np-action:active{transform:translateY(1px)}
+
+.np-first-run,
+.np-today-strip>div,
+.np-day-summary>div{
+  background:var(--np-surface-muted);
+  border:1px solid var(--np-border);
+}
+
+.normalpocket-product-list{gap:var(--np-space-3)}
+.normalpocket-product-card{padding:var(--np-space-4)}
+.normalpocket-product-main>span{background:var(--np-primary-soft);color:var(--np-primary)}
+.normalpocket-variant-row{background:var(--np-surface-muted)}
+
+button,
+.primary-btn,
+.secondary-btn,
+.text-btn,
+.np-action{
+  border-radius:var(--np-radius-control);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible{
+  outline:3px solid rgba(23,107,79,.28);
+  outline-offset:2px;
+}
+
+.modal-actions{gap:var(--np-space-2)}
+.modal-actions button{min-height:44px}
+
+button[disabled],
+input[disabled],
+select[disabled],
+textarea[disabled]{opacity:.56;cursor:not-allowed}
+
+.danger,
+.danger-btn,
+.destructive{color:var(--np-danger)}
+
+@media(max-width:520px){
+  .np-quick-home{border-radius:16px}
+  .normalpocket-product-card{padding:var(--np-space-3)}
+  .np-quick-head h2{font-size:1.25rem}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
+}
