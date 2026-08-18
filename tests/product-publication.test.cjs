@@ -51,7 +51,8 @@ test("release metadata publishes NormalPocket 1.3.1 while retaining catalog file
   const manifest = JSON.parse(read("RELEASE_MANIFEST.json"));
   assert.equal(manifest.release, "1.3.1-mobile-polish");
   assert.equal(manifest.product, "NormalPocket");
-  assert.equal(manifest.sourceCommit, "874cca49624a43a09b48c5155131f974e8d91b61");
+  assert.equal(manifest.engineeringReference?.commit, "874cca49624a43a09b48c5155131f974e8d91b61");
+  assert.equal(manifest.engineeringReference?.authority, "READ_ONLY_REFERENCE");
   const files = new Set(manifest.productionFiles.map(item => item.path));
   for (const file of ["normalpocket-current.css", "normalpocket-runtime.js", "normalpocket-bootstrap.js", "normalpocket-catalog-core.js", "normalpocket-products.js", "normalpocket-reconcile.js", "normalpocket-products.css", "normalpocket-simple-flow.js", "normalpocket-simple-flow.css", "app-icon.svg"]) {
     assert.ok(files.has(file), `${file} must be published`);
