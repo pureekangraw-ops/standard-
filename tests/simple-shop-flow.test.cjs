@@ -14,23 +14,18 @@ test("NormalPocket current release has neutral public branding with no owner-spe
   const metropolis = read("metropolis-v4.js");
   const simple = read("normalpocket-simple-flow.js");
   const visible = [index, manifest.name, manifest.short_name, manifest.description, metropolis, simple].join("\n");
-
   assert.match(index, /<title>NormalPocket 1\.3\.1<\/title>/);
   assert.equal(manifest.name, "NormalPocket");
   assert.equal(manifest.short_name, "NormalPocket");
   assert.match(visible, /NormalPocket/);
-  for (const ownerCopy of ["แอปของบิ๊ก", "กับโก", "YGPH STANDARD", "ฐานงานส่วนตัว"]) {
-    assert.doesNotMatch(visible, new RegExp(ownerCopy));
-  }
+  for (const ownerCopy of ["แอปของบิ๊ก", "กับโก", "YGPH STANDARD", "ฐานงานส่วนตัว"]) assert.doesNotMatch(visible, new RegExp(ownerCopy));
   assert.equal(manifest.icons[0].src, "app-icon.svg");
   assert.equal(manifest.icons[0].sizes, "any");
 });
 
 test("NormalPocket current release exposes five simple daily actions", () => {
   const source = read("normalpocket-simple-flow.js");
-  for (const label of ["ขายสินค้า", "ขายด่วน", "รับสินค้า", "เงิน", "จบวัน"]) {
-    assert.match(source, new RegExp(label));
-  }
+  for (const label of ["ขายสินค้า", "ขายด่วน", "รับสินค้า", "เงิน", "จบวัน"]) assert.match(source, new RegExp(label));
   assert.match(source, /normalpocketQuickHome/);
   assert.match(source, /openQuickSale/);
   assert.match(source, /openDayClose/);
@@ -44,12 +39,33 @@ test("simple home hides the legacy launcher and duplicate dashboard", () => {
   assert.match(css, /display:none/);
 });
 
-test("legacy runtime layers load before NormalPocket authority", () => {
-  const bootstrap = read("sw-bootstrap.js");
-  assert.match(bootstrap, /async function loadRuntimeLayers/);
-  assert.match(bootstrap, /await loadMetropolisLayers\(\)/);
-  assert.match(bootstrap, /await loadScript\("normalpocket-bootstrap\.js"/);
-  assert.ok(bootstrap.indexOf("await loadMetropolisLayers()") < bootstrap.indexOf('await loadScript("normalpocket-bootstrap.js"'));
+test("current runtime layers load before NormalPocket authority", () => {
+  const runtime = read("normalpocket-runtime.js");
+  const current = read("src/current-bootstrap.mjs");
+  const ordered = [
+    "normalpocket-state-port.js",
+    "normalpocket-store-port.js",
+    "normalpocket-finance-port.js",
+    "normalpocket-installment-ui.js",
+    "normalpocket-import-bridge.js",
+    "normalpocket-report-bridge.js",
+    "normalpocket-flow-calendar-bridge.js",
+    "normalpocket-live-source-bridge.js",
+    "normalpocket-bootstrap.js"
+  ];
+  let previous = -1;
+  for (const file of ordered) {
+    const index = runtime.indexOf(file);
+    assert.ok(index > previous, `${file} must load after previous runtime layer`);
+    previous = index;
+  }
+  const wait = runtime.indexOf("await globalThis.NormalPocketCompatibilityReady");
+  const sale = runtime.indexOf('loadClassicScript("normalpocket-catalog-sale-ui.js")');
+  assert.ok(sale > wait, "catalog sale authority must load after compatibility catalog");
+  assert.doesNotMatch(runtime, /normalpocket-sale-ui\.js/);
+  assert.doesNotMatch(runtime, /metropolis-r5(?:-[1-4])?\.js/);
+  assert.match(current, /await import\("\.\.\/normalpocket-runtime\.js"\)/);
+  assert.match(current, /await globalThis\.NormalPocketRuntimeReady/);
 });
 
 test("quick sale is cash-first and never mutates product stock", () => {
@@ -67,23 +83,15 @@ test("quick sale is cash-first and never mutates product stock", () => {
 test("day close summary uses daily records without resetting durable stock or cash", () => {
   const flow = require("../normalpocket-simple-flow.js");
   const state = {
-    store: {
-      stockQty: 9,
-      sales: [
-        { date: "2026-08-12", status: "COMPLETED", totalSatang: 5000, receivedSatang: 5000, costSatang: 2000 },
-        { date: "2026-08-11", status: "COMPLETED", totalSatang: 9000, receivedSatang: 9000, costSatang: 4000 }
-      ]
-    },
-    ledger: {
-      transactions: [
-        { date: "2026-08-12", direction: "IN", amountSatang: 5000 },
-        { date: "2026-08-12", direction: "OUT", amountSatang: 1000 }
-      ]
-    },
-    calendar: [
-      { due: "2026-08-12", status: "OPEN" },
-      { due: "2026-08-12", status: "COMPLETED" }
-    ]
+    store: { stockQty: 9, sales: [
+      { date: "2026-08-12", status: "COMPLETED", totalSatang: 5000, receivedSatang: 5000, costSatang: 2000 },
+      { date: "2026-08-11", status: "COMPLETED", totalSatang: 9000, receivedSatang: 9000, costSatang: 4000 }
+    ] },
+    ledger: { transactions: [
+      { date: "2026-08-12", direction: "IN", amountSatang: 5000 },
+      { date: "2026-08-12", direction: "OUT", amountSatang: 1000 }
+    ] },
+    calendar: [{ due: "2026-08-12", status: "OPEN" }, { due: "2026-08-12", status: "COMPLETED" }]
   };
   const summary = flow.daySummary(state, "2026-08-12");
   assert.equal(summary.salesSatang, 5000);
@@ -107,7 +115,5 @@ test("release contract publishes the current NormalPocket simple-flow assets", (
   assert.equal(release.release, "1.3.1-mobile-polish");
   assert.equal(release.product, "NormalPocket");
   assert.equal(sw.RELEASE_ID, "v1.3.1-20260812-r6-mobile-polish");
-  for (const file of ["normalpocket-simple-flow.js", "normalpocket-simple-flow.css", "app-icon.svg"]) {
-    assert.ok(release.productionFiles.some(item => item.path === file), `${file} must be published`);
-  }
+  for (const file of ["normalpocket-simple-flow.js", "normalpocket-simple-flow.css", "app-icon.svg"]) assert.ok(release.productionFiles.some(item => item.path === file), `${file} must be published`);
 });

@@ -1,6 +1,6 @@
 "use strict";
 
-/* YGPH STANDARD — three-color live status signal + live-only render boundary */
+/* YGPH STANDARD — retained live-selector compatibility wrappers only */
 
 const METROPOLIS_R5_3_VERSION = "5.3.4-standard-live-authority";
 const STATUS_SIGNALS = Object.freeze({ GREEN: "GREEN", YELLOW: "YELLOW", RED: "RED", HIDDEN: "HIDDEN" });
@@ -48,112 +48,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
   (() => {
     let queued = false;
 
-    function todayKey() {
-      return typeof localISO === "function" ? localISO() : new Date().toISOString().slice(0, 10);
-    }
-
-    function sourceStatusOf(item) {
-      if (!item || typeof findSource !== "function") return null;
-      return findSource(item.source, item.sourceId)?.status || null;
-    }
-
-    function queueSignal(item) {
-      if (!item) return STATUS_SIGNALS.HIDDEN;
-      return liveStatusSignal(item, sourceStatusOf(item), todayKey());
-    }
-
-    function signalClass(signal) {
-      return `r53-status-${String(signal || "").toLowerCase()}`;
-    }
-
-    function signalLabel(signal) {
-      if (signal === STATUS_SIGNALS.GREEN) return "เสร็จแล้ว";
-      if (signal === STATUS_SIGNALS.RED) return "เกินกำหนด";
-      return "รอดำเนินการ";
-    }
-
-    function paintMonthGrid() {
-      if (typeof state === "undefined" || !Array.isArray(state?.calendar)) return;
-      const today = todayKey();
-      const selected = selectLiveCalendar(state.calendar, sourceStatusOf, today);
-      document.querySelectorAll("#monthGrid .day-cell[data-date]").forEach(cell => {
-        const date = cell.dataset.date;
-        const items = selected.filter(item => item.due === date);
-        let count = cell.querySelector(".day-count");
-        if (items.length) {
-          if (!count) {
-            count = document.createElement("span");
-            count.className = "day-count";
-            cell.querySelector(".day-num")?.after(count);
-          }
-          count.textContent = String(items.length);
-        } else {
-          count?.remove();
-        }
-        const dots = cell.querySelector(".day-dots");
-        if (dots) {
-          dots.innerHTML = items.slice(0, 5).map(item => {
-            const signal = statusSignal(item, today);
-            return `<span class="r53-day-dot ${signalClass(signal)}" aria-hidden="true"></span>`;
-          }).join("");
-        }
-      });
-    }
-
-    function queueIdFromCard(card) {
-      const action = card.querySelector("[data-history],[data-cancel],[data-move],[data-full],[data-partial],[data-complete],[data-refresh],[data-verify-edit]");
-      if (!action) return null;
-      return action.dataset.history || action.dataset.cancel || action.dataset.move || action.dataset.full || action.dataset.partial || action.dataset.complete || action.dataset.refresh || action.dataset.verifyEdit || null;
-    }
-
-    function ensureInlineDot(container, signal) {
-      if (!container) return;
-      let dot = container.querySelector(":scope > .r53-status-dot");
-      if (!dot) {
-        dot = document.createElement("span");
-        dot.className = "r53-status-dot";
-        dot.setAttribute("aria-hidden", "true");
-        container.prepend(dot);
-      }
-      dot.className = `r53-status-dot ${signalClass(signal)}`;
-      dot.title = signalLabel(signal);
-    }
-
-    function paintQueueCards() {
-      if (typeof findQueue !== "function") return;
-      document.querySelectorAll("#queueList .queue-item").forEach(card => {
-        const queue = findQueue(queueIdFromCard(card));
-        const signal = queueSignal(queue);
-        if (signal === STATUS_SIGNALS.HIDDEN) {
-          card.remove();
-          return;
-        }
-        ensureInlineDot(card.querySelector(".queue-title > b"), signal);
-        const status = card.querySelector(".status");
-        if (status) {
-          status.classList.remove("r53-status-green", "r53-status-yellow", "r53-status-red");
-          status.classList.add(signalClass(signal));
-        }
-      });
-      const list = document.getElementById("queueList");
-      if (list && !list.querySelector(".queue-item") && !list.querySelector(".empty")) {
-        list.innerHTML = '<div class="empty">ไม่มีรายการตามตัวกรองนี้</div>';
-      }
-    }
-
-    function paintHomeTasks() {
-      if (typeof findQueue !== "function") return;
-      document.querySelectorAll(".flow-task-row[data-flow-task]").forEach(row => {
-        const queue = findQueue(row.dataset.flowTask);
-        const signal = queueSignal(queue);
-        if (signal === STATUS_SIGNALS.HIDDEN) {
-          row.remove();
-          return;
-        }
-        ensureInlineDot(row, signal);
-      });
-    }
-
     function renderLiveSourceLists() {
       if (typeof state === "undefined" || !state || typeof recordHtml !== "function" || typeof lastFive !== "function") return;
 
@@ -182,36 +76,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       if (typeof bindGoCalendar === "function") bindGoCalendar();
     }
 
-    function hideCancelledRecordCards() {
-      document.querySelectorAll(".record .status.cancelled").forEach(status => status.closest(".record")?.remove());
-    }
-
-    function syncLiveCounters() {
-      if (typeof state === "undefined" || !state || !Array.isArray(state.calendar)) return;
-      const active = selectLiveCalendar(state.calendar, sourceStatusOf, todayKey()).filter(item =>
-        !["COMPLETED", "CANCELLED"].includes(String(item.status || "").toUpperCase())
-      );
-      const directionOf = item => typeof queueDirection === "function" ? queueDirection(item) : "OTHER";
-      const isVerify = item => String(item.status || "").toUpperCase() === "VERIFY" ||
-        (typeof integrityGate === "function" && integrityGate(item).state !== "TRUSTED");
-      const incoming = active.filter(item => directionOf(item) === "IN").length;
-      const outgoing = active.filter(item => directionOf(item) === "OUT").length;
-      const verify = active.filter(isVerify).length;
-      const setCounter = (id, value) => {
-        const element = document.getElementById(id);
-        const text = String(value);
-        if (element && element.textContent !== text) element.textContent = text;
-      };
-
-      setCounter("homeWaitIn", incoming);
-      setCounter("homeWaitOut", outgoing);
-      setCounter("homeVerify", verify);
-      setCounter("calWaitIn", incoming);
-      setCounter("calWaitOut", outgoing);
-      setCounter("calVerify", verify);
-      setCounter("ledgerPendingCount", `${outgoing} รายการ`);
-    }
-
     function patchHistoryHtml() {
       if (globalThis.__YGPH_R53_HISTORY_SELECTOR_PATCHED__ || typeof historyHtml !== "function") return;
       const baseHistoryHtml = historyHtml;
@@ -225,23 +89,9 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       globalThis.__YGPH_R53_HISTORY_SELECTOR_PATCHED__ = true;
     }
 
-    function patchFlowCalendarItems() {
-      if (globalThis.__YGPH_R53_FLOW_ITEMS_PATCHED__ || typeof flowCalendarItems !== "function") return;
-      const baseFlowCalendarItems = flowCalendarItems;
-      flowCalendarItems = function(...args) {
-        return selectLiveCalendar(baseFlowCalendarItems(...args), sourceStatusOf, todayKey());
-      };
-      globalThis.__YGPH_R53_FLOW_ITEMS_PATCHED__ = true;
-    }
-
     function apply() {
       document.documentElement.dataset.metropolisR53 = METROPOLIS_R5_3_VERSION;
       renderLiveSourceLists();
-      paintMonthGrid();
-      paintQueueCards();
-      paintHomeTasks();
-      hideCancelledRecordCards();
-      syncLiveCounters();
     }
 
     function queueApply() {
@@ -257,7 +107,6 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       if (globalThis.__YGPH_STANDARD_R53_RUNTIME__) return;
       globalThis.__YGPH_STANDARD_R53_RUNTIME__ = true;
       patchHistoryHtml();
-      patchFlowCalendarItems();
       if (globalThis.YGPHRuntime?.register) {
         globalThis.YGPHRuntime.register("STANDARD_R53_LIVE_STATUS", {
           afterRender: queueApply,

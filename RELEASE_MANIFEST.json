@@ -2,14 +2,13 @@
   "release": "1.3.1-mobile-polish",
   "product": "NormalPocket",
   "releaseDate": "2026-08-12",
-  "sourceProduct": "YGPH METROPOLIS current main (read-only engineering reference)",
-  "sourceCommit": "874cca49624a43a09b48c5155131f974e8d91b61",
+  "engineeringReference": {
+    "product": "METROPOLIS",
+    "commit": "874cca49624a43a09b48c5155131f974e8d91b61",
+    "authority": "READ_ONLY_REFERENCE"
+  },
   "stateSchema": 4,
-  "domains": [
-    "STORE",
-    "LEDGER",
-    "CALENDAR"
-  ],
+  "domains": ["STORE", "LEDGER", "CALENDAR"],
   "features": [
     "one-hand mobile home flow",
     "compact mobile header and action grid",
@@ -18,10 +17,33 @@
     "simple daily home actions",
     "general product catalog",
     "optional color and size variants",
-    "quick cash sale without catalog stock mutation",
+    "shipping-aware catalog Store sale authority",
+    "bounded catalog Store purchase and withdrawal authority",
+    "bounded Finance direct income and expense authority",
+    "bounded import compatibility bridge",
+    "bounded receivable and report bridge",
     "simple stock adjustment",
     "day-close summary without destructive reset",
-    "neutral public branding"
+    "neutral public branding",
+    "single current stylesheet authority",
+    "final NormalPocket presentation token and accessibility authority",
+    "single current runtime authority",
+    "explicit Store/Finance/Calendar/Shell structural boundaries",
+    "explicit cross-domain workflow authority",
+    "current release authority hooks",
+    "readonly runtime state projection port",
+    "current live record selectors and projection runtime",
+    "bounded live calendar compatibility bridge",
+    "bounded live source and history compatibility bridge",
+    "current Finance installment schedule authority",
+    "current Finance pure installment operation authority",
+    "bounded Finance write port and current installment UI adapter",
+    "metropolis-v4 production runtime hard cut",
+    "metropolis-r5 javascript runtime hard cut",
+    "metropolis-r5-1 javascript runtime hard cut",
+    "metropolis-r5-2 javascript runtime hard cut",
+    "metropolis-r5-3 javascript runtime hard cut",
+    "metropolis-r5-4 dashboard/version runtime hard cut"
   ],
   "database": {
     "name": "ygph-standard-secure",
@@ -42,6 +64,10 @@
       "NormalPocket simple shop flow contracts",
       "neutral public branding contract",
       "product catalog and stock-owner contracts",
+      "structural authority contracts",
+      "workflow authority contracts",
+      "current UI authority contract",
+      "current runtime authority contract",
       "publication contract",
       "STANDARD regression contracts",
       "syntax",
@@ -49,100 +75,61 @@
       "no executable ride references"
     ]
   },
-  "note": "NormalPocket 1.3.1 polishes the one-hand mobile home by removing duplicated first-run actions and hiding zero-value summary cards while the shop is empty, preserving encrypted local Store/Ledger/Calendar data ownership.",
+  "note": "NormalPocket 1.3.1 installs final Store sale, purchase and withdrawal handlers plus direct Finance income/expense handlers after the catalog compatibility bootstrap. Their durable writes are bounded through NormalPocketStorePort and NormalPocketFinancePort. metropolis-r5*.js files remain source evidence only and are not production runtime assets. app.js and flow-era.js are retained as encrypted-vault/base compatibility substrate behind Current ports rather than final business UI authority.",
   "productionFiles": [
-    {
-      "path": "index.html"
-    },
-    {
-      "path": "manifest.webmanifest"
-    },
-    {
-      "path": "styles.css"
-    },
-    {
-      "path": "flow-era.css"
-    },
-    {
-      "path": "metropolis-v4.css"
-    },
-    {
-      "path": "metropolis-r5.css"
-    },
-    {
-      "path": "metropolis-r5-1.css"
-    },
-    {
-      "path": "metropolis-r5-2.css"
-    },
-    {
-      "path": "metropolis-r5-3.css"
-    },
-    {
-      "path": "metropolis-r5-4.css"
-    },
-    {
-      "path": "normalpocket-products.css"
-    },
-    {
-      "path": "sw-bootstrap.js"
-    },
-    {
-      "path": "normalpocket-bootstrap.js"
-    },
-    {
-      "path": "normalpocket-catalog-core.js"
-    },
-    {
-      "path": "normalpocket-products.js"
-    },
-    {
-      "path": "normalpocket-reconcile.js"
-    },
-    {
-      "path": "highway-gate.js"
-    },
-    {
-      "path": "app.js"
-    },
-    {
-      "path": "flow-era.js"
-    },
-    {
-      "path": "metropolis-v4.js"
-    },
-    {
-      "path": "metropolis-r5.js"
-    },
-    {
-      "path": "metropolis-r5-1.js"
-    },
-    {
-      "path": "metropolis-r5-2.js"
-    },
-    {
-      "path": "metropolis-r5-3.js"
-    },
-    {
-      "path": "metropolis-r5-4.js"
-    },
-    {
-      "path": "sw.js"
-    },
-    {
-      "path": "icon-192.png"
-    },
-    {
-      "path": "icon-512.png"
-    },
-    {
-      "path": "normalpocket-simple-flow.js"
-    },
-    {
-      "path": "normalpocket-simple-flow.css"
-    },
-    {
-      "path": "app-icon.svg"
-    }
+    { "path": "index.html" },
+    { "path": "manifest.webmanifest" },
+    { "path": "normalpocket-current.css" },
+    { "path": "styles.css" },
+    { "path": "flow-era.css" },
+    { "path": "metropolis-v4.css" },
+    { "path": "metropolis-r5.css" },
+    { "path": "metropolis-r5-1.css" },
+    { "path": "metropolis-r5-2.css" },
+    { "path": "metropolis-r5-3.css" },
+    { "path": "metropolis-r5-4.css" },
+    { "path": "normalpocket-products.css" },
+    { "path": "normalpocket-design.css" },
+    { "path": "sw-bootstrap.js" },
+    { "path": "normalpocket-runtime.js" },
+    { "path": "normalpocket-state-port.js" },
+    { "path": "normalpocket-store-port.js" },
+    { "path": "normalpocket-catalog-sale-ui.js" },
+    { "path": "normalpocket-catalog-stock-ui.js" },
+    { "path": "normalpocket-finance-port.js" },
+    { "path": "normalpocket-finance-direct-ui.js" },
+    { "path": "normalpocket-installment-ui.js" },
+    { "path": "normalpocket-import-bridge.js" },
+    { "path": "normalpocket-report-bridge.js" },
+    { "path": "normalpocket-flow-calendar-bridge.js" },
+    { "path": "normalpocket-live-source-bridge.js" },
+    { "path": "normalpocket-bootstrap.js" },
+    { "path": "normalpocket-catalog-core.js" },
+    { "path": "normalpocket-products.js" },
+    { "path": "normalpocket-reconcile.js" },
+    { "path": "highway-gate.js" },
+    { "path": "app.js" },
+    { "path": "flow-era.js" },
+    { "path": "src/current-bootstrap.mjs" },
+    { "path": "src/architecture/authority.mjs" },
+    { "path": "src/architecture/release-authority.mjs" },
+    { "path": "src/workflows/command-authority.mjs" },
+    { "path": "src/workflows/workflow-coordinator.mjs" },
+    { "path": "src/projection/live-records.mjs" },
+    { "path": "src/projection/live-projection.mjs" },
+    { "path": "src/shell/shell-boundary.mjs" },
+    { "path": "src/store/store-boundary.mjs" },
+    { "path": "src/store/sale-operations.mjs" },
+    { "path": "src/store/inventory-operations.mjs" },
+    { "path": "src/finance/installment-schedule.mjs" },
+    { "path": "src/finance/installment-operations.mjs" },
+    { "path": "src/finance/finance-boundary.mjs" },
+    { "path": "src/calendar/calendar-boundary.mjs" },
+    { "path": "sw.js" },
+    { "path": "icon-192.png" },
+    { "path": "icon-512.png" },
+    { "path": "normalpocket-simple-flow.js" },
+    { "path": "normalpocket-simple-flow.css" },
+    { "path": "app-icon.svg" }
   ]
 }

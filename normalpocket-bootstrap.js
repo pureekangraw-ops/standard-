@@ -3,15 +3,6 @@
 (function normalPocketBootstrap() {
   if (typeof document === "undefined") return;
 
-  function ensureStyle(href) {
-    if (document.querySelector(`link[data-normalpocket-style="${href}"]`)) return;
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = href;
-    link.dataset.normalpocketStyle = href;
-    document.head.appendChild(link);
-  }
-
   function loadScript(src) {
     return new Promise((resolve, reject) => {
       const existing = document.querySelector(`script[data-normalpocket-script="${src}"]`);
@@ -32,15 +23,18 @@
   }
 
   async function start() {
-    ensureStyle("normalpocket-products.css");
-    ensureStyle("normalpocket-simple-flow.css");
     await loadScript("normalpocket-catalog-core.js");
     await loadScript("normalpocket-products.js");
     await loadScript("normalpocket-reconcile.js");
     await loadScript("normalpocket-simple-flow.js");
   }
 
-  const run = () => start().catch(error => console.error("NORMALPOCKET_BOOTSTRAP_FAILED", error));
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run, { once: true });
-  else run();
+  globalThis.NormalPocketCompatibilityReady = new Promise((resolve, reject) => {
+    const run = () => start().then(resolve, reject);
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run, { once: true });
+    else run();
+  }).catch(error => {
+    console.error("NORMALPOCKET_BOOTSTRAP_FAILED", error);
+    throw error;
+  });
 })();
