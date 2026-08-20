@@ -3,23 +3,35 @@ import path from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
-const executableFiles = [
-  "index.html",
-  "core.js",
-  "domain.js",
-  "controller.js",
-  "vault.js",
-  "ui-model.js",
-  "highway-gate.js",
-  "app.js",
-  "flow-era.js",
-  "metropolis-v4.js",
-  "metropolis-r5.js",
-  "metropolis-r5-1.js",
-  "metropolis-r5-2.js",
-  "metropolis-r5-3.js",
-  "metropolis-r5-4.js"
-].filter(file => fs.existsSync(path.join(root, file)));
+const manifestPath = path.join(root, "RELEASE_MANIFEST.json");
+if (!fs.existsSync(manifestPath)) {
+  console.error("RELEASE_MANIFEST.json is required for no-RIDE coverage.");
+  process.exit(1);
+}
+
+let manifest;
+try {
+  manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+} catch (error) {
+  console.error(`Invalid RELEASE_MANIFEST.json: ${error.message}`);
+  process.exit(1);
+}
+
+if (!Array.isArray(manifest.productionFiles)) {
+  console.error("RELEASE_MANIFEST.json must declare productionFiles.");
+  process.exit(1);
+}
+
+const executableFiles = [...new Set(manifest.productionFiles
+  .map(entry => String(entry?.path || "").trim())
+  .filter(Boolean)
+  .filter(file => file === "index.html" || /\.m?js$/i.test(file)))];
+
+const missingFiles = executableFiles.filter(file => !fs.existsSync(path.join(root, file)));
+if (missingFiles.length) {
+  console.error("Manifest-declared executable files are missing:\n" + missingFiles.join("\n"));
+  process.exit(1);
+}
 
 const forbidden = [
   { name: "RIDE source/domain token", re: /\bRIDE\b/ },
@@ -50,4 +62,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`No executable RIDE dependency found in ${executableFiles.length} STANDARD runtime files.`);
+console.log(`No executable RIDE dependency found in ${executableFiles.length} manifest-declared STANDARD runtime files.`);
