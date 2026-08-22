@@ -3,14 +3,17 @@
 /*
   NormalPocket v1.0.0
   UI architecture layer only:
-  - Three app experiences: STORE / LEDGER / CALENDAR
+  - Two visible app experiences: STORE / LEDGER
+  - CALENDAR remains the internal action queue and appears only as a Finance subview
   - One encrypted local state and the existing Source/Route rules
   - No migration, formula, vault, IndexedDB or transaction mutation
 */
 
 const METROPOLIS_VERSION = "1.2.0";
 const METROPOLIS_NAME = "NormalPocket";
+// Compatibility token is intentionally unchanged because exchange/import semantics still include CALENDAR.
 const METROPOLIS_ARCHITECTURE = "THREE_APP_CONNECTED_SUITE";
+const METROPOLIS_VISIBLE_APPS = ["store", "ledger"];
 
 const METROPOLIS_APPS = {
   store: {
@@ -25,16 +28,16 @@ const METROPOLIS_APPS = {
   ledger: {
     title: "การเงิน",
     english: "LEDGER",
-    tagline: "เงินจริง · รายรับ · รายจ่าย",
+    tagline: "เงินจริง · รายรับ · รายจ่าย · ภาระ",
     icon: "ledger",
     emoji: "💳",
     valueId: "homeLedgerValue",
     valueLabel: "เงินปัจจุบัน"
   },
   calendar: {
-    title: "ปฏิทิน",
-    english: "CALENDAR",
-    tagline: "คิวงาน · วันครบกำหนด · การยืนยัน",
+    title: "กำหนดชำระและคิว",
+    english: "FINANCE QUEUE",
+    tagline: "รอรับ · รอจ่าย · VERIFY",
     icon: "calendar",
     emoji: "📅",
     valueId: "homeCalendarValue",
@@ -122,9 +125,9 @@ function metropolisBuildLauncher() {
   cityHero.className = "metropolis-city-hero";
   cityHero.innerHTML = `
     <div class="metropolis-city-copy">
-      <span class="metropolis-eyebrow">STORE · LEDGER · CALENDAR</span>
-      <h2>เลือกแอปที่ต้องใช้</h2>
-      <p>แต่ละงานแยกพื้นที่ชัดเจน แต่ยังใช้ฐานข้อมูลกลางและเส้นทางข้อมูลร่วมกัน</p>
+      <span class="metropolis-eyebrow">STORE · LEDGER</span>
+      <h2>ร้านค้าและการเงิน</h2>
+      <p>เลือกงานหลักที่ต้องใช้ ส่วนกำหนดชำระและคิวจะอยู่ภายในการเงินโดยไม่สร้างโลกที่สาม</p>
     </div>
     <div class="metropolis-city-state">
       <span class="metropolis-live-dot"></span>
@@ -138,7 +141,7 @@ function metropolisBuildLauncher() {
   if (sectionTitle && !sectionTitle.querySelector(".metropolis-section-note")) {
     const note = document.createElement("p");
     note.className = "metropolis-section-note";
-    note.textContent = "เปิดเฉพาะงานที่กำลังทำ หน้าจอจึงไม่รก";
+    note.textContent = "เหลือสองพื้นที่หลัก: ร้านค้า และการเงิน";
     sectionTitle.appendChild(note);
   }
 
@@ -150,7 +153,7 @@ function metropolisBuildLauncher() {
     ledger: grid.querySelector(".source-card.ledger")
   };
 
-  ["store", "ledger"].forEach(app => {
+  METROPOLIS_VISIBLE_APPS.forEach(app => {
     const card = existingCards[app];
     const meta = METROPOLIS_APPS[app];
     if (!card) return;
@@ -175,34 +178,23 @@ function metropolisBuildLauncher() {
       <span class="metropolis-app-status" id="metropolis-${app}-status">ใช้ข้อมูลกลางร่วมกัน</span>`;
   });
 
-  let calendarCard = grid.querySelector(".source-card.calendar");
-  if (!calendarCard) {
-    calendarCard = document.createElement("button");
-    calendarCard.type = "button";
-    calendarCard.className = "source-card calendar metropolis-app-card";
-    calendarCard.dataset.metropolisApp = "calendar";
-    calendarCard.setAttribute("aria-label", "เปิดแอปปฏิทิน");
-    calendarCard.innerHTML = `
-      <span class="metropolis-app-top">
-        <span class="metropolis-app-icon">${metropolisIcon("calendar")}</span>
-        <span class="metropolis-open-mark" aria-hidden="true">↗</span>
-      </span>
-      <span class="metropolis-app-copy">
-        <span class="metropolis-app-english">CALENDAR</span>
-        <b>ปฏิทิน</b>
-        <small>คิวงาน · วันครบกำหนด · การยืนยัน</small>
-      </span>
-      <span class="metropolis-app-value">
-        <small>รายการที่ต้องทำ</small>
-        <strong id="homeCalendarValue">0</strong>
-      </span>
-      <span class="metropolis-app-status" id="metropolis-calendar-status">รับคิวจากทุกแอป</span>`;
-    calendarCard.addEventListener("click", () => metropolisShowPage("calendar"));
-  }
-
-  [existingCards.store, existingCards.ledger, calendarCard]
+  [existingCards.store, existingCards.ledger]
     .filter(Boolean)
     .forEach(card => grid.appendChild(card));
+
+  const hubCard = home.querySelector(".hub-card");
+  const ledgerPage = document.getElementById("ledgerPage");
+  const ledgerActionRow = ledgerPage?.querySelector(".action-row");
+  if (hubCard && ledgerPage) {
+    const hubTitle = hubCard.querySelector("h2");
+    const hubLead = hubCard.querySelector("p");
+    const hubButton = hubCard.querySelector(".hub-open");
+    if (hubTitle) hubTitle.textContent = "งานการเงินที่ยังไม่จบ";
+    if (hubLead) hubLead.textContent = "รอรับเงิน · รอจ่าย · ต้องตรวจสอบ — เก็บเป็นคิว ไม่ใช่เงินจริงจนกว่าจะยืนยัน";
+    if (hubButton) hubButton.textContent = "เปิดกำหนดชำระและคิว";
+    ledgerActionRow?.after(hubCard);
+    if (!ledgerActionRow) ledgerPage.appendChild(hubCard);
+  }
 
   const utilityBar = document.createElement("div");
   utilityBar.className = "metropolis-utility-bar";
@@ -218,13 +210,12 @@ function metropolisBuildLauncher() {
   drawer.className = "metropolis-system-drawer";
   drawer.innerHTML = `
     <summary>
-      <span><b>ศูนย์เชื่อมระบบ</b><small>คิว รายงาน และเครื่องมือข้อมูลเพิ่มเติม</small></span>
+      <span><b>เครื่องมือและข้อมูล</b><small>รายงาน รับ–ส่ง และเครื่องมือระบบเพิ่มเติม</small></span>
       <span class="metropolis-summary-arrow" aria-hidden="true">⌄</span>
     </summary>
     <div class="metropolis-system-content"></div>`;
   const content = drawer.querySelector(".metropolis-system-content");
   const movable = [
-    home.querySelector(".hub-card"),
     document.getElementById("flowLatestCash"),
     home.querySelector(".exchange-card"),
     home.querySelector(".home-actions")
@@ -253,7 +244,8 @@ function metropolisBuildAppBar() {
       <span id="metropolisCurrentTagline">ข้อมูลเชื่อมกันผ่านระบบกลาง</span>
     </div>
     <div class="metropolis-linked-badge"><span></span> ใช้ข้อมูลร่วมกัน</div>`;
-  bar.querySelector(".metropolis-back").addEventListener("click", () => metropolisShowPage("home"));
+  const backButton = bar.querySelector(".metropolis-back");
+  backButton.addEventListener("click", () => metropolisShowPage(backButton.dataset.returnPage || "home"));
   main.prepend(bar);
 }
 
@@ -273,6 +265,19 @@ function metropolisFixLegacyCopy() {
   if (unlockLead) unlockLead.textContent = "ใส่รหัสเพื่อปลดล็อกข้อมูลที่เข้ารหัสไว้ในเครื่อง";
   const restoreButton = document.getElementById("restoreFromLockBtn");
   if (restoreButton) restoreButton.textContent = "กู้คืนจากไฟล์สำรองที่เข้ารหัส";
+
+  const queueHero = document.querySelector("#calendarPage .hero");
+  if (queueHero) {
+    queueHero.classList.remove("calendar");
+    queueHero.classList.add("ledger");
+    const queueTitle = queueHero.querySelector("h2");
+    const queueLead = queueHero.querySelector("p");
+    if (queueTitle) queueTitle.textContent = "กำหนดชำระและคิว";
+    if (queueLead) queueLead.textContent = "งานที่ยังไม่เป็นเงินจริงจนกว่าจะยืนยัน — รอรับ รอจ่าย และ VERIFY";
+  }
+
+  const queueReportTitle = document.getElementById("queueReport")?.closest(".card")?.querySelector("h3");
+  if (queueReportTitle) queueReportTitle.textContent = "กำหนดชำระและคิว";
 }
 
 function metropolisApplyBranding() {
@@ -289,7 +294,7 @@ function metropolisApplyBranding() {
   const brandTitle = document.querySelector(".brand-copy h1");
   const brandSub = document.querySelector(".brand-copy p");
   if (brandTitle) brandTitle.textContent = METROPOLIS_NAME;
-  if (brandSub) brandSub.textContent = "ร้านค้า • เงิน • งานประจำวัน";
+  if (brandSub) brandSub.textContent = "ร้านค้า • การเงิน";
 
   const status = document.querySelector(".status-line");
   if (status) {
@@ -302,7 +307,8 @@ function metropolisApplyBranding() {
 
 function metropolisApplyPage(page = metropolisActivePage()) {
   const normalized = METROPOLIS_APPS[page] ? page : "home";
-  document.body.dataset.metropolisPage = normalized;
+  const pageTheme = normalized === "calendar" ? "ledger" : normalized;
+  document.body.dataset.metropolisPage = pageTheme;
 
   const bar = document.getElementById("metropolisAppBar");
   if (!bar) return;
@@ -311,6 +317,15 @@ function metropolisApplyPage(page = metropolisActivePage()) {
   if (isHome) {
     document.title = `${METROPOLIS_NAME} v${METROPOLIS_VERSION}`;
     return;
+  }
+
+  const backButton = bar.querySelector(".metropolis-back");
+  if (backButton) {
+    const returnPage = normalized === "calendar" ? "ledger" : "home";
+    backButton.dataset.returnPage = returnPage;
+    backButton.setAttribute("aria-label", returnPage === "ledger" ? "กลับการเงิน" : "กลับหน้ารวม");
+    const backLabel = backButton.querySelector("span:last-child");
+    if (backLabel) backLabel.textContent = returnPage === "ledger" ? "การเงิน" : "หน้ารวม";
   }
 
   const meta = METROPOLIS_APPS[normalized] || {
@@ -350,9 +365,13 @@ function metropolisRefresh() {
     if (storeStatus) storeStatus.textContent = `สต็อก ${stock.toLocaleString("th-TH")} · ค้าง ${metropolisFormatMoney(receivable)}`;
 
     const today = metropolisToday();
+    void today;
 
     const currentBalance = typeof currentBalanceSatang === "function" ? currentBalanceSatang() : Number(state.ledger?.openingBalanceSatang || 0);
-    if (ledgerStatus) ledgerStatus.textContent = `ยอดจริง ${metropolisFormatMoney(currentBalance)}`;
+    if (ledgerStatus) {
+      const verifySuffix = verifyQueues.length ? ` · ตรวจ ${verifyQueues.length}` : "";
+      ledgerStatus.textContent = `ยอดจริง ${metropolisFormatMoney(currentBalance)} · รอ ${activeQueues.length}${verifySuffix}`;
+    }
   } catch (error) {
     console.warn("Metropolis refresh skipped", error);
   }
