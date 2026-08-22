@@ -5,7 +5,8 @@ const LEGACY_CACHE_PREFIXES = Object.freeze([
   "ygph-standard-0.1.0-preview."
 ]);
 const RELEASE_ID = "v1.3.1-20260812-r6-mobile-polish";
-const CACHE_GENERATION = "v1.3.1-20260822-r8-finance-unified-light";
+const CACHE_GENERATION = "v1.3.1-20260823-r9-finance-unified-light";
+const AUTO_ACTIVATE_CACHE_GENERATION = "v1.3.1-20260823-r9-finance-unified-light";
 const CURRENT_CACHE = `${APP_CACHE_PREFIX}${CACHE_GENERATION}`;
 const META_CACHE = "ygph-standard-meta";
 const META_PATH = "__ygph_service_worker_lifecycle__";
@@ -105,6 +106,10 @@ function shouldAutoActivateLegacyBridge(cacheNames, lifecycle) {
   return !hasSafeGeneration && legacyAppCaches(cacheNames).length > 0;
 }
 
+function shouldAutoActivateCurrentGeneration() {
+  return CACHE_GENERATION === AUTO_ACTIVATE_CACHE_GENERATION;
+}
+
 function assertShellReadback(responses) {
   if (!Array.isArray(responses) || responses.length !== APP_SHELL.length || responses.some(response => !response || !response.ok)) {
     throw new Error("ไฟล์ออฟไลน์ไม่ครบ");
@@ -192,7 +197,7 @@ if (typeof self !== "undefined" && typeof self.addEventListener === "function") 
         caches.keys(),
         readLifecycle()
       ]);
-      if (shouldAutoActivateLegacyBridge(cacheNames, lifecycle)) {
+      if (shouldAutoActivateLegacyBridge(cacheNames, lifecycle) || shouldAutoActivateCurrentGeneration()) {
         await self.skipWaiting();
       }
     })());
@@ -292,6 +297,7 @@ if (typeof module === "object" && module.exports) {
     obsoleteAppCaches,
     legacyAppCaches,
     shouldAutoActivateLegacyBridge,
+    shouldAutoActivateCurrentGeneration,
     assertShellReadback,
     offlineLookupKeys
   };
