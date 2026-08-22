@@ -6,6 +6,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const metropolis = fs.readFileSync(path.join(root, 'metropolis-v4.js'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 
 function has(pattern, message) {
   assert.match(metropolis, pattern, message);
@@ -31,4 +32,11 @@ test('pending work entry point is moved into the Finance page', () => {
   has(/ledgerActionRow\?\.after\(hubCard\)/, 'pending-work card must be inserted into Finance');
   has(/งานการเงินที่ยังไม่จบ/, 'pending-work card must use finance ownership wording');
   has(/เปิดกำหนดชำระและคิว/, 'queue entry button must be framed as a Finance action');
+});
+
+test('finance consolidation ships in a fresh PWA cache generation without changing the 1.3.1 release identity', () => {
+  assert.match(sw, /const RELEASE_ID = "v1\.3\.1-20260812-r6-mobile-polish";/, '1.3.1 release identity must remain stable');
+  assert.match(sw, /const CACHE_GENERATION = "v1\.3\.1-20260822-r7-finance-consolidation";/, 'cached UI assets must receive a fresh cache generation');
+  assert.match(sw, /const CURRENT_CACHE = `\$\{APP_CACHE_PREFIX\}\$\{CACHE_GENERATION\}`;/, 'current cache must use the cache generation rather than the release label');
+  assert.match(sw, /"metropolis-v4\.js"/, 'finance UI layer must remain in the precached app shell');
 });
