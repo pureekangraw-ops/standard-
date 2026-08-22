@@ -1,0 +1,27 @@
+name: Materialize METROPOLIS Baseline
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out METROPOLIS 4.2.4 source
+        uses: actions/checkout@v4
+        with:
+          repository: pureekangraw-ops/ygph-metropolis
+          ref: 7329448eef685d72364c42f8d0373483e6e303d0
+          path: upstream
+      - name: Strip repository metadata
+        run: rm -rf upstream/.git
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: metropolis-4.2.4-baseline
+          path: upstream
+          if-no-files-found: error
