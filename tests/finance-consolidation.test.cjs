@@ -28,7 +28,8 @@ test('Calendar surface is embedded into Finance and removed from visible navigat
   has(/ledgerPage\.appendChild\(calendarPage\)/, 'Finance must physically own the visible queue surface');
   has(/\.nav-btn\[data-page="calendar"\]/, 'visible Calendar nav entry must be explicitly removed');
   assert.match(metroCss, /\.metropolis-v4 \.nav-btn\[data-page="calendar"\]\{display:none!important\}/, 'CSS must defensively hide Calendar nav before runtime cleanup');
-  assert.match(metroCss, /grid-template-columns:repeat\(auto-fit,minmax\(0,1fr\)\)!important/, 'remaining bottom navigation must reflow automatically');
+  assert.match(metroCss, /grid-auto-flow:column!important/, 'remaining bottom navigation must flow by column');
+  assert.match(metroCss, /grid-auto-columns:minmax\(0,1fr\)!important/, 'remaining bottom navigation items must share equal width');
 });
 
 test('all legacy Calendar routes land in Finance Queue', () => {
