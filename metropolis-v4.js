@@ -89,8 +89,48 @@ function metropolisShowPage(page) {
     showPage(page);
     return;
   }
-  document.querySelectorAll(".page").forEach(node => node.classList.toggle("active", node.id === `${page}Page`));
-  metropolisApplyPage(page);
+  const visiblePage = page === "calendar" ? "ledger" : page;
+  document.querySelectorAll(".page").forEach(node => node.classList.toggle("active", node.id === `${visiblePage}Page`));
+  metropolisApplyPage(visiblePage);
+  if (page === "calendar") setTimeout(metropolisScrollFinanceQueue, 60);
+}
+
+function metropolisScrollFinanceQueue() {
+  document.getElementById("calendarPage")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function metropolisInstallFinanceQueueRouting() {
+  const coreShowPage = globalThis.showPage;
+  if (typeof coreShowPage !== "function" || coreShowPage.__metropolisFinanceQueueRoute) return;
+
+  function routedShowPage(page) {
+    if (page === "calendar") {
+      coreShowPage("ledger");
+      setTimeout(metropolisScrollFinanceQueue, 80);
+      return;
+    }
+    return coreShowPage(page);
+  }
+
+  routedShowPage.__metropolisFinanceQueueRoute = true;
+  globalThis.showPage = routedShowPage;
+}
+
+function metropolisEmbedFinanceQueue() {
+  const ledgerPage = document.getElementById("ledgerPage");
+  const calendarPage = document.getElementById("calendarPage");
+  if (!ledgerPage || !calendarPage || calendarPage.dataset.financeEmbedded === "true") return;
+
+  const wasActive = calendarPage.classList.contains("active");
+  calendarPage.dataset.financeEmbedded = "true";
+  calendarPage.classList.remove("page", "active");
+  calendarPage.classList.add("finance-queue-section");
+  calendarPage.setAttribute("aria-label", "กำหนดชำระและคิวการเงิน");
+  ledgerPage.appendChild(calendarPage);
+
+  document.querySelectorAll('.nav-btn[data-page="calendar"]').forEach(button => button.remove());
+
+  if (wasActive && typeof showPage === "function") showPage("ledger");
 }
 
 function metropolisFormatMoney(value) {
@@ -412,7 +452,9 @@ function metropolisInstall() {
   if (document.documentElement.dataset.metropolisInstalled === "true") return;
   document.documentElement.dataset.metropolisInstalled = "true";
   metropolisApplyBranding();
+  metropolisInstallFinanceQueueRouting();
   metropolisBuildLauncher();
+  metropolisEmbedFinanceQueue();
   metropolisBuildAppBar();
   metropolisRegisterRuntime();
   metropolisApplyPage(metropolisActivePage());
