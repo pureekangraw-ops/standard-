@@ -5,6 +5,7 @@ const adapter = require('../normalpocket-work-adapter.js');
 
 const t1 = '2026-08-29T04:00:00.000Z';
 const t2 = '2026-08-29T04:01:00.000Z';
+const t3 = '2026-08-29T04:02:00.000Z';
 const idFactory = () => 'TASK-A1';
 
 function baseState() {
@@ -69,4 +70,24 @@ test('adapter state survives an isolated durable write-read boundary exactly', a
   assert.deepEqual(found[0], created.task);
   assert.deepEqual(durable.store, { stockQty: 7 });
   assert.deepEqual(durable.lighthouse, { session: 'keep-me' });
+});
+
+test('completeTaskInState closes by id without mutating previous host state', () => {
+  const created = adapter.createTaskInState(baseState(), { title: 'ส่งของ' }, { now: t1, idFactory });
+  const closed = adapter.completeTaskInState(created.state, 'TASK-A1', { now: t2 });
+  assert.equal(created.state.work.tasks[0].status, 'OPEN');
+  assert.equal(closed.task.status, 'COMPLETED');
+  assert.equal(closed.task.revision, 2);
+  assert.deepEqual(closed.state.store, { stockQty: 7 });
+  assert.deepEqual(adapter.queryTasksInState(closed.state, { status: 'COMPLETED' }).map(task => task.id), ['TASK-A1']);
+});
+
+test('cancelTaskInState closes by id and preserves cancellation history note', () => {
+  const created = adapter.createTaskInState(baseState(), { title: 'โทรลูกค้า' }, { now: t1, idFactory });
+  const closed = adapter.cancelTaskInState(created.state, 'TASK-A1', { now: t3, note: 'ลูกค้ายกเลิก' });
+  assert.equal(created.state.work.tasks[0].status, 'OPEN');
+  assert.equal(closed.task.status, 'CANCELLED');
+  assert.deepEqual(closed.task.history.at(-1), { at: t3, event: 'CANCELLED', note: 'ลูกค้ายกเลิก' });
+  assert.deepEqual(closed.state.lighthouse, { session: 'keep-me' });
+  assert.deepEqual(adapter.queryTasksInState(closed.state, { status: 'CANCELLED' }).map(task => task.id), ['TASK-A1']);
 });
