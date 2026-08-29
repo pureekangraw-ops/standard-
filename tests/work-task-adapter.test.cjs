@@ -50,11 +50,11 @@ test('createTaskInState and editTaskInState preserve unrelated host state and re
   assert.deepEqual(edited.state.store, { stockQty: 7 });
 });
 
-test('queryTasksInState delegates filtering without exposing caller-owned task objects', () => {
+test('queryTasksInState delegates the authorized query contract without exposing caller-owned task objects', () => {
   let state = baseState();
   state = adapter.createTaskInState(state, { title: 'ส่งลูกค้า', due: '2026-08-30' }, { now: t1, idFactory: () => 'TASK-1' }).state;
   state = adapter.createTaskInState(state, { title: 'ซื้อกล่อง', due: null }, { now: t2, idFactory: () => 'TASK-2' }).state;
-  const results = adapter.queryTasksInState(state, { text: 'ลูกค้า' });
+  const results = adapter.queryTasksInState(state, { id: 'TASK-1', dueFrom: '2026-08-30', dueTo: '2026-08-30' });
   assert.deepEqual(results.map(task => task.id), ['TASK-1']);
   results[0].title = 'mutated result';
   assert.equal(state.work.tasks[0].title, 'ส่งลูกค้า');
@@ -65,7 +65,7 @@ test('adapter state survives an isolated durable write-read boundary exactly', a
   const created = adapter.createTaskInState(baseState(), { title: 'ส่งเอกสาร', due: '2026-09-01', note: 'ชุด A' }, { now: t1, idFactory });
   await store.write(created.state);
   const durable = await store.read();
-  const found = adapter.queryTasksInState(durable, { text: 'เอกสาร' });
+  const found = adapter.queryTasksInState(durable, { id: 'TASK-A1' });
   assert.equal(found.length, 1);
   assert.deepEqual(found[0], created.task);
   assert.deepEqual(durable.store, { stockQty: 7 });
