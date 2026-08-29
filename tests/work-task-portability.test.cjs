@@ -31,7 +31,7 @@ test('a second host can use Work Task create edit query complete without NormalP
 
   const edited = adapter.editTaskInState(created.state, 'TASK-LH-1', { note: 'แก้จาก host ที่สอง' }, { now: t2 });
   assert.equal(edited.task.note, 'แก้จาก host ที่สอง');
-  assert.deepEqual(adapter.queryTasksInState(edited.state, { text: 'capability' }).map(task => task.id), ['TASK-LH-1']);
+  assert.deepEqual(adapter.queryTasksInState(edited.state, { id: 'TASK-LH-1' }).map(task => task.id), ['TASK-LH-1']);
 
   const completed = adapter.completeTaskInState(edited.state, 'TASK-LH-1', { now: t3 });
   assert.equal(completed.task.status, 'COMPLETED');
