@@ -1,7 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 
 const adapter = require('../normalpocket-work-adapter.js');
+const { openIsolatedDurableStore } = require('./helpers/isolated-durable-store.cjs');
 
 const t1 = '2026-08-29T04:00:00.000Z';
 const t2 = '2026-08-29T04:01:00.000Z';
@@ -13,14 +17,6 @@ function baseState() {
     lighthouse: { session: 'keep-me' },
     store: { stockQty: 7 },
     work: { tasks: [] },
-  };
-}
-
-function createMemoryStore() {
-  let value = null;
-  return {
-    async write(next) { value = structuredClone(next); },
-    async read() { return structuredClone(value); },
   };
 }
 
@@ -60,16 +56,45 @@ test('queryTasksInState delegates the authorized query contract without exposing
   assert.equal(state.work.tasks[0].title, 'ส่งลูกค้า');
 });
 
-test('adapter state survives an isolated durable write-read boundary exactly', async () => {
-  const store = createMemoryStore();
+test('adapter state survives isolated durable commit close reopen readback exactly', async t => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'normalpocket-work-task-'));
+  t.after(async () => fs.rm(rootDir, { recursive: true, force: true }));
+
+  const locator = {
+    rootDir,
+    namespace: 'normalpocket-work-task-core-test',
+    database: 'work-task-durable-test',
+    key: 'state-A',
+  };
+
   const created = adapter.createTaskInState(baseState(), { title: 'ส่งเอกสาร', due: '2026-09-01', note: 'ชุด A' }, { now: t1, idFactory });
-  await store.write(created.state);
-  const durable = await store.read();
+
+  const writer = await openIsolatedDurableStore(locator);
+  await writer.commit(created.state);
+  await writer.close();
+
+  const reader = await openIsolatedDurableStore(locator);
+  const durable = await reader.read();
+  await reader.close();
+
+  assert.deepEqual(durable, created.state);
   const found = adapter.queryTasksInState(durable, { id: 'TASK-A1' });
   assert.equal(found.length, 1);
   assert.deepEqual(found[0], created.task);
   assert.deepEqual(durable.store, { stockQty: 7 });
   assert.deepEqual(durable.lighthouse, { session: 'keep-me' });
+});
+
+test('isolated durable proof refuses the real NormalPocket database identity', async () => {
+  await assert.rejects(
+    () => openIsolatedDurableStore({
+      rootDir: os.tmpdir(),
+      namespace: 'normalpocket-work-task-core-test',
+      database: 'ygph-standard-secure',
+      key: 'state-A',
+    }),
+    /forbidden|production|ygph-standard-secure/i,
+  );
 });
 
 test('completeTaskInState closes by id without mutating previous host state', () => {
