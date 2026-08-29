@@ -77,3 +77,30 @@ test('validateTask reports invalid task data instead of throwing', () => {
   assert.equal(result.ok, false);
   assert.ok(result.errors.length >= 5);
 });
+
+test('completeTask closes an OPEN task immutably and records history', () => {
+  const task = core.createTask({ title: 'ส่งของ' }, { now: t1, idFactory });
+  const completed = core.completeTask(task, { now: t2 });
+  assert.equal(task.status, 'OPEN');
+  assert.equal(completed.status, 'COMPLETED');
+  assert.equal(completed.revision, 2);
+  assert.equal(completed.updatedAt, t2);
+  assert.deepEqual(completed.history.at(-1), { at: t2, event: 'COMPLETED', note: '' });
+});
+
+test('cancelTask closes an OPEN task immutably and records history', () => {
+  const task = core.createTask({ title: 'ส่งของ' }, { now: t1, idFactory });
+  const cancelled = core.cancelTask(task, { now: t2, note: 'ไม่ต้องส่งแล้ว' });
+  assert.equal(task.status, 'OPEN');
+  assert.equal(cancelled.status, 'CANCELLED');
+  assert.equal(cancelled.revision, 2);
+  assert.deepEqual(cancelled.history.at(-1), { at: t2, event: 'CANCELLED', note: 'ไม่ต้องส่งแล้ว' });
+});
+
+test('closed tasks reject edit and repeated close transitions', () => {
+  const task = core.createTask({ title: 'ส่งของ' }, { now: t1, idFactory });
+  const completed = core.completeTask(task, { now: t2 });
+  assert.throws(() => core.editTask(completed, { note: 'เปลี่ยนย้อนหลัง' }, { now: '2026-08-29T03:32:00.000Z' }), /OPEN/i);
+  assert.throws(() => core.completeTask(completed, { now: '2026-08-29T03:32:00.000Z' }), /OPEN/i);
+  assert.throws(() => core.cancelTask(completed, { now: '2026-08-29T03:32:00.000Z' }), /OPEN/i);
+});
