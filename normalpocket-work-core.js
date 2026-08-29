@@ -72,6 +72,10 @@
     if (!result.ok) throw new Error(result.errors.join("\n"));
   }
 
+  function assertOpen(task) {
+    if (task.status !== "OPEN") throw new Error("แก้หรือปิดได้เฉพาะ task สถานะ OPEN");
+  }
+
   function createTask(input = {}, context = {}) {
     const { now, idFactory } = resolveContext(context);
     const title = cleanText(input.title);
@@ -93,6 +97,7 @@
 
   function editTask(task, patch = {}, context = {}) {
     assertTask(task);
+    assertOpen(task);
     if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("patch ต้องเป็น object");
     const keys = Object.keys(patch);
     if (!keys.length || keys.some(key => !EDITABLE_FIELDS.includes(key))) throw new Error("patch รองรับเฉพาะ title, due และ note");
@@ -111,6 +116,27 @@
     next.history.push({ at: now, event: "EDITED", note: changed.join(",") });
     assertTask(next);
     return clone(next);
+  }
+
+  function closeTask(task, status, event, context = {}) {
+    assertTask(task);
+    assertOpen(task);
+    const { now } = resolveContext(context);
+    const next = clone(task);
+    next.status = status;
+    next.revision += 1;
+    next.updatedAt = now;
+    next.history.push({ at: now, event, note: cleanText(context.note) });
+    assertTask(next);
+    return clone(next);
+  }
+
+  function completeTask(task, context = {}) {
+    return closeTask(task, "COMPLETED", "COMPLETED", context);
+  }
+
+  function cancelTask(task, context = {}) {
+    return closeTask(task, "CANCELLED", "CANCELLED", context);
   }
 
   function getTask(tasks, id) {
@@ -147,7 +173,7 @@
     return output;
   }
 
-  const api = Object.freeze({ STATUS, createTask, editTask, getTask, queryTasks, validateTask });
+  const api = Object.freeze({ STATUS, createTask, editTask, completeTask, cancelTask, getTask, queryTasks, validateTask });
   if (typeof module === "object" && module.exports) module.exports = api;
   root.NormalPocketWorkCore = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
