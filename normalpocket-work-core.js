@@ -3,6 +3,7 @@
 (function normalPocketWorkCore(root) {
   const STATUS = Object.freeze(["OPEN", "COMPLETED", "CANCELLED"]);
   const EDITABLE_FIELDS = Object.freeze(["title", "due", "note"]);
+  const QUERY_FIELDS = Object.freeze(["id", "status", "dueFrom", "dueTo"]);
 
   function clone(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
@@ -145,22 +146,32 @@
   }
 
   function queryTasks(tasks, filter = {}) {
+    if (!filter || typeof filter !== "object" || Array.isArray(filter)) throw new Error("filter ต้องเป็น object");
+    const keys = Object.keys(filter);
+    if (keys.some(key => !QUERY_FIELDS.includes(key))) throw new Error("filter รองรับเฉพาะ id, status, dueFrom และ dueTo");
+
     let output = (Array.isArray(tasks) ? tasks : []).map(task => {
       assertTask(task);
       return clone(task);
     });
-    if (Object.prototype.hasOwnProperty.call(filter, "status")) output = output.filter(task => task.status === filter.status);
-    if (Object.prototype.hasOwnProperty.call(filter, "due")) output = output.filter(task => task.due === normalizeDue(filter.due));
-    if (filter.dueBefore != null) {
-      const dueBefore = normalizeDue(filter.dueBefore);
-      output = output.filter(task => task.due != null && task.due <= dueBefore);
+
+    if (Object.prototype.hasOwnProperty.call(filter, "id")) {
+      const id = cleanText(filter.id);
+      if (!id) throw new Error("filter.id ต้องมีค่า");
+      output = output.filter(task => task.id === id);
     }
-    if (filter.dueAfter != null) {
-      const dueAfter = normalizeDue(filter.dueAfter);
-      output = output.filter(task => task.due != null && task.due >= dueAfter);
+
+    if (Object.prototype.hasOwnProperty.call(filter, "status")) {
+      if (!STATUS.includes(filter.status)) throw new Error("filter.status ไม่ถูกต้อง");
+      output = output.filter(task => task.status === filter.status);
     }
-    const text = cleanText(filter.text).toLocaleLowerCase();
-    if (text) output = output.filter(task => `${task.title}\n${task.note}`.toLocaleLowerCase().includes(text));
+
+    const dueFrom = filter.dueFrom == null ? null : normalizeDue(filter.dueFrom);
+    const dueTo = filter.dueTo == null ? null : normalizeDue(filter.dueTo);
+    if (dueFrom != null && dueTo != null && dueFrom > dueTo) throw new Error("filter.dueFrom ต้องไม่มากกว่า dueTo");
+    if (dueFrom != null) output = output.filter(task => task.due != null && task.due >= dueFrom);
+    if (dueTo != null) output = output.filter(task => task.due != null && task.due <= dueTo);
+
     output.sort((a, b) => {
       if (a.due == null && b.due != null) return 1;
       if (a.due != null && b.due == null) return -1;
