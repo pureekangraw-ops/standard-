@@ -61,15 +61,17 @@ test('getTask returns a clone and null when the id does not exist', () => {
   assert.equal(core.getTask([task], 'TASK-missing'), null);
 });
 
-test('queryTasks filters text and status and sorts dated tasks before undated tasks deterministically', () => {
+test('queryTasks implements only the owner-authorized id status dueFrom dueTo contract', () => {
   const a = core.createTask({ title: 'ซื้อกล่อง', due: null, note: 'คลัง' }, { now: '2026-08-29T01:00:00.000Z', idFactory: () => 'TASK-C' });
   const b = core.createTask({ title: 'โทรลูกค้า', due: '2026-08-31', note: 'ด่วน' }, { now: '2026-08-29T02:00:00.000Z', idFactory: () => 'TASK-B' });
   const c = core.createTask({ title: 'ส่งลูกค้า', due: '2026-08-30', note: 'กล่องใหญ่' }, { now: '2026-08-29T03:00:00.000Z', idFactory: () => 'TASK-A' });
   assert.deepEqual(core.queryTasks([a, b, c]).map(item => item.id), ['TASK-A', 'TASK-B', 'TASK-C']);
-  assert.deepEqual(core.queryTasks([a, b, c], { text: 'ลูกค้า', status: 'OPEN' }).map(item => item.id), ['TASK-A', 'TASK-B']);
-  assert.deepEqual(core.queryTasks([a, b, c], { dueBefore: '2026-08-30' }).map(item => item.id), ['TASK-A']);
-  assert.deepEqual(core.queryTasks([a, b, c], { dueAfter: '2026-08-31' }).map(item => item.id), ['TASK-B']);
-  assert.deepEqual(core.queryTasks([a, b, c], { due: null }).map(item => item.id), ['TASK-C']);
+  assert.deepEqual(core.queryTasks([a, b, c], { id: 'TASK-B' }).map(item => item.id), ['TASK-B']);
+  assert.deepEqual(core.queryTasks([a, b, c], { status: 'OPEN' }).map(item => item.id), ['TASK-A', 'TASK-B', 'TASK-C']);
+  assert.deepEqual(core.queryTasks([a, b, c], { dueFrom: '2026-08-31' }).map(item => item.id), ['TASK-B']);
+  assert.deepEqual(core.queryTasks([a, b, c], { dueTo: '2026-08-30' }).map(item => item.id), ['TASK-A']);
+  assert.deepEqual(core.queryTasks([a, b, c], { dueFrom: '2026-08-30', dueTo: '2026-08-31' }).map(item => item.id), ['TASK-A', 'TASK-B']);
+  assert.throws(() => core.queryTasks([a, b, c], { text: 'ลูกค้า' }), /filter/i);
 });
 
 test('validateTask reports invalid task data instead of throwing', () => {
