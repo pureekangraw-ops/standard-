@@ -16,7 +16,7 @@ Extract a portable Work / Task capability from the task-like behavior currently 
 
 Create a host-neutral pure module `normalpocket-work-core.js`. It owns only WorkTask data semantics and transitions. It must have no DOM, IndexedDB, Vault, STORE, LEDGER, payment, installment, natural-language Intent, or service-worker dependency.
 
-NormalPocket integrates the core through `normalpocket-work-adapter.js`. The adapter maps WorkTask records to a host-owned `state.work.tasks` collection and exposes pure load/save/query operations against a supplied state object. NormalPocket persistence remains owned by the existing app commit/readback path.
+NormalPocket integrates the core through `normalpocket-work-adapter.js`. The adapter maps WorkTask records to a host-owned `state.work.tasks` collection and exposes pure state transitions/query operations against a supplied state object. The adapter owns no persistence. NormalPocket production persistence remains owned by the existing app commit/readback path and is not changed by this capability.
 
 The first integration deliberately does not replace `state.calendar` or migrate existing queue records. Calendar remains the host's finance/action queue. WorkTask is introduced as a separate portable capability so its contract can be proven without changing money behavior.
 
@@ -62,7 +62,7 @@ validateTask(task) -> { ok: boolean, errors: string[] }
 
 ## Host adapter contract
 
-`normalpocket-work-adapter.js` owns the NormalPocket state shape:
+`normalpocket-work-adapter.js` owns only the host mapping into this NormalPocket-shaped state boundary:
 
 ```js
 state.work = { tasks: WorkTask[] }
@@ -79,31 +79,39 @@ cancelTaskInState(state, id, context?) -> { state, task }
 queryTasksInState(state, filter?) -> WorkTask[]
 ```
 
-The adapter must not write IndexedDB or Vault itself. The host persists the returned state through its existing atomic commit/readback path.
+The adapter must not write IndexedDB, Vault, filesystem storage, or any other persistence API itself. A host persists the returned state through a host-owned adapter/path.
 
 ## Query contract
 
-Supported filters in the first version:
+Supported filters in the Owner-authorized first version are exactly:
 
+- `id`: exact task id
 - `status`: exact status
-- `due`: exact date or `null`
-- `dueBefore`: inclusive date upper bound
-- `dueAfter`: inclusive date lower bound
-- `text`: case-insensitive substring over title and note
+- `dueFrom`: inclusive date lower bound
+- `dueTo`: inclusive date upper bound
+
+Unsupported filter keys are rejected. In particular, the first contract does not include free-text search, exact-`due`, `dueBefore`, or `dueAfter` aliases.
 
 Results are sorted by due date with undated tasks last, then by `createdAt`, then by `id` for deterministic ordering.
 
 ## Durable readback proof
 
-Durability is proven with a memory store test that mirrors the host contract:
+Durability is proven only in a test-only isolated filesystem harness. It is not implemented by the Work Core or host adapter and does not change NormalPocket production persistence.
 
-1. create a WorkTask through the adapter,
-2. write the returned state through a store boundary,
-3. read the state back,
-4. query by id,
-5. assert the entire task survives exactly.
+The proof uses `tests/helpers/isolated-durable-store.cjs` with all of these conditions:
 
-This proves the capability can cross a persistence boundary without using live user data. It is not a claim that production device state changed.
+1. create a temporary test root,
+2. open a store with explicit test-only `namespace`, `database`, and `key`,
+3. reject production database identity `ygph-standard-secure`,
+4. create a WorkTask through the adapter,
+5. commit the returned state to disk and sync it,
+6. close that store instance,
+7. open a new store instance using the same test-only identity,
+8. read the state back,
+9. deep-compare the durable state/task with the committed state/task,
+10. close and remove the temporary test root.
+
+This proves commit → close/reopen → readback across a real durable test boundary without using live user data or claiming that production device state changed.
 
 ## Portability proof
 
@@ -122,4 +130,4 @@ A second host-shaped state object with unrelated keys must be able to adopt `sta
 
 ## Acceptance
 
-The feature is ready for handoff when focused tests prove create/edit/query/complete/cancel, invalid transitions, host adapter isolation, durable readback, and portability; the full `npm run deploy:gate` passes; the PR diff contains no finance/calendar behavior changes; and the review pack documents what was and was not changed.
+The feature is ready for handoff when focused tests prove create/edit/query/complete/cancel, invalid transitions, host adapter isolation, the Owner-authorized query contract, isolated durable commit → close/reopen → readback, and portability; the full `npm run deploy:gate` passes; the PR diff contains no finance/calendar behavior changes; and the review pack documents what was and was not changed.
