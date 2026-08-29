@@ -1,0 +1,153 @@
+"use strict";
+
+(function normalPocketWorkCore(root) {
+  const STATUS = Object.freeze(["OPEN", "COMPLETED", "CANCELLED"]);
+  const EDITABLE_FIELDS = Object.freeze(["title", "due", "note"]);
+
+  function clone(value) {
+    if (typeof structuredClone === "function") return structuredClone(value);
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function cleanText(value) {
+    return String(value ?? "").trim();
+  }
+
+  function isDateOnly(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+    if (!match) return false;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  }
+
+  function isIsoDateTime(value) {
+    if (typeof value !== "string" || !value.includes("T")) return false;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed);
+  }
+
+  function resolveContext(context = {}) {
+    const now = context.now || new Date().toISOString();
+    if (!isIsoDateTime(now)) throw new Error("context.now ต้องเป็น ISO datetime");
+    const idFactory = typeof context.idFactory === "function"
+      ? context.idFactory
+      : prefix => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    return { now, idFactory };
+  }
+
+  function normalizeDue(value) {
+    if (value == null || value === "") return null;
+    const due = String(value).trim();
+    if (!isDateOnly(due)) throw new Error("due ต้องเป็น YYYY-MM-DD หรือ null");
+    return due;
+  }
+
+  function validateTask(task) {
+    const errors = [];
+    if (!task || typeof task !== "object" || Array.isArray(task)) return { ok: false, errors: ["task ต้องเป็น object"] };
+    if (!cleanText(task.id)) errors.push("id ต้องมีค่า");
+    if (!cleanText(task.title)) errors.push("title ต้องมีค่า");
+    if (!STATUS.includes(task.status)) errors.push("status ไม่ถูกต้อง");
+    if (task.due != null && !isDateOnly(task.due)) errors.push("due ไม่ถูกต้อง");
+    if (typeof task.note !== "string") errors.push("note ต้องเป็น string");
+    if (!Number.isSafeInteger(task.revision) || task.revision < 1) errors.push("revision ไม่ถูกต้อง");
+    if (!isIsoDateTime(task.createdAt)) errors.push("createdAt ไม่ถูกต้อง");
+    if (!isIsoDateTime(task.updatedAt)) errors.push("updatedAt ไม่ถูกต้อง");
+    if (!Array.isArray(task.history)) errors.push("history ต้องเป็น array");
+    else {
+      task.history.forEach((entry, index) => {
+        if (!entry || typeof entry !== "object" || !isIsoDateTime(entry.at) || !cleanText(entry.event) || typeof entry.note !== "string") {
+          errors.push(`history[${index}] ไม่ถูกต้อง`);
+        }
+      });
+    }
+    return { ok: errors.length === 0, errors };
+  }
+
+  function assertTask(task) {
+    const result = validateTask(task);
+    if (!result.ok) throw new Error(result.errors.join("\n"));
+  }
+
+  function createTask(input = {}, context = {}) {
+    const { now, idFactory } = resolveContext(context);
+    const title = cleanText(input.title);
+    if (!title) throw new Error("title ต้องมีค่า");
+    const task = {
+      id: cleanText(input.id) || cleanText(idFactory("TASK")),
+      title,
+      status: "OPEN",
+      due: normalizeDue(input.due),
+      note: cleanText(input.note),
+      history: [{ at: now, event: "CREATED", note: "" }],
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    assertTask(task);
+    return clone(task);
+  }
+
+  function editTask(task, patch = {}, context = {}) {
+    assertTask(task);
+    if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("patch ต้องเป็น object");
+    const keys = Object.keys(patch);
+    if (!keys.length || keys.some(key => !EDITABLE_FIELDS.includes(key))) throw new Error("patch รองรับเฉพาะ title, due และ note");
+    const { now } = resolveContext(context);
+    const next = clone(task);
+    if (Object.prototype.hasOwnProperty.call(patch, "title")) {
+      const title = cleanText(patch.title);
+      if (!title) throw new Error("title ต้องมีค่า");
+      next.title = title;
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "due")) next.due = normalizeDue(patch.due);
+    if (Object.prototype.hasOwnProperty.call(patch, "note")) next.note = cleanText(patch.note);
+    const changed = EDITABLE_FIELDS.filter(key => Object.prototype.hasOwnProperty.call(patch, key));
+    next.revision += 1;
+    next.updatedAt = now;
+    next.history.push({ at: now, event: "EDITED", note: changed.join(",") });
+    assertTask(next);
+    return clone(next);
+  }
+
+  function getTask(tasks, id) {
+    const found = (Array.isArray(tasks) ? tasks : []).find(task => task?.id === id);
+    return found ? clone(found) : null;
+  }
+
+  function queryTasks(tasks, filter = {}) {
+    let output = (Array.isArray(tasks) ? tasks : []).map(task => {
+      assertTask(task);
+      return clone(task);
+    });
+    if (Object.prototype.hasOwnProperty.call(filter, "status")) output = output.filter(task => task.status === filter.status);
+    if (Object.prototype.hasOwnProperty.call(filter, "due")) output = output.filter(task => task.due === normalizeDue(filter.due));
+    if (filter.dueBefore != null) {
+      const dueBefore = normalizeDue(filter.dueBefore);
+      output = output.filter(task => task.due != null && task.due <= dueBefore);
+    }
+    if (filter.dueAfter != null) {
+      const dueAfter = normalizeDue(filter.dueAfter);
+      output = output.filter(task => task.due != null && task.due >= dueAfter);
+    }
+    const text = cleanText(filter.text).toLocaleLowerCase();
+    if (text) output = output.filter(task => `${task.title}\n${task.note}`.toLocaleLowerCase().includes(text));
+    output.sort((a, b) => {
+      if (a.due == null && b.due != null) return 1;
+      if (a.due != null && b.due == null) return -1;
+      const dueOrder = String(a.due || "").localeCompare(String(b.due || ""));
+      if (dueOrder) return dueOrder;
+      const createdOrder = a.createdAt.localeCompare(b.createdAt);
+      if (createdOrder) return createdOrder;
+      return a.id.localeCompare(b.id);
+    });
+    return output;
+  }
+
+  const api = Object.freeze({ STATUS, createTask, editTask, getTask, queryTasks, validateTask });
+  if (typeof module === "object" && module.exports) module.exports = api;
+  root.NormalPocketWorkCore = api;
+})(typeof globalThis !== "undefined" ? globalThis : this);
