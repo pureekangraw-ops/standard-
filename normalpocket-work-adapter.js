@@ -50,6 +50,22 @@
     return { state, task: clone(task) };
   }
 
+  function transitionTaskInState(sourceState, id, transition, context = {}) {
+    const state = ensureWorkState(sourceState);
+    const index = findTaskIndex(state.work.tasks, id);
+    const task = transition(state.work.tasks[index], context);
+    state.work.tasks[index] = clone(task);
+    return { state, task: clone(task) };
+  }
+
+  function completeTaskInState(sourceState, id, context = {}) {
+    return transitionTaskInState(sourceState, id, core.completeTask, context);
+  }
+
+  function cancelTaskInState(sourceState, id, context = {}) {
+    return transitionTaskInState(sourceState, id, core.cancelTask, context);
+  }
+
   function queryTasksInState(sourceState, filter = {}) {
     const state = ensureWorkState(sourceState);
     return core.queryTasks(state.work.tasks, filter);
@@ -59,6 +75,8 @@
     ensureWorkState,
     createTaskInState,
     editTaskInState,
+    completeTaskInState,
+    cancelTaskInState,
     queryTasksInState,
   });
 });
