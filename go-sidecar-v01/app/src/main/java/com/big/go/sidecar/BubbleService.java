@@ -31,9 +31,11 @@ import android.widget.Toast;
 import com.big.go.sidecar.core.BridgePayload;
 import com.big.go.sidecar.core.BubbleGesturePolicy;
 import com.big.go.sidecar.core.BubbleVisibilityPolicy;
+import com.big.go.sidecar.core.FavoritePrompt;
 import com.big.go.sidecar.core.ModePromptCatalog;
 
 import java.io.File;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -181,6 +183,13 @@ public class BubbleService extends Service {
         startActivity(i);
     }
 
+    private void startFavorites() {
+        closePanel(false);
+        Intent i = new Intent(this, FavoritesActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
+    }
+
     private void openQuickCrop(File file) {
         setBubbleText("GO");
         closePanel(false);
@@ -194,7 +203,7 @@ public class BubbleService extends Service {
         closePanel(false);
         LinearLayout card = baseCard();
         card.addView(title("GO Modes"));
-        card.addView(body("Quick Crop, รูปจากคลัง และ Clipboard Assistant ส่งต่อเข้า ChatGPT โดยไม่เรียก Sidecar API และอาจเปิดห้องใหม่ · GO Modes ด้านล่างคัดลอก Prompt ไปวางในห้องที่เปิดอยู่"));
+        card.addView(body("Quick Crop, รูปจากคลัง และ Clipboard Assistant ส่งต่อเข้า ChatGPT โดยไม่เรียก Sidecar API และอาจเปิดห้องใหม่ · Favorites และ GO Modes คัดลอก Prompt ไปวางในห้องที่เปิดอยู่"));
 
         Button quickCrop = button("✂️ Quick Crop → ChatGPT");
         quickCrop.setOnClickListener(v -> startQuickCrop());
@@ -208,6 +217,18 @@ public class BubbleService extends Service {
         clipboard.setOnClickListener(v -> startClipboardAssistant());
         card.addView(clipboard, new LinearLayout.LayoutParams(-1, -2));
 
+        Button favorites = button("⭐ Favorites / ปุ่มของบิ๊ก");
+        favorites.setOnClickListener(v -> startFavorites());
+        card.addView(favorites, new LinearLayout.LayoutParams(-1, -2));
+
+        List<FavoritePrompt> savedFavorites = new FavoritePromptStore(this).list();
+        for (int i = 0; i < Math.min(4, savedFavorites.size()); i++) {
+            FavoritePrompt favorite = savedFavorites.get(i);
+            Button favoriteButton = button("⭐ " + favorite.name);
+            favoriteButton.setOnClickListener(v -> copyFavorite(favorite));
+            card.addView(favoriteButton, new LinearLayout.LayoutParams(-1, -2));
+        }
+
         for (ModePromptCatalog.ModePrompt mode : ModePromptCatalog.all()) {
             Button modeButton = button(mode.label);
             modeButton.setOnClickListener(v -> copyModePrompt(mode));
@@ -218,6 +239,13 @@ public class BubbleService extends Service {
         close.setOnClickListener(v -> closePanel(false));
         card.addView(close, new LinearLayout.LayoutParams(-1, -2));
         showPanel(card);
+    }
+
+    private void copyFavorite(FavoritePrompt favorite) {
+        ClipboardManager cb = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        cb.setPrimaryClip(ClipData.newPlainText("GO Favorite · " + favorite.name, favorite.prompt));
+        closePanel(false);
+        toast("คัดลอก " + favorite.name + " แล้ว — วางในห้อง ChatGPT ที่เปิดอยู่");
     }
 
     private void copyModePrompt(ModePromptCatalog.ModePrompt mode) {
