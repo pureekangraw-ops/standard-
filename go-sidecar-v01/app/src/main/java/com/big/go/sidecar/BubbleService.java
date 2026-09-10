@@ -1,5 +1,6 @@
 package com.big.go.sidecar;
 
+import android.app.NotificationManager;
 import android.app.Service;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -22,8 +23,11 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.big.go.sidecar.core.BubbleVisibilityPolicy;
 
 import java.io.File;
 import java.util.concurrent.ExecutorService;
@@ -31,6 +35,8 @@ import java.util.concurrent.Executors;
 
 public class BubbleService extends Service {
     static final String ACTION_START = "com.big.go.sidecar.START";
+    static final String ACTION_TOGGLE_BUBBLE = "com.big.go.sidecar.TOGGLE_BUBBLE";
+    static final String ACTION_STOP = "com.big.go.sidecar.STOP";
     static final String ACTION_CAPTURE_READY = "com.big.go.sidecar.CAPTURE_READY";
     static final String ACTION_CAPTURE_FAILED = "com.big.go.sidecar.CAPTURE_FAILED";
     static final String ACTION_CAPTURE_CANCELLED = "com.big.go.sidecar.CAPTURE_CANCELLED";
@@ -44,31 +50,62 @@ public class BubbleService extends Service {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private File currentCapture;
+    private boolean bubbleVisible = BubbleVisibilityPolicy.initiallyVisible();
 
     @Override
     public void onCreate() {
         super.onCreate();
         NotificationHelper.ensureChannels(this);
-        startForeground(2001, NotificationHelper.sidecar(this, "แตะปุ่ม GO เมื่อต้องการให้ GO ดูจอ"), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        startForeground(
+                2001,
+                NotificationHelper.sidecar(this, bubbleVisible),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        if (Settings.canDrawOverlays(this)) addBubble();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null || intent.getAction() == null) return START_STICKY;
         String action = intent.getAction();
-        if (ACTION_CAPTURE_READY.equals(action)) {
+
+        if (ACTION_TOGGLE_BUBBLE.equals(action)) {
+            setBubbleVisible(BubbleVisibilityPolicy.toggle(bubbleVisible));
+        } else if (ACTION_STOP.equals(action)) {
+            stopSelf();
+        } else if (ACTION_CAPTURE_READY.equals(action)) {
             String path = intent.getStringExtra(EXTRA_CAPTURE_PATH);
             if (path != null) showPreview(new File(path));
         } else if (ACTION_CAPTURE_FAILED.equals(action)) {
             showError(intent.getStringExtra(EXTRA_ERROR));
         } else if (ACTION_CAPTURE_CANCELLED.equals(action)) {
             setBubbleText("GO");
-        } else if (ACTION_START.equals(action) && bubble == null && Settings.canDrawOverlays(this)) {
-            addBubble();
+        } else if (ACTION_START.equals(action)) {
+            updateNotification();
         }
         return START_STICKY;
+    }
+
+    private void setBubbleVisible(boolean visible) {
+        if (visible) {
+            if (!Settings.canDrawOverlays(this)) {
+                toast("ต้องอนุญาตให้ GO แสดงทับแอปอื่นก่อน");
+                bubbleVisible = false;
+                updateNotification();
+                return;
+            }
+            addBubble();
+            bubbleVisible = bubble != null;
+        } else {
+            closePanel(false);
+            removeBubble();
+            bubbleVisible = false;
+        }
+        updateNotification();
+    }
+
+    private void updateNotification() {
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        if (nm != null) nm.notify(2001, NotificationHelper.sidecar(this, bubbleVisible));
     }
 
     private void addBubble() {
@@ -96,6 +133,13 @@ public class BubbleService extends Service {
         wm.addView(bubble, bubbleParams);
     }
 
+    private void removeBubble() {
+        if (bubble == null) return;
+        try { wm.removeView(bubble); } catch (Exception ignored) {}
+        bubble = null;
+        bubbleParams = null;
+    }
+
     private void askGo() {
         closePanel(false);
         setBubbleText("…");
@@ -112,7 +156,7 @@ public class BubbleService extends Service {
 
         ImageView preview = new ImageView(this);
         preview.setAdjustViewBounds(true);
-        preview.setMaxHeight(dp(360));
+        preview.setMaxHeight(dp(210));
         preview.setImageURI(Uri.fromFile(file));
         card.addView(preview, new LinearLayout.LayoutParams(-1, -2));
 
@@ -230,15 +274,22 @@ public class BubbleService extends Service {
     }
 
     private void showPanel(View content) {
-        panel = content;
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        scroll.setClipToPadding(false);
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        panel = scroll;
+
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        int maxHeight = Math.max(dp(260), screenHeight - dp(120));
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(
                 Math.min(getResources().getDisplayMetrics().widthPixels - dp(24), dp(420)),
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                maxHeight,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
         p.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-        p.y = dp(70);
+        p.y = dp(56);
         p.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
         wm.addView(panel, p);
     }
@@ -297,11 +348,9 @@ public class BubbleService extends Service {
     @Override
     public void onDestroy() {
         closePanel(true);
-        if (bubble != null) {
-            try { wm.removeView(bubble); } catch (Exception ignored) {}
-            bubble = null;
-        }
+        removeBubble();
         worker.shutdownNow();
+        stopForeground(STOP_FOREGROUND_REMOVE);
         super.onDestroy();
     }
 
