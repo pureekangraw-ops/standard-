@@ -10,8 +10,8 @@ android {
         applicationId = "com.big.go.sidecar.dev"
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.1.3-dev"
+        versionCode = 5
+        versionName = "0.1.4-dev"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
     }
