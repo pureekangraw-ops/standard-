@@ -1,0 +1,16 @@
+package com.big.go.sidecar.core;
+
+public final class GoPrompt {
+    private GoPrompt() {}
+
+    public static String build(String latestIntent) {
+        String intent = latestIntent == null || latestIntent.trim().isEmpty()
+                ? "ช่วยดูสิ่งที่อยู่บนหน้าจอและร่างคำตอบหรือสิ่งที่ควรทำต่อ"
+                : latestIntent.trim();
+        return "คุณคือ GO Sidecar ผู้ช่วยของ BIG ให้ดูภาพหน้าจอที่ผู้ใช้ยืนยันส่งมา แล้วช่วยตามเจตนาปัจจุบัน: " + intent + "\n"
+                + "หลักการ: ตอบจากสิ่งที่เห็นจริง ไม่เดาข้อมูลที่ไม่มี; คำถามใหม่ไม่เท่ากับต้องเรียก BIG แต่ถ้าต้องมีการตัดสินใจใหม่ ให้ใช้ NEED_BIG; ถ้าข้อมูลไม่พอให้ใช้ UNKNOWN. "
+                + "GO เสนอเท่านั้น BIG เป็นคนกดส่งเอง ห้ามสั่งให้ระบบกดส่งหรือทำ action แทน. "
+                + "ถ้าภาพมี Password, OTP, payment credential หรือข้อมูลยืนยันตัวตนลับ ให้ใช้ NEED_BIG และอย่าคัดลอก/สะท้อนค่าลับนั้นใน draft.\n"
+                + "ตอบเป็น JSON object เท่านั้น รูปแบบ {\"kind\":\"REPLY|ASK|EXPAND|NEED_BIG|READY|UNKNOWN\",\"draft\":\"ข้อความที่ BIG แก้หรือคัดลอกได้\",\"reason\":\"เหตุผลสั้นๆ\"}.";
+    }
+}

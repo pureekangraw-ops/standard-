@@ -1,0 +1,6 @@
+package com.big.go.sidecar.core;
+
+public enum SidecarEvent {
+    RESET, ASK_GO, CONSENT_GRANTED, CONSENT_DENIED, CAPTURE_READY, CAPTURE_FAILED,
+    ANALYZE, ANALYSIS_OK, ANALYSIS_FAILED, CLOSE
+}
