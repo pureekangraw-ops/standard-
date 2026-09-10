@@ -190,6 +190,13 @@ public class BubbleService extends Service {
         startActivity(i);
     }
 
+    private void startSchedule() {
+        closePanel(false);
+        Intent i = new Intent(this, ScheduleActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
+    }
+
     private void openQuickCrop(File file) {
         setBubbleText("GO");
         closePanel(false);
@@ -203,7 +210,7 @@ public class BubbleService extends Service {
         closePanel(false);
         LinearLayout card = baseCard();
         card.addView(title("GO Modes"));
-        card.addView(body("Quick Crop, รูปจากคลัง และ Clipboard Assistant ส่งต่อเข้า ChatGPT โดยไม่เรียก Sidecar API และอาจเปิดห้องใหม่ · Favorites และ GO Modes คัดลอก Prompt ไปวางในห้องที่เปิดอยู่"));
+        card.addView(body("Quick Crop, รูปจากคลัง และ Clipboard Assistant เป็น Share ที่อาจเปิดห้องใหม่ · Favorites, Schedule และ GO Modes ใช้ Prompt/Clipboard โดย BIG เป็นคนวางและส่งเอง"));
 
         Button quickCrop = button("✂️ Quick Crop → ChatGPT");
         quickCrop.setOnClickListener(v -> startQuickCrop());
@@ -220,6 +227,10 @@ public class BubbleService extends Service {
         Button favorites = button("⭐ Favorites / ปุ่มของบิ๊ก");
         favorites.setOnClickListener(v -> startFavorites());
         card.addView(favorites, new LinearLayout.LayoutParams(-1, -2));
+
+        Button schedule = button("⏰ Schedule / Reminder");
+        schedule.setOnClickListener(v -> startSchedule());
+        card.addView(schedule, new LinearLayout.LayoutParams(-1, -2));
 
         List<FavoritePrompt> savedFavorites = new FavoritePromptStore(this).list();
         for (int i = 0; i < Math.min(4, savedFavorites.size()); i++) {
