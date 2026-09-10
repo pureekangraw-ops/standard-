@@ -28,6 +28,9 @@ jobs:
           mkdir -p "$HOME/.android"
           base64 -d .ci/go-sidecar-dev-debug.keystore.b64 > "$HOME/.android/debug.keystore"
           chmod 600 "$HOME/.android/debug.keystore"
+          KEY_DIGEST="$(keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sed -n 's/.*SHA256: //p' | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test "$KEY_DIGEST" = "a30be45ab320e3635756b41eec9288cced2b721e4f39a97af4c3d789ded3f390"
+          echo "Verified dev keystore certificate: $KEY_DIGEST"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
@@ -38,10 +41,14 @@ jobs:
       - name: Verify APK signature and package
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+          VERIFY_OUT="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK")"
+          echo "$VERIFY_OUT"
+          SIGNER_DIGEST="$(printf '%s\n' "$VERIFY_OUT" | sed -n 's/Signer #1 certificate SHA-256 digest: //p')"
+          test "$SIGNER_DIGEST" = "a30be45ab320e3635756b41eec9288cced2b721e4f39a97af4c3d789ded3f390"
           APP_ID="$(apkanalyzer manifest application-id "$APK")"
           test "$APP_ID" = "com.big.go.sidecar.dev"
           echo "Verified applicationId: $APP_ID"
+          echo "Verified signer SHA-256: $SIGNER_DIGEST"
       - uses: actions/upload-artifact@v4
         with:
           name: GO-Sidecar-v0.1-dev-apk
