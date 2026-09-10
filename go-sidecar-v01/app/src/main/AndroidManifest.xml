@@ -20,6 +20,12 @@
             android:grantUriPermissions="true" />
 
         <activity
+            android:name=".ClipboardAssistantActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+
+        <activity
             android:name=".GalleryShareActivity"
             android:excludeFromRecents="true"
             android:exported="false"
