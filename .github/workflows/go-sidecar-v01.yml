@@ -23,6 +23,11 @@ jobs:
       - uses: android-actions/setup-android@v3
       - name: Install Android 16 SDK
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install stable dev-only debug keystore
+        run: |
+          mkdir -p "$HOME/.android"
+          base64 -d .ci/go-sidecar-dev-debug.keystore.b64 > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
@@ -30,8 +35,11 @@ jobs:
         run: gradle testDebugUnitTest --stacktrace
       - name: Build APK
         run: gradle assembleDebug --stacktrace
+      - name: Verify dev signing certificate
+        run: |
+          keytool -printcert -jarfile app/build/outputs/apk/debug/app-debug.apk | grep -A 2 "Certificate fingerprints" || true
       - uses: actions/upload-artifact@v4
         with:
-          name: GO-Sidecar-v0.1-debug-apk
+          name: GO-Sidecar-v0.1-dev-apk
           path: go-sidecar-v01/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
