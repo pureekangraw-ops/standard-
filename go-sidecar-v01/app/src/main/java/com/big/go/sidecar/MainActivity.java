@@ -52,7 +52,7 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         TextView desc = new TextView(this);
-        desc.setText("แตะ Bubble = ดูหน้าจอด้วย GO · กดค้าง Bubble = GO Modes + Quick Crop + เลือกรูปจากคลังส่งตรงเข้า ChatGPT");
+        desc.setText("แตะ Bubble = ดูหน้าจอด้วย GO · กดค้าง Bubble = GO Modes / Quick Crop / รูปจากคลัง / Clipboard / Favorites / Schedule");
         desc.setTextSize(16);
         desc.setTextColor(Color.DKGRAY);
         desc.setPadding(0, dp(8), 0, dp(12));
@@ -97,9 +97,25 @@ public class MainActivity extends Activity {
         stop.setOnClickListener(v -> stopService(new Intent(this, BubbleService.class)));
         root.addView(stop);
 
+        addSpace(root, 12);
+        TextView tools = new TextView(this);
+        tools.setText("Productivity");
+        tools.setTextSize(18);
+        tools.setTextColor(Color.BLACK);
+        tools.setTypeface(null, 1);
+        root.addView(tools);
+
+        Button favorites = button("⭐ Favorites / ปุ่มของบิ๊ก");
+        favorites.setOnClickListener(v -> startActivity(new Intent(this, FavoritesActivity.class)));
+        root.addView(favorites);
+
+        Button schedule = button("⏰ Schedule / Reminder");
+        schedule.setOnClickListener(v -> startActivity(new Intent(this, ScheduleActivity.class)));
+        root.addView(schedule);
+
         addSpace(root, 14);
         TextView note = new TextView(this);
-        note.setText("Personal Direct Mode: การวิเคราะห์ภาพแบบแตะ Bubble ยังเรียก OpenAI จากเครื่องนี้โดยตรงและเก็บ API key ด้วย Android Keystore; GO Modes ไม่เรียก APIและคัดลอก Prompt ไปห้องเดิม; Quick Crop และรูปจากคลังไม่เรียก GO API — ส่งภาพตรงเข้า ChatGPT แล้ว BIG เป็นคนกดส่งเอง โดย Share อาจเปิดห้องใหม่");
+        note.setText("เลนห้องเดิม = GO Modes / Favorites / Reminder คัดลอก Prompt ให้ BIG วางเอง · Clipboard และรูปเป็น Share จึงอาจเปิดห้องใหม่ · ทั้ง Clipboard, Gallery, Favorites และ Schedule ไม่เรียก Sidecar API และไม่ส่งข้อความอัตโนมัติ · การวิเคราะห์ภาพจากการแตะ Bubble ยังใช้ Personal Direct Mode ผ่าน OpenAI API จากเครื่องนี้");
         note.setTextColor(Color.DKGRAY);
         note.setTextSize(13);
         root.addView(note);
