@@ -29,7 +29,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.big.go.sidecar.core.BridgePayload;
+import com.big.go.sidecar.core.BubbleGesturePolicy;
 import com.big.go.sidecar.core.BubbleVisibilityPolicy;
+import com.big.go.sidecar.core.ModePromptCatalog;
 
 import java.io.File;
 import java.util.concurrent.ExecutorService;
@@ -44,6 +46,7 @@ public class BubbleService extends Service {
     static final String ACTION_CAPTURE_CANCELLED = "com.big.go.sidecar.CAPTURE_CANCELLED";
     static final String EXTRA_CAPTURE_PATH = "capture_path";
     static final String EXTRA_ERROR = "error";
+    private static final long MODE_LONG_PRESS_MS = 650L;
 
     private WindowManager wm;
     private TextView bubble;
@@ -147,6 +150,31 @@ public class BubbleService extends Service {
         setBubbleText("…");
         Intent i = new Intent(this, CaptureConsentActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(i);
+    }
+
+    private void showModeMenu() {
+        closePanel(false);
+        LinearLayout card = baseCard();
+        card.addView(title("GO Modes"));
+        card.addView(body("เลือกโหมดเพื่อคัดลอก Prompt แล้ววางในห้อง ChatGPT ที่เปิดอยู่ — ไม่เรียก API และไม่สร้างห้องใหม่"));
+
+        for (ModePromptCatalog.ModePrompt mode : ModePromptCatalog.all()) {
+            Button modeButton = button(mode.label);
+            modeButton.setOnClickListener(v -> copyModePrompt(mode));
+            card.addView(modeButton, new LinearLayout.LayoutParams(-1, -2));
+        }
+
+        Button close = button("ปิด");
+        close.setOnClickListener(v -> closePanel(false));
+        card.addView(close, new LinearLayout.LayoutParams(-1, -2));
+        showPanel(card);
+    }
+
+    private void copyModePrompt(ModePromptCatalog.ModePrompt mode) {
+        ClipboardManager cb = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        cb.setPrimaryClip(ClipData.newPlainText("GO " + mode.id + " MODE", mode.prompt));
+        closePanel(false);
+        toast("คัดลอก " + mode.label + " แล้ว — วางในห้อง ChatGPT ที่เปิดอยู่");
     }
 
     private void showPreview(File file) {
@@ -426,7 +454,15 @@ public class BubbleService extends Service {
                 case MotionEvent.ACTION_UP:
                     float dx = e.getRawX() - downX;
                     float dy = e.getRawY() - downY;
-                    if (Math.hypot(dx, dy) < dp(10) && System.currentTimeMillis() - downAt < 500) askGo();
+                    float distance = (float) Math.hypot(dx, dy);
+                    long duration = System.currentTimeMillis() - downAt;
+                    BubbleGesturePolicy.Action gesture = BubbleGesturePolicy.classify(
+                            duration, distance, dp(10), MODE_LONG_PRESS_MS);
+                    if (gesture == BubbleGesturePolicy.Action.TAP) {
+                        askGo();
+                    } else if (gesture == BubbleGesturePolicy.Action.LONG_PRESS) {
+                        showModeMenu();
+                    }
                     return true;
                 default:
                     return false;
