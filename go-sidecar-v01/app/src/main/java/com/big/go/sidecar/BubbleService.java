@@ -2,6 +2,7 @@ package com.big.go.sidecar;
 
 import android.app.NotificationManager;
 import android.app.Service;
+import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -27,6 +28,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.big.go.sidecar.core.BridgePayload;
 import com.big.go.sidecar.core.BubbleVisibilityPolicy;
 
 import java.io.File;
@@ -211,6 +213,7 @@ public class BubbleService extends Service {
         closePanel(false);
         LinearLayout card = baseCard();
         card.addView(title("GO · " + result.kind));
+        if (!result.observed.isEmpty()) card.addView(body(result.observed));
         if (!result.reason.isEmpty()) card.addView(body(result.reason));
 
         EditText draft = new EditText(this);
@@ -225,6 +228,9 @@ public class BubbleService extends Service {
         row1.addView(copy, weight());
         row1.addView(retry, weight());
         card.addView(row1);
+
+        Button handoff = button("ส่งต่อเข้า GO");
+        card.addView(handoff, new LinearLayout.LayoutParams(-1, -2));
         Button close = button("ปิด");
         card.addView(close, new LinearLayout.LayoutParams(-1, -2));
 
@@ -237,8 +243,49 @@ public class BubbleService extends Service {
             if (currentCapture != null && currentCapture.exists()) showPreview(currentCapture);
             else askGo();
         });
+        handoff.setOnClickListener(v -> shareToMainGo(result, draft.getText().toString()));
         close.setOnClickListener(v -> closePanel(true));
         showPanel(card);
+    }
+
+    private void shareToMainGo(GoResult result, String editedDraft) {
+        String observed = result.observed.isEmpty()
+                ? "ใช้ภาพหน้าจอที่แนบเป็นบริบทหลัก"
+                : result.observed;
+        String handoffText = BridgePayload.format(result.kind, observed, result.reason, editedDraft);
+
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.putExtra(Intent.EXTRA_TEXT, handoffText);
+        if (currentCapture != null && currentCapture.exists()) {
+            Uri image = new Uri.Builder()
+                    .scheme("content")
+                    .authority(getPackageName() + ".capture")
+                    .appendPath(currentCapture.getName())
+                    .build();
+            share.setType("image/png");
+            share.putExtra(Intent.EXTRA_STREAM, image);
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            share.setClipData(ClipData.newUri(getContentResolver(), "GO screen context", image));
+        } else {
+            share.setType("text/plain");
+        }
+
+        closePanel(false);
+        Intent direct = new Intent(share)
+                .setPackage("com.openai.chatgpt")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(direct);
+            toast("ส่ง Context ไป ChatGPT แล้ว — เลือกห้อง GO ที่ต้องการคุยต่อ");
+        } catch (ActivityNotFoundException noChatGptShareTarget) {
+            Intent chooser = Intent.createChooser(share, "ส่งต่อเข้า GO")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                startActivity(chooser);
+            } catch (ActivityNotFoundException noShareTarget) {
+                toast("ไม่พบแอปที่รับ Context นี้ได้");
+            }
+        }
     }
 
     private void showError(String message) {
