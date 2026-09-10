@@ -69,9 +69,13 @@ final class OpenAiVisionClient {
         JSONObject response = new JSONObject(raw);
         String outputText = extractOutputText(response);
         String jsonText = ModelTextJsonExtractor.extract(outputText);
-        if (jsonText == null) return new GoResult("UNKNOWN", outputText, "โมเดลไม่ได้คืน JSON ตามสัญญา");
+        if (jsonText == null) return new GoResult("UNKNOWN", outputText, "โมเดลไม่ได้คืน JSON ตามสัญญา", "");
         JSONObject result = new JSONObject(jsonText);
-        return new GoResult(result.optString("kind", "UNKNOWN"), result.optString("draft", ""), result.optString("reason", ""));
+        return new GoResult(
+                result.optString("kind", "UNKNOWN"),
+                result.optString("draft", ""),
+                result.optString("reason", ""),
+                result.optString("observed", ""));
     }
 
     private static String extractOutputText(JSONObject response) {
