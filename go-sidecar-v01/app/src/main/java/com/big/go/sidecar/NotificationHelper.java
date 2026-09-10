@@ -8,9 +8,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 
+import com.big.go.sidecar.core.ReminderSchedule;
+
 final class NotificationHelper {
     static final String CHANNEL_SIDECAR = "go_sidecar";
     static final String CHANNEL_CAPTURE = "go_capture";
+    static final String CHANNEL_REMINDER = "go_reminder";
 
     private NotificationHelper() {}
 
@@ -19,6 +22,7 @@ final class NotificationHelper {
         NotificationManager nm = context.getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel(CHANNEL_SIDECAR, "GO Sidecar", NotificationManager.IMPORTANCE_LOW));
         nm.createNotificationChannel(new NotificationChannel(CHANNEL_CAPTURE, "GO screen capture", NotificationManager.IMPORTANCE_LOW));
+        nm.createNotificationChannel(new NotificationChannel(CHANNEL_REMINDER, "GO reminders", NotificationManager.IMPORTANCE_DEFAULT));
     }
 
     static Notification sidecar(Context context, boolean bubbleVisible) {
@@ -66,6 +70,25 @@ final class NotificationHelper {
                 .setContentText("กำลังจับภาพหน้าจอที่คุณอนุญาต")
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
+                .build();
+    }
+
+    static Notification reminder(Context context, ReminderSchedule reminder) {
+        ensureChannels(context);
+        Intent action = new Intent(context, ReminderActionActivity.class)
+                .putExtra(ReminderScheduler.EXTRA_REMINDER_ID, reminder.id);
+        PendingIntent actionPi = PendingIntent.getActivity(
+                context,
+                reminder.id.hashCode(),
+                action,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
+        return new Notification.Builder(context, CHANNEL_REMINDER)
+                .setSmallIcon(android.R.drawable.ic_popup_reminder)
+                .setContentTitle("GO · " + reminder.title)
+                .setContentText("Prompt พร้อมแล้ว · แตะเพื่อคัดลอกและเปิด ChatGPT")
+                .setAutoCancel(true)
+                .setContentIntent(actionPi)
                 .build();
     }
 }
