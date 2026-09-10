@@ -19,6 +19,8 @@ import android.os.IBinder;
 import android.util.DisplayMetrics;
 import android.view.WindowManager;
 
+import com.big.go.sidecar.core.CloseOnceGate;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
@@ -32,6 +34,7 @@ public class CaptureService extends Service {
     private VirtualDisplay virtualDisplay;
     private ImageReader reader;
     private boolean delivered;
+    private final CloseOnceGate closeGate = new CloseOnceGate();
 
     @Override
     public void onCreate() {
@@ -54,7 +57,15 @@ public class CaptureService extends Service {
             MediaProjectionManager mpm = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
             projection = mpm.getMediaProjection(resultCode, resultData);
             projection.registerCallback(new MediaProjection.Callback() {
-                @Override public void onStop() { cleanup(); }
+                @Override public void onStop() {
+                    if (!delivered) {
+                        Intent cancelled = new Intent(CaptureService.this, BubbleService.class)
+                                .setAction(BubbleService.ACTION_CAPTURE_CANCELLED);
+                        startService(cancelled);
+                    }
+                    cleanup();
+                    stopSelf();
+                }
             }, handler);
             startSingleFrameCapture();
         } catch (Exception e) {
@@ -137,12 +148,18 @@ public class CaptureService extends Service {
     }
 
     private void cleanup() {
+        if (!closeGate.beginClose()) return;
+
         try { if (virtualDisplay != null) virtualDisplay.release(); } catch (Exception ignored) {}
         virtualDisplay = null;
         try { if (reader != null) reader.close(); } catch (Exception ignored) {}
         reader = null;
-        try { if (projection != null) projection.stop(); } catch (Exception ignored) {}
+
+        MediaProjection p = projection;
         projection = null;
+        try { if (p != null) p.stop(); } catch (Exception ignored) {}
+
+        stopForeground(STOP_FOREGROUND_REMOVE);
     }
 
     @Override
