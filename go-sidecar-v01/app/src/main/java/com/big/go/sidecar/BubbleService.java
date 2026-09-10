@@ -42,6 +42,7 @@ public class BubbleService extends Service {
     static final String ACTION_TOGGLE_BUBBLE = "com.big.go.sidecar.TOGGLE_BUBBLE";
     static final String ACTION_STOP = "com.big.go.sidecar.STOP";
     static final String ACTION_CAPTURE_READY = "com.big.go.sidecar.CAPTURE_READY";
+    static final String ACTION_QUICK_CROP_READY = "com.big.go.sidecar.QUICK_CROP_READY";
     static final String ACTION_CAPTURE_FAILED = "com.big.go.sidecar.CAPTURE_FAILED";
     static final String ACTION_CAPTURE_CANCELLED = "com.big.go.sidecar.CAPTURE_CANCELLED";
     static final String EXTRA_CAPTURE_PATH = "capture_path";
@@ -80,6 +81,9 @@ public class BubbleService extends Service {
         } else if (ACTION_CAPTURE_READY.equals(action)) {
             String path = intent.getStringExtra(EXTRA_CAPTURE_PATH);
             if (path != null) showPreview(new File(path));
+        } else if (ACTION_QUICK_CROP_READY.equals(action)) {
+            String path = intent.getStringExtra(EXTRA_CAPTURE_PATH);
+            if (path != null) openQuickCrop(new File(path));
         } else if (ACTION_CAPTURE_FAILED.equals(action)) {
             showError(intent.getStringExtra(EXTRA_ERROR));
         } else if (ACTION_CAPTURE_CANCELLED.equals(action)) {
@@ -148,7 +152,27 @@ public class BubbleService extends Service {
     private void askGo() {
         closePanel(false);
         setBubbleText("…");
-        Intent i = new Intent(this, CaptureConsentActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        Intent i = new Intent(this, CaptureConsentActivity.class)
+                .putExtra(CaptureConsentActivity.EXTRA_FLOW, CaptureConsentActivity.FLOW_ANALYZE)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
+    }
+
+    private void startQuickCrop() {
+        closePanel(false);
+        setBubbleText("✂");
+        Intent i = new Intent(this, CaptureConsentActivity.class)
+                .putExtra(CaptureConsentActivity.EXTRA_FLOW, CaptureConsentActivity.FLOW_QUICK_CROP)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
+    }
+
+    private void openQuickCrop(File file) {
+        setBubbleText("GO");
+        closePanel(false);
+        Intent i = new Intent(this, QuickCropActivity.class)
+                .putExtra(QuickCropActivity.EXTRA_CAPTURE_PATH, file.getAbsolutePath())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(i);
     }
 
@@ -156,7 +180,11 @@ public class BubbleService extends Service {
         closePanel(false);
         LinearLayout card = baseCard();
         card.addView(title("GO Modes"));
-        card.addView(body("เลือกโหมดเพื่อคัดลอก Prompt แล้ววางในห้อง ChatGPT ที่เปิดอยู่ — ไม่เรียก API และไม่สร้างห้องใหม่"));
+        card.addView(body("Quick Crop ส่งส่วนที่เลือกตรงเข้า ChatGPT และอาจเปิดห้องใหม่ · GO Modes ด้านล่างคัดลอก Prompt ไปวางในห้องที่เปิดอยู่"));
+
+        Button quickCrop = button("✂️ Quick Crop → ChatGPT");
+        quickCrop.setOnClickListener(v -> startQuickCrop());
+        card.addView(quickCrop, new LinearLayout.LayoutParams(-1, -2));
 
         for (ModePromptCatalog.ModePrompt mode : ModePromptCatalog.all()) {
             Button modeButton = button(mode.label);
