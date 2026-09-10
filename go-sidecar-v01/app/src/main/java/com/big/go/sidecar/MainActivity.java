@@ -52,7 +52,7 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         TextView desc = new TextView(this);
-        desc.setText("Android Visual Sidecar — GO เห็นเฉพาะภาพหน้าจอที่คุณกดยืนยันส่ง และ BIG เป็นคนทำ Action สุดท้ายเอง");
+        desc.setText("แตะ Bubble = ดูหน้าจอด้วย GO · กดค้าง Bubble = เลือก GO Mode แล้วคัดลอก Prompt ไปวางในห้อง ChatGPT ที่เปิดอยู่");
         desc.setTextSize(16);
         desc.setTextColor(Color.DKGRAY);
         desc.setPadding(0, dp(8), 0, dp(12));
@@ -99,7 +99,7 @@ public class MainActivity extends Activity {
 
         addSpace(root, 14);
         TextView note = new TextView(this);
-        note.setText("Personal Direct Mode: v0.1 เรียก OpenAI จากเครื่องนี้โดยตรงและใช้ Android Keystore ป้องกัน key ที่บันทึกไว้ เหมาะสำหรับใช้ส่วนตัวบนเครื่อง BIG เท่านั้น; ก่อนส่งภาพทุกครั้งแอปจะแสดง Preview ให้กดยืนยันอีกครั้ง");
+        note.setText("Personal Direct Mode: การวิเคราะห์ภาพยังเรียก OpenAI จากเครื่องนี้โดยตรงและเก็บ API key ด้วย Android Keystore; เมนู GO Mode ไม่เรียก API — มันคัดลอก Prompt เพื่อให้ BIG วางในห้อง ChatGPT ปัจจุบันเอง");
         note.setTextColor(Color.DKGRAY);
         note.setTextSize(13);
         root.addView(note);
