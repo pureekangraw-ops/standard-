@@ -35,9 +35,13 @@ jobs:
         run: gradle testDebugUnitTest --stacktrace
       - name: Build APK
         run: gradle assembleDebug --stacktrace
-      - name: Verify dev signing certificate
+      - name: Verify APK signature and package
         run: |
-          keytool -printcert -jarfile app/build/outputs/apk/debug/app-debug.apk | grep -A 2 "Certificate fingerprints" || true
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+          APP_ID="$(apkanalyzer manifest application-id "$APK")"
+          test "$APP_ID" = "com.big.go.sidecar.dev"
+          echo "Verified applicationId: $APP_ID"
       - uses: actions/upload-artifact@v4
         with:
           name: GO-Sidecar-v0.1-dev-apk
