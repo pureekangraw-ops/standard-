@@ -21,16 +21,40 @@ final class NotificationHelper {
         nm.createNotificationChannel(new NotificationChannel(CHANNEL_CAPTURE, "GO screen capture", NotificationManager.IMPORTANCE_LOW));
     }
 
-    static Notification sidecar(Context context, String text) {
+    static Notification sidecar(Context context, boolean bubbleVisible) {
         ensureChannels(context);
-        Intent open = new Intent(context, MainActivity.class);
-        PendingIntent pi = PendingIntent.getActivity(context, 1, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
+        Intent toggle = new Intent(context, BubbleService.class)
+                .setAction(BubbleService.ACTION_TOGGLE_BUBBLE);
+        PendingIntent togglePi = PendingIntent.getService(
+                context,
+                11,
+                toggle,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
+        Intent stop = new Intent(context, BubbleService.class)
+                .setAction(BubbleService.ACTION_STOP);
+        PendingIntent stopPi = PendingIntent.getService(
+                context,
+                12,
+                stop,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
+        String text = bubbleVisible
+                ? "แตะเพื่อซ่อนปุ่ม GO"
+                : "แตะเพื่อแสดงปุ่ม GO";
+
         return new Notification.Builder(context, CHANNEL_SIDECAR)
                 .setSmallIcon(android.R.drawable.ic_menu_view)
-                .setContentTitle("GO Sidecar ทำงานอยู่")
+                .setContentTitle("GO Sidecar พร้อมใช้")
                 .setContentText(text)
                 .setOngoing(true)
-                .setContentIntent(pi)
+                .setOnlyAlertOnce(true)
+                .setContentIntent(togglePi)
+                .addAction(new Notification.Action.Builder(
+                        android.R.drawable.ic_menu_close_clear_cancel,
+                        "หยุด Sidecar",
+                        stopPi).build())
                 .build();
     }
 
@@ -41,6 +65,7 @@ final class NotificationHelper {
                 .setContentTitle("GO Sidecar")
                 .setContentText("กำลังจับภาพหน้าจอที่คุณอนุญาต")
                 .setOngoing(true)
+                .setOnlyAlertOnce(true)
                 .build();
     }
 }
