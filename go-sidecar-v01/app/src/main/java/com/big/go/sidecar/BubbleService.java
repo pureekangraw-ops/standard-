@@ -174,6 +174,13 @@ public class BubbleService extends Service {
         startActivity(i);
     }
 
+    private void startClipboardAssistant() {
+        closePanel(false);
+        Intent i = new Intent(this, ClipboardAssistantActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
+    }
+
     private void openQuickCrop(File file) {
         setBubbleText("GO");
         closePanel(false);
@@ -187,7 +194,7 @@ public class BubbleService extends Service {
         closePanel(false);
         LinearLayout card = baseCard();
         card.addView(title("GO Modes"));
-        card.addView(body("Quick Crop และรูปจากคลังส่งตรงเข้า ChatGPT โดยไม่เรียก Sidecar API และอาจเปิดห้องใหม่ · GO Modes ด้านล่างคัดลอก Prompt ไปวางในห้องที่เปิดอยู่"));
+        card.addView(body("Quick Crop, รูปจากคลัง และ Clipboard Assistant ส่งต่อเข้า ChatGPT โดยไม่เรียก Sidecar API และอาจเปิดห้องใหม่ · GO Modes ด้านล่างคัดลอก Prompt ไปวางในห้องที่เปิดอยู่"));
 
         Button quickCrop = button("✂️ Quick Crop → ChatGPT");
         quickCrop.setOnClickListener(v -> startQuickCrop());
@@ -196,6 +203,10 @@ public class BubbleService extends Service {
         Button gallery = button("🖼️ รูปจากคลัง → ChatGPT");
         gallery.setOnClickListener(v -> startGalleryShare());
         card.addView(gallery, new LinearLayout.LayoutParams(-1, -2));
+
+        Button clipboard = button("📋 Clipboard Assistant");
+        clipboard.setOnClickListener(v -> startClipboardAssistant());
+        card.addView(clipboard, new LinearLayout.LayoutParams(-1, -2));
 
         for (ModePromptCatalog.ModePrompt mode : ModePromptCatalog.all()) {
             Button modeButton = button(mode.label);
