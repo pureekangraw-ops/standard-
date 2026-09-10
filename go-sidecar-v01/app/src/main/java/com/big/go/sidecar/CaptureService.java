@@ -28,6 +28,7 @@ import java.nio.ByteBuffer;
 public class CaptureService extends Service {
     static final String EXTRA_RESULT_CODE = "result_code";
     static final String EXTRA_RESULT_DATA = "result_data";
+    static final String EXTRA_FLOW = "flow";
     private HandlerThread thread;
     private Handler handler;
     private MediaProjection projection;
@@ -49,6 +50,7 @@ public class CaptureService extends Service {
         startForeground(2002, NotificationHelper.capture(this), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
         int resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, ActivityResultCode.INVALID);
         Intent resultData = intent.getParcelableExtra(EXTRA_RESULT_DATA, Intent.class);
+        String flow = intent.getStringExtra(EXTRA_FLOW);
         if (resultCode == ActivityResultCode.INVALID || resultData == null) {
             fail("ไม่ได้รับสิทธิ์จับหน้าจอ");
             return START_NOT_STICKY;
@@ -67,14 +69,14 @@ public class CaptureService extends Service {
                     stopSelf();
                 }
             }, handler);
-            startSingleFrameCapture();
+            startSingleFrameCapture(flow);
         } catch (Exception e) {
             fail(e.getMessage());
         }
         return START_NOT_STICKY;
     }
 
-    private void startSingleFrameCapture() {
+    private void startSingleFrameCapture(String flow) {
         WindowManager wm = getSystemService(WindowManager.class);
         int width;
         int height;
@@ -97,8 +99,11 @@ public class CaptureService extends Service {
             delivered = true;
             try {
                 File file = imageToPng(image, width, height);
+                String readyAction = CaptureConsentActivity.FLOW_QUICK_CROP.equals(flow)
+                        ? BubbleService.ACTION_QUICK_CROP_READY
+                        : BubbleService.ACTION_CAPTURE_READY;
                 Intent ready = new Intent(this, BubbleService.class)
-                        .setAction(BubbleService.ACTION_CAPTURE_READY)
+                        .setAction(readyAction)
                         .putExtra(BubbleService.EXTRA_CAPTURE_PATH, file.getAbsolutePath());
                 startService(ready);
             } catch (Exception e) {
