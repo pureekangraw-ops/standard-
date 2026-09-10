@@ -52,7 +52,7 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         TextView desc = new TextView(this);
-        desc.setText("แตะ Bubble = ดูหน้าจอด้วย GO · กดค้าง Bubble = เลือก GO Mode แล้วคัดลอก Prompt ไปวางในห้อง ChatGPT ที่เปิดอยู่");
+        desc.setText("แตะ Bubble = ดูหน้าจอด้วย GO · กดค้าง Bubble = GO Modes + Quick Crop เลือกส่วนแล้วส่งตรงเข้า ChatGPT");
         desc.setTextSize(16);
         desc.setTextColor(Color.DKGRAY);
         desc.setPadding(0, dp(8), 0, dp(12));
@@ -99,7 +99,7 @@ public class MainActivity extends Activity {
 
         addSpace(root, 14);
         TextView note = new TextView(this);
-        note.setText("Personal Direct Mode: การวิเคราะห์ภาพยังเรียก OpenAI จากเครื่องนี้โดยตรงและเก็บ API key ด้วย Android Keystore; เมนู GO Mode ไม่เรียก API — มันคัดลอก Prompt เพื่อให้ BIG วางในห้อง ChatGPT ปัจจุบันเอง");
+        note.setText("Personal Direct Mode: การวิเคราะห์ภาพแบบแตะ Bubble ยังเรียก OpenAI จากเครื่องนี้โดยตรงและเก็บ API key ด้วย Android Keystore; GO Modes ไม่เรียก APIและคัดลอก Prompt ไปห้องเดิม; Quick Crop ไม่เรียก GO API — ปล่อยนิ้วหลังครอบภาพแล้ว Share ตรงเข้า ChatGPT ซึ่งอาจเปิดห้องใหม่");
         note.setTextColor(Color.DKGRAY);
         note.setTextSize(13);
         root.addView(note);
