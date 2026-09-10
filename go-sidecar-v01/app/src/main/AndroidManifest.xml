@@ -20,6 +20,12 @@
             android:grantUriPermissions="true" />
 
         <activity
+            android:name=".QuickCropActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
+
+        <activity
             android:name=".CaptureConsentActivity"
             android:excludeFromRecents="true"
             android:exported="false"
