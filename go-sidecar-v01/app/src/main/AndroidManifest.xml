@@ -13,6 +13,12 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
+        <provider
+            android:name=".CaptureShareProvider"
+            android:authorities="${applicationId}.capture"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <activity
             android:name=".CaptureConsentActivity"
             android:excludeFromRecents="true"
