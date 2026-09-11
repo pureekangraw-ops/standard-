@@ -6,6 +6,10 @@ android {
     namespace = "com.big.go.sidecar"
     compileSdk = 36
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId = "com.big.go.sidecar.dev"
         minSdk = 29
