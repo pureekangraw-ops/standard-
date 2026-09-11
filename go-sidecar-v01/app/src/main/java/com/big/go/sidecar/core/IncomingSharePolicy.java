@@ -25,7 +25,7 @@ public final class IncomingSharePolicy {
         for (String value : values) {
             if (value == null) continue;
             String clean = value.trim();
-            if (!clean.isEmpty() && !result.contains(clean) && result.size() < MAX_IMAGES) {
+            if (!clean.isEmpty() && !result.contains(clean)) {
                 result.add(clean);
             }
         }
