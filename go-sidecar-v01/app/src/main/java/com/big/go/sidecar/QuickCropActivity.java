@@ -1,7 +1,6 @@
 package com.big.go.sidecar;
 
 import android.app.Activity;
-import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -104,21 +103,9 @@ public class QuickCropActivity extends Activity {
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             share.setClipData(ClipData.newUri(getContentResolver(), "GO Quick Crop", image));
 
-            Intent direct = new Intent(share).setPackage("com.openai.chatgpt");
-            try {
-                startActivity(direct);
-                Toast.makeText(this,
-                        "ส่งส่วนที่เลือกเข้า ChatGPT แล้ว — แอปอาจเปิดห้องใหม่",
-                        Toast.LENGTH_LONG).show();
-            } catch (ActivityNotFoundException noChatGptTarget) {
-                try {
-                    startActivity(Intent.createChooser(share, "ส่งภาพ Quick Crop"));
-                } catch (ActivityNotFoundException noShareTarget) {
-                    shared = false;
-                    Toast.makeText(this, "ไม่พบแอปที่รับภาพนี้ได้", Toast.LENGTH_LONG).show();
-                    return;
-                }
-            }
+            share.setClass(this, RoomShareActivity.class)
+                    .putExtra(RoomShareActivity.EXTRA_SOURCE_LABEL, "Quick Crop");
+            startActivity(share);
             finish();
         } catch (Exception e) {
             shared = false;
