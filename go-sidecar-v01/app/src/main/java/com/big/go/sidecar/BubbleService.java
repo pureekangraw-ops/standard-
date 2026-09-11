@@ -289,14 +289,39 @@ public class BubbleService extends Service {
 
         LinearLayout buttons = row();
         Button analyze = button("ส่งให้ GO");
+        Button room = button("เลือกห้อง");
         Button cancel = button("ยกเลิก");
         buttons.addView(analyze, weight());
+        buttons.addView(room, weight());
         buttons.addView(cancel, weight());
         card.addView(buttons);
 
         analyze.setOnClickListener(v -> analyzeCurrent(intent.getText().toString()));
+        room.setOnClickListener(v -> routeCaptureToRoom(intent.getText().toString()));
         cancel.setOnClickListener(v -> closePanel(true));
         showPanel(card);
+    }
+
+    private void routeCaptureToRoom(String request) {
+        if (currentCapture == null || !currentCapture.exists()) {
+            showError("ไม่พบภาพที่จับไว้");
+            return;
+        }
+        Uri image = new Uri.Builder()
+                .scheme("content")
+                .authority(getPackageName() + ".capture")
+                .appendPath(currentCapture.getName())
+                .build();
+        Intent route = new Intent(Intent.ACTION_SEND)
+                .setType("image/png")
+                .putExtra(Intent.EXTRA_STREAM, image)
+                .putExtra(Intent.EXTRA_TEXT, request)
+                .putExtra(RoomShareActivity.EXTRA_SOURCE_LABEL, "ภาพหน้าจอ")
+                .setClass(this, RoomShareActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        route.setClipData(ClipData.newUri(getContentResolver(), "GO screen capture", image));
+        closePanel(false);
+        startActivity(route);
     }
 
     private void analyzeCurrent(String intent) {
