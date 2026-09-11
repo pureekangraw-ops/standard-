@@ -30,4 +30,10 @@ public class IncomingSharePolicyTest {
                 IncomingSharePolicy.uniqueUris(Arrays.asList("content://one", "", "content://one", "content://two")));
         assertEquals(Collections.emptyList(), IncomingSharePolicy.uniqueUris(null));
     }
+
+    @Test
+    public void doesNotSilentlyTrimAnOversizedSelectionBeforeValidation() {
+        assertEquals(11, IncomingSharePolicy.uniqueUris(Arrays.asList(
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11")).size());
+    }
 }
