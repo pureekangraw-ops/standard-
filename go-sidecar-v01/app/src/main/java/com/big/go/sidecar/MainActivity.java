@@ -18,6 +18,8 @@ import android.widget.Space;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.big.go.sidecar.core.AppDisplayName;
+
 public class MainActivity extends Activity {
     private TextView status;
     private EditText apiKey;
@@ -45,7 +47,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.WHITE);
 
         TextView title = new TextView(this);
-        title.setText("GO Sidecar v0.1");
+        title.setText(AppDisplayName.forVersion(BuildConfig.VERSION_NAME));
         title.setTextSize(28);
         title.setTextColor(Color.BLACK);
         title.setTypeface(null, 1);
