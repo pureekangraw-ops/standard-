@@ -52,7 +52,7 @@ public final class GalleryShareActivity extends Activity {
             finish();
             return;
         }
-        shareToChatGpt(images);
+        routeToRoom(images);
     }
 
     private ArrayList<Uri> collectImages(Intent data) {
@@ -69,7 +69,7 @@ public final class GalleryShareActivity extends Activity {
         return images;
     }
 
-    private void shareToChatGpt(ArrayList<Uri> images) {
+    private void routeToRoom(ArrayList<Uri> images) {
         String action = GallerySelectionPolicy.shareActionForCount(images.size());
         Intent share;
         if ("SEND_MULTIPLE".equals(action)) {
@@ -89,16 +89,9 @@ public final class GalleryShareActivity extends Activity {
         }
         share.setClipData(grants);
 
-        Intent direct = new Intent(share).setPackage(GallerySharePolicy.CHATGPT_PACKAGE);
-        try {
-            startActivity(direct);
-        } catch (ActivityNotFoundException noChatGpt) {
-            try {
-                startActivity(Intent.createChooser(share, "ส่งรูปไป ChatGPT"));
-            } catch (ActivityNotFoundException noShareTarget) {
-                Toast.makeText(this, "ไม่พบแอปที่รับรูปนี้ได้", Toast.LENGTH_LONG).show();
-            }
-        }
+        share.setClass(this, RoomShareActivity.class)
+                .putExtra(RoomShareActivity.EXTRA_SOURCE_LABEL, "รูปจากคลัง");
+        startActivity(share);
         finish();
     }
 }
