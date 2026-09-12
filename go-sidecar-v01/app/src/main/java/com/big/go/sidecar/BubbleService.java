@@ -32,6 +32,7 @@ import com.big.go.sidecar.core.BridgePayload;
 import com.big.go.sidecar.core.BubbleActionRouter;
 import com.big.go.sidecar.core.BubbleGesturePolicy;
 import com.big.go.sidecar.core.BubbleVisibilityPolicy;
+import com.big.go.sidecar.core.CommandPaletteCatalog;
 import com.big.go.sidecar.core.FavoritePrompt;
 import com.big.go.sidecar.core.PracticalLensCatalog;
 import com.big.go.sidecar.core.SlidePromptCatalog;
@@ -225,6 +226,12 @@ public class BubbleService extends Service {
         ask.setOnClickListener(v -> askGo());
         card.addView(ask, fullButton());
 
+        card.addView(sectionLabel("คำสั่ง GO"));
+        addCommandButtons(card, CommandPaletteCatalog.primary());
+        Button moreCommands = button("⋯ คำสั่งเพิ่ม");
+        moreCommands.setOnClickListener(v -> showMoreCommandMenu());
+        card.addView(moreCommands, fullButton());
+
         card.addView(sectionLabel("งานด่วน"));
 
         Button quickCrop = button("✂️ ตัดหน้าจอ");
@@ -291,6 +298,54 @@ public class BubbleService extends Service {
         close.setOnClickListener(v -> closePanel(false));
         card.addView(close, fullButton());
         showPanel(card, true);
+    }
+
+    private void showMoreCommandMenu() {
+        closePanel(false);
+        LinearLayout card = baseCard();
+        LinearLayout header = row();
+        TextView heading = title("คำสั่ง GO");
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        Button closeTop = button("✕");
+        closeTop.setOnClickListener(v -> closePanel(false));
+        header.addView(heading, weight());
+        header.addView(closeTop, new LinearLayout.LayoutParams(dp(52), -2));
+        card.addView(header, new LinearLayout.LayoutParams(-1, -2));
+        card.addView(body("เลือกคำสั่งเพื่อล็อกพฤติกรรมของ GO · บิ๊กเป็นคนวางและส่งเอง"));
+
+        card.addView(sectionLabel("คำสั่งเพิ่ม"));
+        addCommandButtons(card, CommandPaletteCatalog.more());
+
+        card.addView(sectionLabel("คำสั่งเฉพาะ"));
+        addCommandButtons(card, CommandPaletteCatalog.contextual());
+
+        Button back = button("← กลับเมนู GO");
+        back.setOnClickListener(v -> showModeMenu());
+        card.addView(back, fullButton());
+        showPanel(card, true);
+    }
+
+    private void addCommandButtons(LinearLayout card, List<CommandPaletteCatalog.Command> commands) {
+        for (int i = 0; i < commands.size(); i += 2) {
+            CommandPaletteCatalog.Command first = commands.get(i);
+            Button firstButton = button(first.label);
+            firstButton.setOnClickListener(v -> copyCommand(first));
+
+            Button secondButton = null;
+            if (i + 1 < commands.size()) {
+                CommandPaletteCatalog.Command second = commands.get(i + 1);
+                secondButton = button(second.label);
+                secondButton.setOnClickListener(v -> copyCommand(second));
+            }
+            addButtonPair(card, firstButton, secondButton);
+        }
+    }
+
+    private void copyCommand(CommandPaletteCatalog.Command command) {
+        ClipboardManager cb = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        cb.setPrimaryClip(ClipData.newPlainText("GO COMMAND · " + command.id, command.prompt));
+        closePanel(false);
+        toast("คัดลอก " + command.label + " แล้ว — วางในห้อง ChatGPT ที่เปิดอยู่");
     }
 
     private void copyFavorite(FavoritePrompt favorite) {
