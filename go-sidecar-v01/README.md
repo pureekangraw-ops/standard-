@@ -8,8 +8,8 @@ v0.1 is a personal-only Direct API build. The OpenAI key is entered on-device an
 
 - Sidecar starts with the floating GO bubble hidden.
 - The persistent Sidecar notification toggles the bubble on/off.
-- Tap Bubble keeps the existing one-shot screen-analysis flow.
-- Long-press Bubble opens GO Modes plus Quick Crop, gallery share, Clipboard Assistant, Favorites, and Schedule.
+- Tap Bubble opens the compact GO menu with quick actions, slide-production prompts, GO Modes, Favorites, and Schedule.
+- Long-press Bubble keeps the one-shot screen-analysis flow available as a shortcut.
 - Quick Crop and gallery share send selected image context through Android Share; ChatGPT may open a new room and BIG still presses send.
 - Android screenshots/images can be shared directly into GO Sidecar. Before forwarding, BIG can mask private areas, add a current request, and choose exactly one of the five GO room modes.
 - The normal Bubble capture preview now also offers `เลือกห้อง`, packaging the screenshot with that room's exact prompt without calling the Sidecar API.
