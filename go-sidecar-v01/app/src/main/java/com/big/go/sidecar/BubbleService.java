@@ -29,10 +29,12 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.big.go.sidecar.core.BridgePayload;
+import com.big.go.sidecar.core.BubbleActionRouter;
 import com.big.go.sidecar.core.BubbleGesturePolicy;
 import com.big.go.sidecar.core.BubbleVisibilityPolicy;
 import com.big.go.sidecar.core.FavoritePrompt;
-import com.big.go.sidecar.core.ModePromptCatalog;
+import com.big.go.sidecar.core.PracticalLensCatalog;
+import com.big.go.sidecar.core.SlidePromptCatalog;
 
 import java.io.File;
 import java.util.List;
@@ -209,47 +211,86 @@ public class BubbleService extends Service {
     private void showModeMenu() {
         closePanel(false);
         LinearLayout card = baseCard();
-        card.addView(title("GO Modes"));
-        card.addView(body("Quick Crop, รูปจากคลัง และ Clipboard Assistant เป็น Share ที่อาจเปิดห้องใหม่ · Favorites, Schedule และ GO Modes ใช้ Prompt/Clipboard โดย BIG เป็นคนวางและส่งเอง"));
+        LinearLayout header = row();
+        TextView heading = title("GO");
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        Button closeTop = button("✕");
+        closeTop.setOnClickListener(v -> closePanel(false));
+        header.addView(heading, weight());
+        header.addView(closeTop, new LinearLayout.LayoutParams(dp(52), -2));
+        card.addView(header, new LinearLayout.LayoutParams(-1, -2));
+        card.addView(body("งานภาพใช้ Share · คำสั่งใช้ Clipboard โดยบิ๊กเป็นคนวางและส่งเอง"));
 
-        Button quickCrop = button("✂️ Quick Crop → ChatGPT");
+        Button ask = button("🧠 ถาม GO จากหน้าจอ");
+        ask.setOnClickListener(v -> askGo());
+        card.addView(ask, fullButton());
+
+        card.addView(sectionLabel("งานด่วน"));
+
+        Button quickCrop = button("✂️ ตัดหน้าจอ");
         quickCrop.setOnClickListener(v -> startQuickCrop());
-        card.addView(quickCrop, new LinearLayout.LayoutParams(-1, -2));
-
-        Button gallery = button("🖼️ รูปจากคลัง → ChatGPT");
+        Button gallery = button("🖼️ รูปจากคลัง");
         gallery.setOnClickListener(v -> startGalleryShare());
-        card.addView(gallery, new LinearLayout.LayoutParams(-1, -2));
+        addButtonPair(card, quickCrop, gallery);
 
         Button clipboard = button("📋 Clipboard Assistant");
         clipboard.setOnClickListener(v -> startClipboardAssistant());
-        card.addView(clipboard, new LinearLayout.LayoutParams(-1, -2));
+        card.addView(clipboard, fullButton());
 
-        Button favorites = button("⭐ Favorites / ปุ่มของบิ๊ก");
-        favorites.setOnClickListener(v -> startFavorites());
-        card.addView(favorites, new LinearLayout.LayoutParams(-1, -2));
+        card.addView(sectionLabel("ผลิตสไลด์"));
+        List<SlidePromptCatalog.SlidePrompt> slidePrompts = SlidePromptCatalog.all();
+        Button createSlide = button(slidePrompts.get(0).label);
+        createSlide.setOnClickListener(v -> copySlidePrompt(slidePrompts.get(0)));
+        Button patchSlide = button(slidePrompts.get(1).label);
+        patchSlide.setOnClickListener(v -> copySlidePrompt(slidePrompts.get(1)));
+        addButtonPair(card, createSlide, patchSlide);
 
-        Button schedule = button("⏰ Schedule / Reminder");
-        schedule.setOnClickListener(v -> startSchedule());
-        card.addView(schedule, new LinearLayout.LayoutParams(-1, -2));
+        card.addView(sectionLabel("เลนส์ชีวิตและงาน"));
+        List<PracticalLensCatalog.PracticalLens> lenses = PracticalLensCatalog.all();
+        for (int i = 0; i < lenses.size(); i += 2) {
+            PracticalLensCatalog.PracticalLens first = lenses.get(i);
+            Button firstButton = button(first.label);
+            firstButton.setOnClickListener(v -> copyPracticalLens(first));
+
+            Button secondButton = null;
+            if (i + 1 < lenses.size()) {
+                PracticalLensCatalog.PracticalLens second = lenses.get(i + 1);
+                secondButton = button(second.label);
+                secondButton.setOnClickListener(v -> copyPracticalLens(second));
+            }
+            addButtonPair(card, firstButton, secondButton);
+        }
 
         List<FavoritePrompt> savedFavorites = new FavoritePromptStore(this).list();
-        for (int i = 0; i < Math.min(4, savedFavorites.size()); i++) {
-            FavoritePrompt favorite = savedFavorites.get(i);
-            Button favoriteButton = button("⭐ " + favorite.name);
-            favoriteButton.setOnClickListener(v -> copyFavorite(favorite));
-            card.addView(favoriteButton, new LinearLayout.LayoutParams(-1, -2));
+        if (!savedFavorites.isEmpty()) {
+            card.addView(sectionLabel("ปุ่มลัดของบิ๊ก"));
+            int visibleFavorites = Math.min(4, savedFavorites.size());
+            for (int i = 0; i < visibleFavorites; i += 2) {
+                FavoritePrompt first = savedFavorites.get(i);
+                Button firstButton = button("⭐ " + first.name);
+                firstButton.setOnClickListener(v -> copyFavorite(first));
+
+                Button secondButton = null;
+                if (i + 1 < visibleFavorites) {
+                    FavoritePrompt second = savedFavorites.get(i + 1);
+                    secondButton = button("⭐ " + second.name);
+                    secondButton.setOnClickListener(v -> copyFavorite(second));
+                }
+                addButtonPair(card, firstButton, secondButton);
+            }
         }
 
-        for (ModePromptCatalog.ModePrompt mode : ModePromptCatalog.all()) {
-            Button modeButton = button(mode.label);
-            modeButton.setOnClickListener(v -> copyModePrompt(mode));
-            card.addView(modeButton, new LinearLayout.LayoutParams(-1, -2));
-        }
+        card.addView(sectionLabel("เครื่องมือ"));
+        Button favorites = button("⭐ Favorites");
+        favorites.setOnClickListener(v -> startFavorites());
+        Button schedule = button("⏰ Schedule");
+        schedule.setOnClickListener(v -> startSchedule());
+        addButtonPair(card, favorites, schedule);
 
         Button close = button("ปิด");
         close.setOnClickListener(v -> closePanel(false));
-        card.addView(close, new LinearLayout.LayoutParams(-1, -2));
-        showPanel(card);
+        card.addView(close, fullButton());
+        showPanel(card, true);
     }
 
     private void copyFavorite(FavoritePrompt favorite) {
@@ -259,11 +300,18 @@ public class BubbleService extends Service {
         toast("คัดลอก " + favorite.name + " แล้ว — วางในห้อง ChatGPT ที่เปิดอยู่");
     }
 
-    private void copyModePrompt(ModePromptCatalog.ModePrompt mode) {
+    private void copyPracticalLens(PracticalLensCatalog.PracticalLens lens) {
         ClipboardManager cb = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        cb.setPrimaryClip(ClipData.newPlainText("GO " + mode.id + " MODE", mode.prompt));
+        cb.setPrimaryClip(ClipData.newPlainText("GO PRACTICAL LENS · " + lens.id, lens.prompt));
         closePanel(false);
-        toast("คัดลอก " + mode.label + " แล้ว — วางในห้อง ChatGPT ที่เปิดอยู่");
+        toast("คัดลอก " + lens.label + " แล้ว — วางในห้อง ChatGPT ที่เปิดอยู่");
+    }
+
+    private void copySlidePrompt(SlidePromptCatalog.SlidePrompt prompt) {
+        ClipboardManager cb = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        cb.setPrimaryClip(ClipData.newPlainText("GO SLIDE · " + prompt.id, prompt.prompt));
+        closePanel(false);
+        toast("คัดลอก " + prompt.label + " แล้ว — วางในห้องผลิตที่เปิดอยู่");
     }
 
     private void showPreview(File file) {
@@ -463,17 +511,29 @@ public class BubbleService extends Service {
     }
 
     private void showPanel(View content) {
+        showPanel(content, false);
+    }
+
+    private void showPanel(View content, boolean fitContent) {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(false);
         scroll.setClipToPadding(false);
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
         panel = scroll;
 
+        int panelWidth = Math.min(getResources().getDisplayMetrics().widthPixels - dp(24), dp(420));
         int screenHeight = getResources().getDisplayMetrics().heightPixels;
         int maxHeight = Math.max(dp(260), screenHeight - dp(120));
+        int panelHeight = maxHeight;
+        if (fitContent) {
+            scroll.measure(
+                    View.MeasureSpec.makeMeasureSpec(panelWidth, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(maxHeight, View.MeasureSpec.AT_MOST));
+            panelHeight = Math.min(maxHeight, scroll.getMeasuredHeight());
+        }
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(
-                Math.min(getResources().getDisplayMetrics().widthPixels - dp(24), dp(420)),
-                maxHeight,
+                panelWidth,
+                panelHeight,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
@@ -521,6 +581,39 @@ public class BubbleService extends Service {
 
     private LinearLayout.LayoutParams weight() {
         return new LinearLayout.LayoutParams(0, -2, 1f);
+    }
+
+    private LinearLayout.LayoutParams fullButton() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, dp(2), 0, dp(2));
+        return params;
+    }
+
+    private LinearLayout.LayoutParams pairWeight(boolean first) {
+        LinearLayout.LayoutParams params = weight();
+        params.setMargins(first ? 0 : dp(3), dp(2), first ? dp(3) : 0, dp(2));
+        return params;
+    }
+
+    private void addButtonPair(LinearLayout card, Button first, Button second) {
+        if (second == null) {
+            card.addView(first, fullButton());
+            return;
+        }
+        LinearLayout pair = row();
+        pair.addView(first, pairWeight(true));
+        pair.addView(second, pairWeight(false));
+        card.addView(pair, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private TextView sectionLabel(String text) {
+        TextView label = new TextView(this);
+        label.setText(text);
+        label.setTextColor(0xff334155);
+        label.setTextSize(13);
+        label.setTypeface(null, 1);
+        label.setPadding(dp(2), dp(10), 0, dp(3));
+        return label;
     }
 
     private Button button(String text) {
@@ -572,11 +665,9 @@ public class BubbleService extends Service {
                     long duration = System.currentTimeMillis() - downAt;
                     BubbleGesturePolicy.Action gesture = BubbleGesturePolicy.classify(
                             duration, distance, dp(10), MODE_LONG_PRESS_MS);
-                    if (gesture == BubbleGesturePolicy.Action.TAP) {
-                        askGo();
-                    } else if (gesture == BubbleGesturePolicy.Action.LONG_PRESS) {
-                        showModeMenu();
-                    }
+                    BubbleActionRouter.Target target = BubbleActionRouter.route(gesture);
+                    if (target == BubbleActionRouter.Target.OPEN_MENU) showModeMenu();
+                    else if (target == BubbleActionRouter.Target.ASK_GO) askGo();
                     return true;
                 default:
                     return false;
