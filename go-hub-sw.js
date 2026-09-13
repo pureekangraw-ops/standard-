@@ -1,20 +1,29 @@
 "use strict";
 
 const CACHE_PREFIX = "go-hub-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v1`;
+const CACHE_NAME = `${CACHE_PREFIX}v2-hard-cutover`;
 const APP_SHELL = [
+  "./",
+  "./index.html",
   "./go-hub.html",
+  "./go-hub.webmanifest",
   "./go-hub-shell.css",
   "./go-hub-shell.js",
   "./go-hub-runtime.js",
-  "./go-hub.webmanifest"
+  "./go-hub-sw-bootstrap.js",
 ];
 
+function isHubNavigation(request) {
+  if (request.mode !== "navigate") return false;
+  const pathname = new URL(request.url).pathname;
+  return pathname === "/"
+    || pathname.endsWith("/index.html")
+    || pathname.endsWith("/go-hub.html");
+}
+
 self.addEventListener("install", event => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(APP_SHELL);
-  })());
+  self.skipWaiting();
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
 });
 
 self.addEventListener("activate", event => {
@@ -25,6 +34,7 @@ self.addEventListener("activate", event => {
         .filter(name => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
         .map(name => caches.delete(name)),
     );
+    await self.clients.claim();
   })());
 });
 
@@ -34,13 +44,20 @@ self.addEventListener("fetch", event => {
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) return;
 
-  const shellUrls = new Set(APP_SHELL.map(path => new URL(path, self.location.href).href));
-  const isHubNavigation = event.request.mode === "navigate" && requestUrl.pathname.endsWith("/go-hub.html");
-  if (!isHubNavigation && !shellUrls.has(requestUrl.href)) return;
+  if (isHubNavigation(event.request)) {
+    event.respondWith((async () => {
+      try {
+        return await fetch(event.request);
+      } catch {
+        const cache = await caches.open(CACHE_NAME);
+        return (await cache.match("./index.html")) || Response.error();
+      }
+    })());
+    return;
+  }
 
   event.respondWith((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    const cached = await cache.match(isHubNavigation ? "./go-hub.html" : event.request);
+    const cached = await caches.match(event.request);
     if (cached) return cached;
     return fetch(event.request);
   })());
