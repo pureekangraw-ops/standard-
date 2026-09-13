@@ -1,0 +1,17 @@
+node_modules
+node_modules/**
+.wrangler
+.wrangler/**
+.git
+.git/**
+*
+!/go-hub.html
+!/go-hub-shell.css
+!/go-hub-shell.js
+!/go-hub-runtime.js
+!/go-hub-foundation.js
+!/go-hub-utils.js
+!/go-hub-persistence.js
+!/go-hub-update-lifecycle.js
+!/go-hub.webmanifest
+!/go-hub-sw.js
