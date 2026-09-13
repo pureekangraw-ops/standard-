@@ -26,7 +26,7 @@ test("GO Hub root has no active NormalPocket compatibility route", () => {
   assert.match(html, /go-hub-sw-bootstrap\.js/);
   assert.doesNotMatch(html, /normalpocket-root-compat\.js/);
   assert.doesNotMatch(html, /manifest\.webmanifest/);
-  assert.doesNotMatch(html, /sw-bootstrap\.js/);
+  assert.doesNotMatch(html, /src=["']\.\/sw-bootstrap\.js["']/);
 });
 
 test("dedicated GO Hub service worker owns root offline startup", () => {
