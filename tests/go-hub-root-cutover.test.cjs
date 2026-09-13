@@ -19,10 +19,10 @@ test("hard cutover keeps GO Hub at slash with no compatibility route", () => {
     "metropolis-r5.js",
     "app.js",
     "manifest.webmanifest",
-    "sw-bootstrap.js",
   ]) {
     assert.equal(rootHtml.includes(retiredRuntime), false, `root must not boot ${retiredRuntime}`);
   }
+  assert.doesNotMatch(rootHtml, /src=["']\.\/sw-bootstrap\.js["']/, "root must not boot the legacy service-worker bootstrap");
 });
 
 test("legacy compatibility source may remain but is unreachable and unpublished", () => {
