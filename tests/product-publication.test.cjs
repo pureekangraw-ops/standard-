@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 
 test("NormalPocket bootstrap loads catalog then simple-flow assets after the base app is ready", () => {
-  const shell = read("index.html");
+  const shell = read("normalpocket.html");
   assert.match(shell, /normalpocket-bootstrap\.js/);
   const bootstrap = read("normalpocket-bootstrap.js");
   for (const file of ["normalpocket-products.css", "normalpocket-simple-flow.css", "normalpocket-catalog-core.js", "normalpocket-products.js", "normalpocket-reconcile.js", "normalpocket-simple-flow.js"]) {
