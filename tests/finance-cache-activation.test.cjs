@@ -4,14 +4,20 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-const runtime = require('../sw.js');
+const sw = fs.readFileSync(path.join(root, 'go-hub-sw.js'), 'utf8');
+const release = JSON.parse(fs.readFileSync(path.join(root, 'RELEASE_MANIFEST.json'), 'utf8'));
 
-test('GO Hub root cutover receives a fresh cache generation without auto-activating over installed clients', () => {
-  assert.match(sw, /const CACHE_GENERATION = "v1\.3\.1-20260913-r10-go-hub-root-cutover";/,
-    'root cutover requires a fresh compatibility cache generation');
-  assert.match(sw, /const AUTO_ACTIVATE_CACHE_GENERATION = "v1\.3\.1-20260823-r9-finance-unified-light";/,
-    'the previous UI-only generation remains the last auto-activation authority');
-  assert.equal(runtime.shouldAutoActivateCurrentGeneration(), false,
-    'root ownership cutover must wait for explicit activation rather than silently taking over installed clients');
+test('GO Hub hard cutover owns a fresh cache generation and activates immediately', () => {
+  assert.match(sw, /const CACHE_PREFIX = "go-hub-app-";/,
+    'hard cutover requires the dedicated GO Hub cache namespace');
+  assert.match(sw, /v2-hard-cutover/,
+    'hard cutover requires its own cache generation');
+  assert.match(sw, /skipWaiting\(\)/,
+    'hard cutover intentionally activates the new GO Hub worker');
+  assert.match(sw, /clients\.claim\(\)/,
+    'hard cutover intentionally claims active GO Hub clients');
+  assert.equal(release.serviceWorker.file, 'go-hub-sw.js');
+  assert.equal(release.serviceWorker.autoActivate, true);
+  assert.equal(release.serviceWorker.cachePrefix, 'go-hub-app-');
+  assert.doesNotMatch(sw, /ygph-standard-app-/);
 });
