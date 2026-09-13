@@ -15,8 +15,8 @@ test("service-worker bootstrap stays free of legacy runtime ownership", () => {
   assert.doesNotMatch(source, /normalpocket/i);
 });
 
-test("NormalPocket root owns legacy runtime wiring in order", () => {
-  const html = read("index.html");
+test("NormalPocket compatibility route owns legacy runtime wiring in order", () => {
+  const html = read("normalpocket.html");
   const scripts = [
     "metropolis-v4.js",
     "metropolis-r5.js",
@@ -41,4 +41,7 @@ test("NormalPocket root owns legacy runtime wiring in order", () => {
   ]) {
     assert.ok(html.includes(stylesheet), `missing ${stylesheet}`);
   }
+
+  const rootHtml = read("index.html");
+  for (const script of scripts) assert.equal(rootHtml.includes(script), false, `Hub root must not load ${script}`);
 });
