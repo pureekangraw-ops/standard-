@@ -22,13 +22,15 @@ function cloudflareAllowlist() {
     .map(line => line.slice(2));
 }
 
-test("NormalPocket publication metadata follows the current release", () => {
-  const expectedRelease = "v1.3.1-20260812-r6-mobile-polish";
-  assert.equal(sw.RELEASE_ID, expectedRelease);
-  assert.equal(manifest.serviceWorker.releaseId, expectedRelease);
-  assert.equal(manifest.sourceCommit, "874cca49624a43a09b48c5155131f974e8d91b61");
-  assert.equal(manifest.release, "1.3.1-mobile-polish");
-  assert.equal(manifest.product, "NormalPocket");
+test("active publication metadata follows the GO Hub root cutover", () => {
+  assert.equal(manifest.release, "go-hub-root-cutover-compat-1");
+  assert.equal(manifest.product, "GO Hub");
+  assert.equal(manifest.rootEntry, "index.html");
+  assert.equal(manifest.compatibility.normalPocket.release, "1.3.1-mobile-polish");
+  assert.equal(manifest.compatibility.normalPocket.sourceCommit, "874cca49624a43a09b48c5155131f974e8d91b61");
+  assert.equal(sw.RELEASE_ID, manifest.serviceWorker.releaseId);
+  assert.equal(sw.CACHE_GENERATION, manifest.serviceWorker.cacheGeneration);
+  assert.equal(manifest.serviceWorker.autoActivate, false);
 });
 
 test("release manifest, Cloudflare allowlist, and offline shell cannot drift", () => {
@@ -45,10 +47,11 @@ test("release manifest, Cloudflare allowlist, and offline shell cannot drift", (
   }
 });
 
-test("operator guide follows the current NormalPocket Worker name", () => {
+test("operator guide retains the compatibility Worker name until service-worker ownership handoff", () => {
   const wrangler = JSON.parse(read("wrangler.jsonc"));
   const guide = read("UPLOAD_GUIDE.md");
   assert.equal(wrangler.name, "normalpocket");
+  assert.equal(manifest.compatibility.normalPocket.workerName, "normalpocket");
   assert.match(guide, /Worker[^\n]*`normalpocket`/);
   assert.doesNotMatch(guide, /Worker[^\n]*`ygph-standard`/);
 });

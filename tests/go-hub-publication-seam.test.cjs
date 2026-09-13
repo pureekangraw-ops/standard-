@@ -21,7 +21,7 @@ const requiredHubFiles = [
   "go-hub-sw.js",
 ];
 
-test("GO Hub has an inactive publication contract separate from NormalPocket", () => {
+test("GO Hub keeps a dedicated future publication contract separate from compatibility", () => {
   assert.equal(fs.existsSync(path.join(root, "GO_HUB_RELEASE_MANIFEST.json")), true);
   assert.equal(fs.existsSync(path.join(root, "go-hub.assetsignore")), true);
 
@@ -38,9 +38,15 @@ test("GO Hub has an inactive publication contract separate from NormalPocket", (
   }
 });
 
-test("GO Hub publication seam is not active in the legacy deployment contract", () => {
+test("active cutover publishes Hub root assets but does not activate the dedicated Hub service worker", () => {
   const activeAllowlist = read(".assetsignore");
-  assert.doesNotMatch(activeAllowlist, /go-hub/i);
-  const legacyRelease = read("RELEASE_MANIFEST.json");
-  assert.doesNotMatch(legacyRelease, /GO_HUB_RELEASE_MANIFEST|go-hub\.html|go-hub-sw\.js/i);
+  for (const file of ["go-hub.html", "go-hub.webmanifest", "go-hub-shell.css", "go-hub-shell.js", "go-hub-runtime.js", "go-hub-root-route.js"]) {
+    assert.match(activeAllowlist, new RegExp(`!/${file.replaceAll(".", "\\.")}`));
+  }
+  assert.doesNotMatch(activeAllowlist, /!\/go-hub-sw\.js/);
+
+  const activeRelease = JSON.parse(read("RELEASE_MANIFEST.json"));
+  assert.equal(activeRelease.product, "GO Hub");
+  assert.equal(activeRelease.serviceWorker.mode, "compatibility-bridge");
+  assert.equal(activeRelease.productionFiles.some(item => item.path === "go-hub-sw.js"), false);
 });

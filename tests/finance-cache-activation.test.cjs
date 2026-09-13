@@ -5,14 +5,13 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+const runtime = require('../sw.js');
 
-test('finance UI hotfix auto-activates instead of remaining behind the old serving cache', () => {
-  assert.match(sw, /const CACHE_GENERATION = "v1\.3\.1-20260823-r9-finance-unified-light";/,
-    'a fresh service-worker generation is required so browsers detect the hotfix');
+test('GO Hub root cutover receives a fresh cache generation without auto-activating over installed clients', () => {
+  assert.match(sw, /const CACHE_GENERATION = "v1\.3\.1-20260913-r10-go-hub-root-cutover";/,
+    'root cutover requires a fresh compatibility cache generation');
   assert.match(sw, /const AUTO_ACTIVATE_CACHE_GENERATION = "v1\.3\.1-20260823-r9-finance-unified-light";/,
-    'only the approved UI-only cache refresh may opt into immediate activation');
-  assert.match(sw, /function shouldAutoActivateCurrentGeneration\(\) \{\s*return CACHE_GENERATION === AUTO_ACTIVATE_CACHE_GENERATION;\s*\}/,
-    'the service worker must expose an explicit activation decision for this generation');
-  assert.match(sw, /shouldAutoActivateLegacyBridge\(cacheNames, lifecycle\) \|\| shouldAutoActivateCurrentGeneration\(\)/,
-    'install must skip waiting for the approved UI-only refresh while retaining the legacy bridge');
+    'the previous UI-only generation remains the last auto-activation authority');
+  assert.equal(runtime.shouldAutoActivateCurrentGeneration(), false,
+    'root ownership cutover must wait for explicit activation rather than silently taking over installed clients');
 });
