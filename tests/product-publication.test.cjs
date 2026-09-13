@@ -23,7 +23,7 @@ test("NormalPocket bootstrap loads catalog then simple-flow assets after the bas
   assert.match(bootstrap, /DOMContentLoaded/);
 });
 
-test("active GO Hub publication retains the NormalPocket 1.3.1 compatibility catalog", () => {
+test("NormalPocket catalog remains testable source but is retired from active GO Hub publication", () => {
   const pkg = JSON.parse(read("package.json"));
   assert.equal(pkg.version, "1.3.1");
   for (const file of ["normalpocket-bootstrap.js", "normalpocket-catalog-core.js", "normalpocket-products.js", "normalpocket-reconcile.js", "normalpocket-simple-flow.js"]) {
@@ -32,18 +32,17 @@ test("active GO Hub publication retains the NormalPocket 1.3.1 compatibility cat
 
   const manifest = JSON.parse(read("RELEASE_MANIFEST.json"));
   assert.equal(manifest.product, "GO Hub");
-  assert.equal(manifest.compatibility.normalPocket.release, "1.3.1-mobile-polish");
-  assert.equal(manifest.compatibility.normalPocket.sourceCommit, "874cca49624a43a09b48c5155131f974e8d91b61");
+  assert.equal(Object.hasOwn(manifest, "compatibility"), false);
   const files = new Set(manifest.productionFiles.map(item => item.path));
   for (const file of ["normalpocket-bootstrap.js", "normalpocket-catalog-core.js", "normalpocket-products.js", "normalpocket-reconcile.js", "normalpocket-products.css", "normalpocket-simple-flow.js", "normalpocket-simple-flow.css", "app-icon.svg", "normalpocket.html"]) {
-    assert.ok(files.has(file), `${file} must be published`);
+    assert.equal(files.has(file), false, `${file} must remain unpublished legacy source`);
   }
 });
 
-test("compatibility service worker precaches the complete NormalPocket 1.3 surface", () => {
-  const sw = require("../sw.js");
-  assert.equal(sw.RELEASE_ID, "v1.3.1-20260812-r6-mobile-polish");
-  for (const file of ["normalpocket.html", "normalpocket-bootstrap.js", "normalpocket-catalog-core.js", "normalpocket-products.js", "normalpocket-reconcile.js", "normalpocket-products.css", "normalpocket-simple-flow.js", "normalpocket-simple-flow.css", "app-icon.svg"]) {
-    assert.ok(sw.APP_SHELL.includes(file), `${file} must be offline`);
+test("active GO Hub service worker does not precache the retired NormalPocket surface", () => {
+  const sw = read("go-hub-sw.js");
+  assert.match(sw, /go-hub-app-/);
+  for (const file of ["normalpocket.html", "normalpocket-bootstrap.js", "normalpocket-catalog-core.js", "normalpocket-products.js", "normalpocket-reconcile.js", "normalpocket-simple-flow.js", "app-icon.svg"]) {
+    assert.equal(sw.includes(file), false, `${file} must not be part of GO Hub service-worker ownership`);
   }
 });
