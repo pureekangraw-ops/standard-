@@ -9,13 +9,13 @@ const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 
 test("NormalPocket current release has neutral public branding with no owner-specific UI copy", () => {
-  const index = read("index.html");
+  const legacy = read("normalpocket.html");
   const manifest = JSON.parse(read("manifest.webmanifest"));
   const metropolis = read("metropolis-v4.js");
   const simple = read("normalpocket-simple-flow.js");
-  const visible = [index, manifest.name, manifest.short_name, manifest.description, metropolis, simple].join("\n");
+  const visible = [legacy, manifest.name, manifest.short_name, manifest.description, metropolis, simple].join("\n");
 
-  assert.match(index, /<title>NormalPocket 1\.3\.1<\/title>/);
+  assert.match(legacy, /<title>NormalPocket 1\.3\.1<\/title>/);
   assert.equal(manifest.name, "NormalPocket");
   assert.equal(manifest.short_name, "NormalPocket");
   assert.match(visible, /NormalPocket/);
@@ -45,11 +45,20 @@ test("simple home hides the legacy launcher and duplicate dashboard", () => {
 });
 
 test("legacy runtime layers load before NormalPocket authority", () => {
-  const bootstrap = read("sw-bootstrap.js");
-  assert.match(bootstrap, /async function loadRuntimeLayers/);
-  assert.match(bootstrap, /await loadMetropolisLayers\(\)/);
-  assert.match(bootstrap, /await loadScript\("normalpocket-bootstrap\.js"/);
-  assert.ok(bootstrap.indexOf("await loadMetropolisLayers()") < bootstrap.indexOf('await loadScript("normalpocket-bootstrap.js"'));
+  const html = read("normalpocket.html");
+  const layers = [
+    "metropolis-v4.js",
+    "metropolis-r5.js",
+    "metropolis-r5-1.js",
+    "metropolis-r5-2.js",
+    "metropolis-r5-3.js",
+    "metropolis-r5-4.js",
+    "normalpocket-bootstrap.js",
+  ];
+  for (const layer of layers) assert.ok(html.includes(layer), `missing ${layer}`);
+  for (let index = 1; index < layers.length; index += 1) {
+    assert.ok(html.indexOf(layers[index - 1]) < html.indexOf(layers[index]), `${layers[index - 1]} must load before ${layers[index]}`);
+  }
 });
 
 test("quick sale is cash-first and never mutates product stock", () => {
@@ -99,15 +108,16 @@ test("stock adjustment reasons stay small and general-purpose", () => {
   assert.deepEqual(flow.STOCK_ADJUST_REASONS, ["นับใหม่", "เสีย", "หาย", "ใช้เอง", "คืนสินค้า", "อื่นๆ"]);
 });
 
-test("release contract publishes the current NormalPocket simple-flow assets", () => {
+test("NormalPocket simple-flow remains source-only after GO Hub hard cutover", () => {
   const pkg = JSON.parse(read("package.json"));
   const release = JSON.parse(read("RELEASE_MANIFEST.json"));
-  const sw = require("../sw.js");
   assert.equal(pkg.version, "1.3.1");
-  assert.equal(release.release, "1.3.1-mobile-polish");
-  assert.equal(release.product, "NormalPocket");
-  assert.equal(sw.RELEASE_ID, "v1.3.1-20260812-r6-mobile-polish");
-  for (const file of ["normalpocket-simple-flow.js", "normalpocket-simple-flow.css", "app-icon.svg"]) {
-    assert.ok(release.productionFiles.some(item => item.path === file), `${file} must be published`);
+  assert.equal(release.product, "GO Hub");
+  assert.equal(Object.hasOwn(release, "compatibility"), false);
+  for (const file of ["normalpocket-simple-flow.js", "normalpocket-simple-flow.css", "app-icon.svg", "normalpocket.html"]) {
+    assert.equal(release.productionFiles.some(item => item.path === file), false, `${file} must not be actively published`);
+    assert.equal(fs.existsSync(path.join(root, file)), true, `${file} may remain as source reference`);
   }
+  const sw = read("go-hub-sw.js");
+  assert.doesNotMatch(sw, /normalpocket/i);
 });

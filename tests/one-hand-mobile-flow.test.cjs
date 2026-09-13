@@ -10,11 +10,11 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
 
 test("NormalPocket 1.3.1 publishes the mobile polish release identity", () => {
   const pkg = JSON.parse(read("package.json"));
-  const index = read("index.html");
+  const legacy = read("normalpocket.html");
   const sw = require("../sw.js");
 
   assert.equal(pkg.version, "1.3.1");
-  assert.match(index, /<title>NormalPocket 1\.3\.1<\/title>/);
+  assert.match(legacy, /<title>NormalPocket 1\.3\.1<\/title>/);
   assert.equal(sw.RELEASE_ID, "v1.3.1-20260812-r6-mobile-polish");
 });
 

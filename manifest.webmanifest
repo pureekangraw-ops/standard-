@@ -3,7 +3,7 @@
   "short_name": "NormalPocket",
   "description": "ร้านค้า เงิน สต็อก และงานประจำวันแบบเรียบง่าย ข้อมูลเข้ารหัสเก็บในเครื่องและใช้งานออฟไลน์ได้",
   "lang": "th",
-  "start_url": "/",
+  "start_url": "/normalpocket.html",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f2f6f4",

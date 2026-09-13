@@ -1,0 +1,23 @@
+{
+  "release": "0.1.0-foundation",
+  "product": "GO Hub",
+  "status": "INACTIVE_MIGRATION_SEAM",
+  "entrypoint": "go-hub.html",
+  "productionFiles": [
+    { "path": "go-hub.html" },
+    { "path": "go-hub-shell.css" },
+    { "path": "go-hub-shell.js" },
+    { "path": "go-hub-runtime.js" },
+    { "path": "go-hub-foundation.js" },
+    { "path": "go-hub-utils.js" },
+    { "path": "go-hub-persistence.js" },
+    { "path": "go-hub-update-lifecycle.js" },
+    { "path": "go-hub.webmanifest" },
+    { "path": "go-hub-sw.js" }
+  ],
+  "activation": {
+    "activeDeploymentContract": false,
+    "serviceWorkerRegistered": false,
+    "requiresOwnerGate": true
+  }
+}

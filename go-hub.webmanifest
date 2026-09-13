@@ -1,0 +1,12 @@
+{
+  "name": "GO Hub",
+  "short_name": "GO Hub",
+  "description": "Neutral GO Hub control surface.",
+  "lang": "en",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#111318",
+  "theme_color": "#111318"
+}

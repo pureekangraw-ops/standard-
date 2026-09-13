@@ -4,15 +4,20 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+const sw = fs.readFileSync(path.join(root, 'go-hub-sw.js'), 'utf8');
+const release = JSON.parse(fs.readFileSync(path.join(root, 'RELEASE_MANIFEST.json'), 'utf8'));
 
-test('finance UI hotfix auto-activates instead of remaining behind the old serving cache', () => {
-  assert.match(sw, /const CACHE_GENERATION = "v1\.3\.1-20260823-r9-finance-unified-light";/,
-    'a fresh service-worker generation is required so browsers detect the hotfix');
-  assert.match(sw, /const AUTO_ACTIVATE_CACHE_GENERATION = "v1\.3\.1-20260823-r9-finance-unified-light";/,
-    'only the approved UI-only cache refresh may opt into immediate activation');
-  assert.match(sw, /function shouldAutoActivateCurrentGeneration\(\) \{\s*return CACHE_GENERATION === AUTO_ACTIVATE_CACHE_GENERATION;\s*\}/,
-    'the service worker must expose an explicit activation decision for this generation');
-  assert.match(sw, /shouldAutoActivateLegacyBridge\(cacheNames, lifecycle\) \|\| shouldAutoActivateCurrentGeneration\(\)/,
-    'install must skip waiting for the approved UI-only refresh while retaining the legacy bridge');
+test('GO Hub hard cutover owns a fresh cache generation and activates immediately', () => {
+  assert.match(sw, /const CACHE_PREFIX = "go-hub-app-";/,
+    'hard cutover requires the dedicated GO Hub cache namespace');
+  assert.match(sw, /v2-hard-cutover/,
+    'hard cutover requires its own cache generation');
+  assert.match(sw, /skipWaiting\(\)/,
+    'hard cutover intentionally activates the new GO Hub worker');
+  assert.match(sw, /clients\.claim\(\)/,
+    'hard cutover intentionally claims active GO Hub clients');
+  assert.equal(release.serviceWorker.file, 'go-hub-sw.js');
+  assert.equal(release.serviceWorker.autoActivate, true);
+  assert.equal(release.serviceWorker.cachePrefix, 'go-hub-app-');
+  assert.doesNotMatch(sw, /ygph-standard-app-/);
 });

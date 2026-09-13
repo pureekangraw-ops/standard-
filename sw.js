@@ -5,7 +5,7 @@ const LEGACY_CACHE_PREFIXES = Object.freeze([
   "ygph-standard-0.1.0-preview."
 ]);
 const RELEASE_ID = "v1.3.1-20260812-r6-mobile-polish";
-const CACHE_GENERATION = "v1.3.1-20260823-r9-finance-unified-light";
+const CACHE_GENERATION = "v1.3.1-20260913-r10-go-hub-root-cutover";
 const AUTO_ACTIVATE_CACHE_GENERATION = "v1.3.1-20260823-r9-finance-unified-light";
 const CURRENT_CACHE = `${APP_CACHE_PREFIX}${CACHE_GENERATION}`;
 const META_CACHE = "ygph-standard-meta";
@@ -13,6 +13,14 @@ const META_PATH = "__ygph_service_worker_lifecycle__";
 const APP_SHELL = [
   "./",
   "index.html",
+  "go-hub.html",
+  "go-hub.webmanifest",
+  "go-hub-shell.css",
+  "go-hub-shell.js",
+  "go-hub-runtime.js",
+  "go-hub-root-route.js",
+  "normalpocket-root-compat.js",
+  "normalpocket.html",
   "manifest.webmanifest",
   "styles.css",
   "flow-era.css",
@@ -118,7 +126,20 @@ function assertShellReadback(responses) {
 }
 
 function offlineLookupKeys(request) {
-  return request?.mode === "navigate" ? ["index.html", "./"] : [request];
+  if (request?.mode !== "navigate") return [request];
+
+  let pathname = "/";
+  try {
+    pathname = new URL(request.url || "/", "https://offline.invalid").pathname;
+  } catch {
+    return ["index.html", "./"];
+  }
+
+  const relativePath = pathname.replace(/^\/+/, "");
+  if (relativePath === "normalpocket.html") return ["normalpocket.html"];
+  if (relativePath === "" || relativePath === "index.html") return ["index.html", "./"];
+  if (relativePath === "go-hub.html") return ["go-hub.html", "index.html", "./"];
+  return [relativePath, "index.html", "./"];
 }
 
 if (typeof self !== "undefined" && typeof self.addEventListener === "function") {

@@ -5,11 +5,13 @@ node_modules/**
 .git
 .git/**
 *
-!/index.html
 !/go-hub.html
-!/go-hub.webmanifest
 !/go-hub-shell.css
 !/go-hub-shell.js
 !/go-hub-runtime.js
-!/go-hub-sw-bootstrap.js
+!/go-hub-foundation.js
+!/go-hub-utils.js
+!/go-hub-persistence.js
+!/go-hub-update-lifecycle.js
+!/go-hub.webmanifest
 !/go-hub-sw.js

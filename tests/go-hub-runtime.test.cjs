@@ -1,0 +1,10 @@
+"use strict";
+const fs=require("node:fs");
+const path=require("node:path");
+const test=require("node:test");
+const assert=require("node:assert/strict");
+const root=path.resolve(__dirname,"..");
+const read=p=>fs.readFileSync(path.join(root,p),"utf8");
+test("runtime module exists",()=>assert.equal(fs.existsSync(path.join(root,"go-hub-runtime.js")),true));
+test("runtime stays neutral",()=>{const s=read("go-hub-runtime.js").toLowerCase(); for(const x of ["normalpocket","metropolis-r5","ygph-standard-secure"]) assert.equal(s.includes(x),false);});
+test("runtime exposes registry",()=>{const s=read("go-hub-runtime.js"); assert.match(s,/createHubRuntime/); assert.match(s,/register/); assert.match(s,/list/); assert.match(s,/get/);});
