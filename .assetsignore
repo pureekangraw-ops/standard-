@@ -6,6 +6,14 @@ node_modules/**
 .git/**
 *
 !/index.html
+!/go-hub.html
+!/go-hub.webmanifest
+!/go-hub-shell.css
+!/go-hub-shell.js
+!/go-hub-runtime.js
+!/go-hub-root-route.js
+!/normalpocket-root-compat.js
+!/normalpocket.html
 !/manifest.webmanifest
 !/styles.css
 !/flow-era.css

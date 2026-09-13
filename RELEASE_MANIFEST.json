@@ -1,148 +1,116 @@
 {
-  "release": "1.3.1-mobile-polish",
-  "product": "NormalPocket",
-  "releaseDate": "2026-08-12",
-  "sourceProduct": "YGPH METROPOLIS current main (read-only engineering reference)",
-  "sourceCommit": "874cca49624a43a09b48c5155131f974e8d91b61",
-  "stateSchema": 4,
-  "domains": [
-    "STORE",
-    "LEDGER",
-    "CALENDAR"
-  ],
+  "release": "go-hub-root-cutover-compat-1",
+  "product": "GO Hub",
+  "releaseDate": "2026-09-13",
+  "rootEntry": "index.html",
   "features": [
-    "one-hand mobile home flow",
-    "compact mobile header and action grid",
-    "compact first-run catalog guidance without duplicated quick-sale action",
-    "empty-shop summary suppression",
-    "simple daily home actions",
-    "general product catalog",
-    "optional color and size variants",
-    "quick cash sale without catalog stock mutation",
-    "simple stock adjustment",
-    "day-close summary without destructive reset",
-    "neutral public branding"
+    "GO Hub neutral root control surface",
+    "legacy-client detection before root routing",
+    "NormalPocket compatibility route",
+    "compatibility service-worker bridge with explicit activation",
+    "offline-safe route separation between GO Hub and NormalPocket"
   ],
-  "database": {
-    "name": "ygph-standard-secure",
-    "version": 1,
-    "store": "kv",
-    "vaultKey": "vault",
-    "vaultFormat": 1
+  "compatibility": {
+    "normalPocket": {
+      "release": "1.3.1-mobile-polish",
+      "route": "normalpocket.html",
+      "manifest": "manifest.webmanifest",
+      "packageVersion": "1.3.1",
+      "workerName": "normalpocket",
+      "sourceProduct": "YGPH METROPOLIS current main (read-only engineering reference)",
+      "sourceCommit": "874cca49624a43a09b48c5155131f974e8d91b61",
+      "stateSchema": 4,
+      "domains": [
+        "STORE",
+        "LEDGER",
+        "CALENDAR"
+      ],
+      "database": {
+        "name": "ygph-standard-secure",
+        "version": 1,
+        "store": "kv",
+        "vaultKey": "vault",
+        "vaultFormat": 1
+      },
+      "features": [
+        "one-hand mobile home flow",
+        "compact mobile header and action grid",
+        "compact first-run catalog guidance without duplicated quick-sale action",
+        "empty-shop summary suppression",
+        "simple daily home actions",
+        "general product catalog",
+        "optional color and size variants",
+        "quick cash sale without catalog stock mutation",
+        "simple stock adjustment",
+        "day-close summary without destructive reset",
+        "neutral public branding"
+      ]
+    }
   },
   "serviceWorker": {
+    "file": "sw.js",
+    "mode": "compatibility-bridge",
     "releaseId": "v1.3.1-20260812-r6-mobile-polish",
     "cachePrefix": "ygph-standard-app-",
+    "cacheGeneration": "v1.3.1-20260913-r10-go-hub-root-cutover",
+    "autoActivate": false,
     "metaCache": "ygph-standard-meta"
   },
   "validation": {
     "command": "npm run deploy:gate",
     "scope": [
+      "GO Hub root and compatibility routing contracts",
       "NormalPocket one-hand mobile contracts",
       "NormalPocket simple shop flow contracts",
       "neutral public branding contract",
       "product catalog and stock-owner contracts",
-      "publication contract",
+      "active publication parity",
       "STANDARD regression contracts",
       "syntax",
       "utf8",
       "no executable ride references"
     ]
   },
-  "note": "NormalPocket 1.3.1 polishes the one-hand mobile home by removing duplicated first-run actions and hiding zero-value summary cards while the shop is empty, preserving encrypted local Store/Ledger/Calendar data ownership.",
+  "note": "GO Hub owns the root entry while NormalPocket 1.3.1 remains behind an explicit compatibility route. The existing normalpocket Worker, encrypted local database identity, cache prefix, and release identity are retained during the transition; the root-cutover cache generation does not auto-activate over installed clients.",
   "productionFiles": [
-    {
-      "path": "index.html"
-    },
-    {
-      "path": "manifest.webmanifest"
-    },
-    {
-      "path": "styles.css"
-    },
-    {
-      "path": "flow-era.css"
-    },
-    {
-      "path": "metropolis-v4.css"
-    },
-    {
-      "path": "metropolis-r5.css"
-    },
-    {
-      "path": "metropolis-r5-1.css"
-    },
-    {
-      "path": "metropolis-r5-2.css"
-    },
-    {
-      "path": "metropolis-r5-3.css"
-    },
-    {
-      "path": "metropolis-r5-4.css"
-    },
-    {
-      "path": "normalpocket-products.css"
-    },
-    {
-      "path": "sw-bootstrap.js"
-    },
-    {
-      "path": "normalpocket-bootstrap.js"
-    },
-    {
-      "path": "normalpocket-catalog-core.js"
-    },
-    {
-      "path": "normalpocket-products.js"
-    },
-    {
-      "path": "normalpocket-reconcile.js"
-    },
-    {
-      "path": "highway-gate.js"
-    },
-    {
-      "path": "app.js"
-    },
-    {
-      "path": "flow-era.js"
-    },
-    {
-      "path": "metropolis-v4.js"
-    },
-    {
-      "path": "metropolis-r5.js"
-    },
-    {
-      "path": "metropolis-r5-1.js"
-    },
-    {
-      "path": "metropolis-r5-2.js"
-    },
-    {
-      "path": "metropolis-r5-3.js"
-    },
-    {
-      "path": "metropolis-r5-4.js"
-    },
-    {
-      "path": "sw.js"
-    },
-    {
-      "path": "icon-192.png"
-    },
-    {
-      "path": "icon-512.png"
-    },
-    {
-      "path": "normalpocket-simple-flow.js"
-    },
-    {
-      "path": "normalpocket-simple-flow.css"
-    },
-    {
-      "path": "app-icon.svg"
-    }
+    { "path": "index.html" },
+    { "path": "go-hub.html" },
+    { "path": "go-hub.webmanifest" },
+    { "path": "go-hub-shell.css" },
+    { "path": "go-hub-shell.js" },
+    { "path": "go-hub-runtime.js" },
+    { "path": "go-hub-root-route.js" },
+    { "path": "normalpocket-root-compat.js" },
+    { "path": "normalpocket.html" },
+    { "path": "manifest.webmanifest" },
+    { "path": "styles.css" },
+    { "path": "flow-era.css" },
+    { "path": "metropolis-v4.css" },
+    { "path": "metropolis-r5.css" },
+    { "path": "metropolis-r5-1.css" },
+    { "path": "metropolis-r5-2.css" },
+    { "path": "metropolis-r5-3.css" },
+    { "path": "metropolis-r5-4.css" },
+    { "path": "normalpocket-products.css" },
+    { "path": "sw-bootstrap.js" },
+    { "path": "normalpocket-bootstrap.js" },
+    { "path": "normalpocket-catalog-core.js" },
+    { "path": "normalpocket-products.js" },
+    { "path": "normalpocket-reconcile.js" },
+    { "path": "highway-gate.js" },
+    { "path": "app.js" },
+    { "path": "flow-era.js" },
+    { "path": "metropolis-v4.js" },
+    { "path": "metropolis-r5.js" },
+    { "path": "metropolis-r5-1.js" },
+    { "path": "metropolis-r5-2.js" },
+    { "path": "metropolis-r5-3.js" },
+    { "path": "metropolis-r5-4.js" },
+    { "path": "sw.js" },
+    { "path": "icon-192.png" },
+    { "path": "icon-512.png" },
+    { "path": "normalpocket-simple-flow.js" },
+    { "path": "normalpocket-simple-flow.css" },
+    { "path": "app-icon.svg" }
   ]
 }
