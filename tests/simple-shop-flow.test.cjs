@@ -45,11 +45,20 @@ test("simple home hides the legacy launcher and duplicate dashboard", () => {
 });
 
 test("legacy runtime layers load before NormalPocket authority", () => {
-  const bootstrap = read("sw-bootstrap.js");
-  assert.match(bootstrap, /async function loadRuntimeLayers/);
-  assert.match(bootstrap, /await loadMetropolisLayers\(\)/);
-  assert.match(bootstrap, /await loadScript\("normalpocket-bootstrap\.js"/);
-  assert.ok(bootstrap.indexOf("await loadMetropolisLayers()") < bootstrap.indexOf('await loadScript("normalpocket-bootstrap.js"'));
+  const html = read("index.html");
+  const layers = [
+    "metropolis-v4.js",
+    "metropolis-r5.js",
+    "metropolis-r5-1.js",
+    "metropolis-r5-2.js",
+    "metropolis-r5-3.js",
+    "metropolis-r5-4.js",
+    "normalpocket-bootstrap.js",
+  ];
+  for (const layer of layers) assert.ok(html.includes(layer), `missing ${layer}`);
+  for (let index = 1; index < layers.length; index += 1) {
+    assert.ok(html.indexOf(layers[index - 1]) < html.indexOf(layers[index]), `${layers[index - 1]} must load before ${layers[index]}`);
+  }
 });
 
 test("quick sale is cash-first and never mutates product stock", () => {
