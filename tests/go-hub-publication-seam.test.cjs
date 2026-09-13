@@ -21,7 +21,7 @@ const requiredHubFiles = [
   "go-hub-sw.js",
 ];
 
-test("GO Hub keeps a dedicated future publication contract separate from compatibility", () => {
+test("GO Hub keeps its design-time publication contract free of legacy ownership", () => {
   assert.equal(fs.existsSync(path.join(root, "GO_HUB_RELEASE_MANIFEST.json")), true);
   assert.equal(fs.existsSync(path.join(root, "go-hub.assetsignore")), true);
 
@@ -38,15 +38,19 @@ test("GO Hub keeps a dedicated future publication contract separate from compati
   }
 });
 
-test("active cutover publishes Hub root assets but does not activate the dedicated Hub service worker", () => {
+test("active publication now activates the dedicated GO Hub service worker", () => {
   const activeAllowlist = read(".assetsignore");
-  for (const file of ["go-hub.html", "go-hub.webmanifest", "go-hub-shell.css", "go-hub-shell.js", "go-hub-runtime.js", "go-hub-root-route.js"]) {
+  for (const file of ["index.html", "go-hub.html", "go-hub.webmanifest", "go-hub-shell.css", "go-hub-shell.js", "go-hub-runtime.js", "go-hub-sw-bootstrap.js", "go-hub-sw.js"]) {
     assert.match(activeAllowlist, new RegExp(`!/${file.replaceAll(".", "\\.")}`));
   }
-  assert.doesNotMatch(activeAllowlist, /!\/go-hub-sw\.js/);
+  for (const retired of ["go-hub-root-route.js", "normalpocket-root-compat.js", "normalpocket.html", "sw.js"]) {
+    assert.equal(activeAllowlist.includes(`!/${retired}`), false, `${retired} must not be actively published`);
+  }
 
   const activeRelease = JSON.parse(read("RELEASE_MANIFEST.json"));
   assert.equal(activeRelease.product, "GO Hub");
-  assert.equal(activeRelease.serviceWorker.mode, "compatibility-bridge");
-  assert.equal(activeRelease.productionFiles.some(item => item.path === "go-hub-sw.js"), false);
+  assert.equal(activeRelease.serviceWorker.mode, "go-hub-exclusive");
+  assert.equal(activeRelease.serviceWorker.file, "go-hub-sw.js");
+  assert.equal(activeRelease.serviceWorker.autoActivate, true);
+  assert.equal(activeRelease.productionFiles.some(item => item.path === "go-hub-sw.js"), true);
 });
