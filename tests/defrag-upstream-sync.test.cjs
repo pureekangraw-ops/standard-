@@ -9,10 +9,10 @@ const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 
 test("STANDARD Calendar source does not depend on cancelled compatibility controls", () => {
-  const index = read("index.html");
+  const legacy = read("normalpocket.html");
   const app = read("app.js");
-  assert.doesNotMatch(index, /id="calCancelled"/);
-  assert.doesNotMatch(index, /data-filter="CANCELLED"/);
+  assert.doesNotMatch(legacy, /id="calCancelled"/);
+  assert.doesNotMatch(legacy, /data-filter="CANCELLED"/);
   assert.doesNotMatch(app, /byId\("calCancelled"\)/);
 });
 

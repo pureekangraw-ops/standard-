@@ -9,13 +9,13 @@ const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 
 test("NormalPocket current release has neutral public branding with no owner-specific UI copy", () => {
-  const index = read("index.html");
+  const legacy = read("normalpocket.html");
   const manifest = JSON.parse(read("manifest.webmanifest"));
   const metropolis = read("metropolis-v4.js");
   const simple = read("normalpocket-simple-flow.js");
-  const visible = [index, manifest.name, manifest.short_name, manifest.description, metropolis, simple].join("\n");
+  const visible = [legacy, manifest.name, manifest.short_name, manifest.description, metropolis, simple].join("\n");
 
-  assert.match(index, /<title>NormalPocket 1\.3\.1<\/title>/);
+  assert.match(legacy, /<title>NormalPocket 1\.3\.1<\/title>/);
   assert.equal(manifest.name, "NormalPocket");
   assert.equal(manifest.short_name, "NormalPocket");
   assert.match(visible, /NormalPocket/);
@@ -45,7 +45,7 @@ test("simple home hides the legacy launcher and duplicate dashboard", () => {
 });
 
 test("legacy runtime layers load before NormalPocket authority", () => {
-  const html = read("index.html");
+  const html = read("normalpocket.html");
   const layers = [
     "metropolis-v4.js",
     "metropolis-r5.js",
