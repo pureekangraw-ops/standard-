@@ -4,71 +4,55 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), "utf8");
 
-test("root cutover keeps GO Hub at slash and NormalPocket behind compatibility", () => {
-  for (const file of ["normalpocket.html", "normalpocket-root-compat.js", "go-hub-root-route.js"]) {
-    assert.equal(fs.existsSync(path.join(root, file)), true, `${file} must exist`);
-  }
-
+test("hard cutover keeps GO Hub at slash with no compatibility route", () => {
   const rootHtml = read("index.html");
-  for (const required of ["go-hub.webmanifest", "go-hub-shell.css", "normalpocket-root-compat.js", "go-hub-shell.js"]) {
+  for (const required of ["go-hub.webmanifest", "go-hub-shell.css", "go-hub-sw-bootstrap.js", "go-hub-shell.js"]) {
     assert.match(rootHtml, new RegExp(required.replaceAll(".", "\\.")));
   }
-  for (const legacyRuntime of ["normalpocket-bootstrap.js", "metropolis-r5.js", "app.js", "manifest.webmanifest"]) {
-    assert.equal(rootHtml.includes(legacyRuntime), false, `root must not boot ${legacyRuntime}`);
+  for (const retiredRuntime of [
+    "normalpocket-root-compat.js",
+    "normalpocket-bootstrap.js",
+    "metropolis-r5.js",
+    "app.js",
+    "manifest.webmanifest",
+    "sw-bootstrap.js",
+  ]) {
+    assert.equal(rootHtml.includes(retiredRuntime), false, `root must not boot ${retiredRuntime}`);
+  }
+});
+
+test("legacy compatibility source may remain but is unreachable and unpublished", () => {
+  for (const legacyFile of ["normalpocket.html", "normalpocket-root-compat.js", "go-hub-root-route.js", "sw.js"]) {
+    assert.equal(fs.existsSync(path.join(root, legacyFile)), true, `${legacyFile} may remain as source reference`);
   }
 
-  const legacyHtml = read("normalpocket.html");
-  assert.match(legacyHtml, /NormalPocket/);
-  assert.match(legacyHtml, /normalpocket-bootstrap\.js/);
-  assert.match(legacyHtml, /metropolis-r5\.js/);
-});
-
-test("root route decision fails closed for clients whose legacy state cannot be inspected", async () => {
-  const url = pathToFileURL(path.join(root, "go-hub-root-route.js")).href;
-  const { chooseRootDestination } = await import(`${url}?t=${Date.now()}`);
-
-  assert.equal(chooseRootDestination({ canInspectLegacy: false, legacyData: false }), "LEGACY");
-  assert.equal(chooseRootDestination({ canInspectLegacy: true, legacyData: true }), "LEGACY");
-  assert.equal(chooseRootDestination({ canInspectLegacy: true, legacyData: false }), "HUB");
-  assert.equal(chooseRootDestination({ canInspectLegacy: false, legacyData: true, forceHub: true }), "HUB");
-  assert.equal(chooseRootDestination({ canInspectLegacy: true, legacyData: false, forceLegacy: true }), "LEGACY");
-});
-
-test("NormalPocket root compatibility adapter detects the retained database without owning Hub core", () => {
-  const source = read("normalpocket-root-compat.js");
-  assert.match(source, /go-hub-root-route\.js/);
-  assert.match(source, /indexedDB/);
-  assert.match(source, /databases/);
-  assert.match(source, /ygph-standard-secure/);
-  assert.match(source, /normalpocket\.html/);
-  assert.doesNotMatch(source, /createHubRuntime/);
-  assert.doesNotMatch(source, /go-hub-foundation\.js/);
-});
-
-test("real-device cutover gate binds fresh, legacy, and offline-legacy scenarios", async () => {
-  const url = pathToFileURL(path.join(root, "go-hub-root-route.js")).href;
-  const { chooseRootDestination } = await import(`${url}?device-gate=${Date.now()}`);
-  const sw = require("../sw.js");
   const release = JSON.parse(read("RELEASE_MANIFEST.json"));
+  const published = release.productionFiles.map(item => item.path);
+  for (const legacyFile of ["normalpocket.html", "normalpocket-root-compat.js", "go-hub-root-route.js", "sw.js"]) {
+    assert.equal(published.includes(legacyFile), false, `${legacyFile} must not be active publication`);
+  }
+  assert.equal(Object.hasOwn(release, "compatibility"), false);
+});
 
-  assert.equal(chooseRootDestination({ canInspectLegacy: true, legacyData: false }), "HUB", "fresh inspected client must be eligible for GO Hub");
-  assert.equal(chooseRootDestination({ canInspectLegacy: true, legacyData: true }), "LEGACY", "legacy data must route to NormalPocket");
-  assert.equal(chooseRootDestination({ canInspectLegacy: false, legacyData: false }), "LEGACY", "uninspectable client must fail closed");
-  assert.equal(release.compatibility.normalPocket.database.name, "ygph-standard-secure");
-  assert.match(sw.CACHE_GENERATION, /go-hub-root-cutover/);
-  assert.equal(sw.shouldAutoActivateCurrentGeneration(), false, "cutover cache must wait for explicit activation");
-  assert.equal(sw.APP_SHELL.includes("normalpocket.html"), true, "compatibility route must be cached for offline legacy use");
-  assert.deepEqual(sw.offlineLookupKeys({ mode: "navigate", url: "https://device.test/normalpocket.html" }), ["normalpocket.html"]);
+test("real-device release gate is GO Hub online and offline only", () => {
+  const release = JSON.parse(read("RELEASE_MANIFEST.json"));
+  const sw = read("go-hub-sw.js");
 
-  const runbookPath = path.join(root, "docs", "go-hub", "real-device-cutover-verification.md");
-  assert.equal(fs.existsSync(runbookPath), true, "real-device cutover runbook must exist before release review");
-  const runbook = fs.readFileSync(runbookPath, "utf8");
-  for (const marker of ["Fresh client", "Legacy client", "Offline legacy client", "STOP conditions", "CI GREEN is necessary but not sufficient", "Do not merge or deploy"]) {
-    assert.match(runbook, new RegExp(marker, "i"), `runbook must contain ${marker}`);
+  assert.equal(release.serviceWorker.file, "go-hub-sw.js");
+  assert.equal(release.serviceWorker.autoActivate, true);
+  assert.match(sw, /\.\/index\.html/);
+  assert.match(sw, /cache\.match\(["']\.\/index\.html["']\)/);
+  assert.match(sw, /skipWaiting/);
+  assert.match(sw, /clients\.claim/);
+
+  const specPath = path.join(root, "docs", "superpowers", "specs", "2026-09-14-go-hub-hard-cutover-design.md");
+  assert.equal(fs.existsSync(specPath), true, "hard-cutover design must define the owner gate");
+  const spec = fs.readFileSync(specPath, "utf8");
+  for (const marker of ["Online `/` opens GO Hub", "Disable network", "NormalPocket online/offline behavior is not evaluated", "Do not merge", "Do not deploy"]) {
+    assert.match(spec, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), `spec must contain ${marker}`);
   }
 });
