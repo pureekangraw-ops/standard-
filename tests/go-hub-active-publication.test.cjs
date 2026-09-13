@@ -8,62 +8,57 @@ const assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 const release = JSON.parse(read("RELEASE_MANIFEST.json"));
-const sw = require("../sw.js");
 
-const rootHubFiles = [
+const activeHubFiles = [
   "index.html",
   "go-hub.html",
   "go-hub.webmanifest",
   "go-hub-shell.css",
   "go-hub-shell.js",
   "go-hub-runtime.js",
-  "go-hub-root-route.js",
-  "normalpocket-root-compat.js",
-  "normalpocket.html",
-  "manifest.webmanifest",
+  "go-hub-sw-bootstrap.js",
+  "go-hub-sw.js",
 ];
 
-test("active publication truth declares GO Hub root with NormalPocket compatibility", () => {
-  assert.equal(release.product, "GO Hub");
-  assert.equal(release.release, "go-hub-root-cutover-compat-1");
-  assert.equal(release.rootEntry, "index.html");
-  assert.equal(release.compatibility.normalPocket.release, "1.3.1-mobile-polish");
-  assert.equal(release.compatibility.normalPocket.route, "normalpocket.html");
-  assert.equal(release.compatibility.normalPocket.workerName, "normalpocket");
-  assert.equal(release.compatibility.normalPocket.database.name, "ygph-standard-secure");
-  assert.equal(release.serviceWorker.mode, "compatibility-bridge");
-  assert.equal(release.serviceWorker.cachePrefix, "ygph-standard-app-");
-  assert.equal(release.serviceWorker.autoActivate, false);
+const retiredRuntimeNames = [
+  "normalpocket.html",
+  "normalpocket-root-compat.js",
+  "manifest.webmanifest",
+  "sw-bootstrap.js",
+  "sw.js",
+  "app.js",
+  "metropolis-r5.js",
+];
 
-  const files = new Set(release.productionFiles.map(item => item.path));
+test("active publication truth declares exclusive GO Hub ownership", () => {
+  assert.equal(release.product, "GO Hub");
+  assert.equal(release.release, "go-hub-hard-cutover-1");
+  assert.equal(release.rootEntry, "index.html");
+  assert.equal(Object.hasOwn(release, "compatibility"), false);
+  assert.equal(release.serviceWorker.file, "go-hub-sw.js");
+  assert.equal(release.serviceWorker.mode, "go-hub-exclusive");
+  assert.equal(release.serviceWorker.cachePrefix, "go-hub-app-");
+  assert.equal(release.serviceWorker.autoActivate, true);
+
+  const files = release.productionFiles.map(item => item.path).sort();
+  assert.deepEqual(files, [...activeHubFiles].sort());
+
   const allowlist = read(".assetsignore");
-  for (const file of rootHubFiles) {
-    assert.equal(files.has(file), true, `${file} must be in active publication truth`);
+  const sw = read("go-hub-sw.js");
+  for (const file of activeHubFiles) {
     assert.match(allowlist, new RegExp(`!/${file.replaceAll(".", "\\.")}`));
-    assert.equal(sw.APP_SHELL.includes(file), true, `${file} must be available in the compatibility cache`);
+    if (file !== "go-hub-sw.js") {
+      assert.match(sw, new RegExp(file.replaceAll(".", "\\.")), `${file} must be represented in the Hub shell/cache contract`);
+    }
+  }
+  for (const file of retiredRuntimeNames) {
+    assert.equal(files.includes(file), false, `${file} must stay outside active publication`);
   }
 });
 
-test("compatibility service worker routes NormalPocket navigation without falling through to Hub root", () => {
-  assert.match(sw.CACHE_GENERATION, /go-hub-root-cutover/);
-  assert.equal(sw.shouldAutoActivateCurrentGeneration(), false);
-  assert.deepEqual(
-    sw.offlineLookupKeys({ mode: "navigate", url: "https://example.test/normalpocket.html" }),
-    ["normalpocket.html"],
-  );
-  assert.deepEqual(
-    sw.offlineLookupKeys({ mode: "navigate", url: "https://example.test/" }),
-    ["index.html", "./"],
-  );
-  assert.deepEqual(
-    sw.offlineLookupKeys({ mode: "navigate", url: "https://example.test/go-hub.html" }),
-    ["go-hub.html", "index.html", "./"],
-  );
-});
-
-test("deploy syntax gate covers every new active root JavaScript entry", () => {
+test("deploy syntax gate covers every active GO Hub JavaScript entry", () => {
   const pkg = JSON.parse(read("package.json"));
-  for (const file of ["go-hub-shell.js", "go-hub-runtime.js", "go-hub-root-route.js", "normalpocket-root-compat.js"]) {
+  for (const file of ["go-hub-shell.js", "go-hub-runtime.js", "go-hub-sw-bootstrap.js", "go-hub-sw.js"]) {
     assert.match(pkg.scripts["check:syntax"], new RegExp(file.replaceAll(".", "\\.")), `${file} must be syntax checked`);
   }
 });
