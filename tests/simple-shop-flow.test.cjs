@@ -108,15 +108,16 @@ test("stock adjustment reasons stay small and general-purpose", () => {
   assert.deepEqual(flow.STOCK_ADJUST_REASONS, ["นับใหม่", "เสีย", "หาย", "ใช้เอง", "คืนสินค้า", "อื่นๆ"]);
 });
 
-test("active GO Hub publication retains the current NormalPocket simple-flow compatibility assets", () => {
+test("NormalPocket simple-flow remains source-only after GO Hub hard cutover", () => {
   const pkg = JSON.parse(read("package.json"));
   const release = JSON.parse(read("RELEASE_MANIFEST.json"));
-  const sw = require("../sw.js");
   assert.equal(pkg.version, "1.3.1");
   assert.equal(release.product, "GO Hub");
-  assert.equal(release.compatibility.normalPocket.release, "1.3.1-mobile-polish");
-  assert.equal(sw.RELEASE_ID, "v1.3.1-20260812-r6-mobile-polish");
+  assert.equal(Object.hasOwn(release, "compatibility"), false);
   for (const file of ["normalpocket-simple-flow.js", "normalpocket-simple-flow.css", "app-icon.svg", "normalpocket.html"]) {
-    assert.ok(release.productionFiles.some(item => item.path === file), `${file} must be published`);
+    assert.equal(release.productionFiles.some(item => item.path === file), false, `${file} must not be actively published`);
+    assert.equal(fs.existsSync(path.join(root, file)), true, `${file} may remain as source reference`);
   }
+  const sw = read("go-hub-sw.js");
+  assert.doesNotMatch(sw, /normalpocket/i);
 });
