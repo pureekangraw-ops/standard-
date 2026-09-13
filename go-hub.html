@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GO Hub</title>
+  <link rel="stylesheet" href="./go-hub-shell.css">
+</head>
+<body>
+  <main class="hub-shell" data-hub-shell>
+    <header class="hub-header">
+      <p class="hub-kicker">CONTROL SURFACE</p>
+      <h1>GO Hub</h1>
+      <p class="hub-status" data-hub-status>Starting neutral runtime…</p>
+    </header>
+    <section class="hub-panel" aria-labelledby="capabilities-title">
+      <h2 id="capabilities-title">Capabilities</h2>
+      <p data-hub-empty>No capabilities registered yet.</p>
+      <ul class="hub-capabilities" data-hub-capabilities></ul>
+    </section>
+  </main>
+  <script type="module" src="./go-hub-shell.js"></script>
+</body>
+</html>
