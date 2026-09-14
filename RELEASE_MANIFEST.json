@@ -8,7 +8,8 @@
     "dedicated GO Hub PWA identity",
     "dedicated GO Hub service worker",
     "offline GO Hub root startup",
-    "provider-neutral Code capability"
+    "provider-neutral Code capability",
+    "GitHub-backed Code workspace through trusted same-origin gateway"
   ],
   "serviceWorker": {
     "file": "go-hub-sw.js",
@@ -29,7 +30,7 @@
       "no executable ride references"
     ]
   },
-  "note": "GO Hub exclusively owns the active root and exposes Code as a provider-neutral capability. Repository authorization remains outside the browser client and must be supplied through a workspace adapter or trusted gateway.",
+  "note": "GO Hub exclusively owns the active root and exposes Code through a trusted same-origin workspace gateway. Repository credentials remain server-side and are never stored in the browser client.",
   "productionFiles": [
     { "path": "index.html" },
     { "path": "go-hub.html" },
@@ -38,6 +39,7 @@
     { "path": "go-hub-shell.js" },
     { "path": "go-hub-runtime.js" },
     { "path": "go-hub-code-module.js" },
+    { "path": "go-hub-github-workspace.js" },
     { "path": "go-hub-sw-bootstrap.js" },
     { "path": "go-hub-sw.js" }
   ]
