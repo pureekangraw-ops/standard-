@@ -37,6 +37,12 @@ function assertRef(value, label = "ref") {
   return ref;
 }
 
+function assertPositiveInteger(value, label) {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number <= 0) badRequest(`invalid ${label}`);
+  return number;
+}
+
 function encodePath(filePath) {
   return filePath.split("/").map(encodeURIComponent).join("/");
 }
@@ -227,6 +233,87 @@ async function compareRefs(fetchImpl, token, repository, base, head) {
   });
 }
 
+function pullRequestPayload(payload) {
+  return {
+    number: payload.number,
+    url: payload.html_url || null,
+    state: payload.state || null,
+    mergeable: payload.mergeable ?? null,
+    headBranch: payload.head?.ref || null,
+    headSha: payload.head?.sha || null,
+    baseBranch: payload.base?.ref || null,
+    baseSha: payload.base?.sha || null,
+  };
+}
+
+async function openPullRequest(fetchImpl, token, repository, branch, base, title, body) {
+  const owner = repository.split("/")[0];
+  const query = new URLSearchParams({ state: "open", head: `${owner}:${branch}`, base });
+  const listed = await githubRequest(
+    fetchImpl, token, `https://api.github.com/repos/${repository}/pulls?${query}`,
+  );
+  if (!listed.response.ok) return upstreamError(listed.response);
+  const existing = Array.isArray(listed.payload) ? listed.payload[0] : null;
+  const result = existing
+    ? await githubRequest(fetchImpl, token, `https://api.github.com/repos/${repository}/pulls/${existing.number}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title, body, base }),
+      })
+    : await githubRequest(fetchImpl, token, `https://api.github.com/repos/${repository}/pulls`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title, body, head: branch, base }),
+      });
+  if (!result.response.ok) return upstreamError(result.response);
+  return json(pullRequestPayload(result.payload), existing ? 200 : 201);
+}
+
+async function getPullRequest(fetchImpl, token, repository, number) {
+  const result = await githubRequest(
+    fetchImpl, token, `https://api.github.com/repos/${repository}/pulls/${number}`,
+  );
+  if (result.response.status === 404) return json({ code: "PULL_REQUEST_NOT_FOUND" }, 404);
+  if (!result.response.ok) return upstreamError(result.response);
+  return json(pullRequestPayload(result.payload));
+}
+
+async function getCI(fetchImpl, token, repository, sha) {
+  const [runsResult, checksResult] = await Promise.all([
+    githubRequest(fetchImpl, token, `https://api.github.com/repos/${repository}/actions/runs?head_sha=${encodeURIComponent(sha)}`),
+    githubRequest(fetchImpl, token, `https://api.github.com/repos/${repository}/commits/${encodeURIComponent(sha)}/check-runs`),
+  ]);
+  if (!runsResult.response.ok) return upstreamError(runsResult.response);
+  if (!checksResult.response.ok) return upstreamError(checksResult.response);
+  const runs = Array.isArray(runsResult.payload.workflow_runs)
+    ? runsResult.payload.workflow_runs
+        .filter(run => run.head_sha === sha)
+        .map(run => ({
+          id: run.id, name: run.name, status: run.status, conclusion: run.conclusion,
+          headSha: run.head_sha, url: run.html_url || null,
+        }))
+    : [];
+  const checks = Array.isArray(checksResult.payload.check_runs)
+    ? checksResult.payload.check_runs
+        .filter(check => check.head_sha === sha)
+        .map(check => ({
+          id: check.id, name: check.name, status: check.status, conclusion: check.conclusion,
+          headSha: check.head_sha, url: check.html_url || null,
+        }))
+    : [];
+  return json({ headSha: sha, runs, checks });
+}
+
+async function rerunFailed(fetchImpl, token, repository, runId) {
+  const result = await githubRequest(
+    fetchImpl, token,
+    `https://api.github.com/repos/${repository}/actions/runs/${runId}/rerun-failed-jobs`,
+    { method: "POST" },
+  );
+  if (!result.response.ok) return upstreamError(result.response);
+  return json({ ok: true, runId }, 202);
+}
+
 export function createWorkerHandler({ fetchImpl = fetch } = {}) {
   return {
     async fetch(request, env) {
@@ -283,6 +370,41 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
             body.expectedSha,
             body.content,
             request.method,
+          );
+        }
+        if (request.method === "POST" && url.pathname === `${API_ROOT}/pull-request`) {
+          const body = await request.json().catch(() => null);
+          if (!body) return json({ code: "INVALID_JSON" }, 400);
+          return openPullRequest(
+            fetchImpl, env.GITHUB_TOKEN,
+            assertRepository(body.repository),
+            assertRef(body.branch, "branch"),
+            assertRef(body.base, "base"),
+            String(body.title || "").trim() || badRequest("title is required"),
+            String(body.body || ""),
+          );
+        }
+        if (request.method === "GET" && url.pathname === `${API_ROOT}/pull-request`) {
+          return getPullRequest(
+            fetchImpl, env.GITHUB_TOKEN,
+            assertRepository(url.searchParams.get("repository")),
+            assertPositiveInteger(url.searchParams.get("number"), "pull request number"),
+          );
+        }
+        if (request.method === "GET" && url.pathname === `${API_ROOT}/ci`) {
+          return getCI(
+            fetchImpl, env.GITHUB_TOKEN,
+            assertRepository(url.searchParams.get("repository")),
+            assertRef(url.searchParams.get("sha"), "sha"),
+          );
+        }
+        if (request.method === "POST" && url.pathname === `${API_ROOT}/ci/rerun-failed`) {
+          const body = await request.json().catch(() => null);
+          if (!body) return json({ code: "INVALID_JSON" }, 400);
+          return rerunFailed(
+            fetchImpl, env.GITHUB_TOKEN,
+            assertRepository(body.repository),
+            assertPositiveInteger(body.runId, "run id"),
           );
         }
         if (request.method === "GET" && url.pathname === `${API_ROOT}/compare`) {
