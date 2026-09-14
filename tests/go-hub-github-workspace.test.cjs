@@ -13,13 +13,14 @@ test("GitHub workspace adapter lists, reads, and writes through a same-origin ga
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url, init });
-    if (url.endsWith("/files")) return new Response(JSON.stringify({ files: ["a.js"] }), { status: 200 });
-    if (url.includes("/file?")) return new Response(JSON.stringify({ content: "hello" }), { status: 200 });
+    const parsed = new URL(url, "https://hub.test");
+    if (parsed.pathname.endsWith("/files")) return new Response(JSON.stringify({ files: ["a.js"] }), { status: 200 });
+    if (parsed.pathname.endsWith("/file") && (init.method || "GET") === "GET") return new Response(JSON.stringify({ content: "hello" }), { status: 200 });
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   };
 
   const { createGitHubWorkspace } = await load();
-  const workspace = createGitHubWorkspace({ gatewayBase: "/api/github-workspace", repository: "owner/repo", fetchImpl });
+  const workspace = createGitHubWorkspace({ gatewayBase: "/hub/api/github-workspace", repository: "owner/repo", fetchImpl });
 
   assert.deepEqual(await workspace.listFiles(), ["a.js"]);
   assert.equal(await workspace.readText("a.js"), "hello");
@@ -31,7 +32,7 @@ test("GitHub workspace adapter rejects unsafe repository paths before network ac
   let called = false;
   const fetchImpl = async () => { called = true; throw new Error("unexpected"); };
   const { createGitHubWorkspace } = await load();
-  const workspace = createGitHubWorkspace({ gatewayBase: "/api/github-workspace", repository: "owner/repo", fetchImpl });
+  const workspace = createGitHubWorkspace({ gatewayBase: "/hub/api/github-workspace", repository: "owner/repo", fetchImpl });
 
   await assert.rejects(() => workspace.readText("../secret"), /unsafe path/i);
   assert.equal(called, false);
