@@ -52,3 +52,22 @@ test("GO Hub shell restores the durable Code task before capability registration
   assert.match(source, /await session\.load\(\)/);
   assert.match(source, /createCodeCapability\(\{ workspace, task \}\)/);
 });
+
+test("GO Hub shell mounts the six truths from the restored Code task projection", () => {
+  const source = read("go-hub-shell.js");
+  const goHubHtml = read("go-hub.html");
+  const indexHtml = read("index.html");
+  assert.match(source, /createWorkbenchView/);
+  assert.match(source, /renderWorkbench\(task\.snapshot\(\)\)/);
+  [
+    "data-workbench-mission",
+    "data-workbench-blueprint",
+    "data-workbench-piece",
+    "data-workbench-status",
+    "data-workbench-evidence",
+    "data-workbench-next",
+  ].forEach((selector) => {
+    assert.match(goHubHtml, new RegExp(selector));
+    assert.match(indexHtml, new RegExp(selector));
+  });
+});
