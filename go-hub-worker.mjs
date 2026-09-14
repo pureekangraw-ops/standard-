@@ -181,10 +181,11 @@ async function createBranch(fetchImpl, token, repository, name, fromSha) {
 async function mutateFile(fetchImpl, token, repository, filePath, branch, expectedSha, content, method) {
   const policy = await assertNonDefaultBranch(fetchImpl, token, repository, branch);
   if (policy.error) return policy.error;
+  const safeExpectedSha = assertRef(expectedSha, "sha");
   const body = {
     message: `GO Hub: ${method === "DELETE" ? "delete" : "update"} ${filePath}`,
     branch,
-    sha: expectedSha,
+    sha: safeExpectedSha,
   };
   if (method === "PUT") body.content = encodeUtf8Base64(content);
   const result = await githubRequest(
@@ -279,7 +280,7 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
             assertRepository(body.repository),
             assertSafePath(body.path),
             assertRef(body.branch, "branch"),
-            assertRef(body.expectedSha, "sha"),
+            body.expectedSha,
             body.content,
             request.method,
           );
