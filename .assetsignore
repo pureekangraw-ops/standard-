@@ -13,6 +13,9 @@ node_modules/**
 !/go-hub-runtime.js
 !/go-hub-code-module.js
 !/go-hub-code-task.js
+!/go-hub-evidence-ledger.js
+!/go-hub-piece-qc.js
+!/go-hub-ready-gate.js
 !/go-hub-workbench-model.js
 !/go-hub-github-workspace.js
 !/go-hub-persistence.js
