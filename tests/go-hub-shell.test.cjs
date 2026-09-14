@@ -42,3 +42,13 @@ test("GO Hub shell bootstrap uses the neutral runtime registry", () => {
   assert.doesNotMatch(source, /normalpocket/i);
   assert.doesNotMatch(source, /metropolis-r5/i);
 });
+
+
+test("GO Hub shell restores the durable Code task before capability registration", () => {
+  const source = read("go-hub-shell.js");
+  assert.match(source, /go-hub-persistence\.js/);
+  assert.match(source, /createLocalStorageKeyValueStore/);
+  assert.match(source, /createCodeTaskSession/);
+  assert.match(source, /await session\.load\(\)/);
+  assert.match(source, /createCodeCapability\(\{ workspace, task \}\)/);
+});
