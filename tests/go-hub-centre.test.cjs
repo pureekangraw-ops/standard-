@@ -117,3 +117,60 @@ test("return receiver rejects mismatched work or checkpoint identity", async () 
     /Checkpoint ID/,
   );
 });
+
+
+test("all GO work leaves and returns through the same Centre passage", async () => {
+  const { createCentrePassage, createTestDestinationAdapter, CENTRE_STATES } = await load();
+  const centre = createCentrePassage();
+
+  const arrived = centre.enter({ checkpointId: "CENTRE-001", workId: "WORK-A" });
+  const reviewed = centre.review(arrived, {
+    task: "Construct through Factory",
+    requestedResult: "Verified construction result",
+    authority: "BIG",
+  });
+
+  assert.throws(
+    () => centre.leave(reviewed, { destination: "destination://factory" }),
+    /fitted Lens/,
+    "GO cannot bypass the Centre fitting step",
+  );
+
+  const fitted = centre.fit(reviewed, {
+    lensId: "LENS-FIT",
+    lensReference: "lens://fit",
+    fittedView: "Build only the requested result",
+  });
+  const outbound = centre.leave(fitted, { destination: "destination://factory" });
+  const factory = createTestDestinationAdapter(() => ({ result: "verified" }));
+  const returned = centre.return(outbound.work, factory.accept(outbound.envelope));
+
+  assert.equal(returned.status, CENTRE_STATES.RETURNED);
+  assert.equal(returned.checkpointId, arrived.checkpointId);
+  assert.equal(returned.workId, arrived.workId);
+  assert.equal(returned.handoff.returnAddress, arrived.checkpointId);
+});
+
+test("the Centre passage rejects a second entry while work is already in flight", async () => {
+  const { createCentrePassage } = await load();
+  const centre = createCentrePassage();
+  const reviewed = centre.review(
+    centre.enter({ checkpointId: "CENTRE-001", workId: "WORK-A" }),
+    { task: "Task A", requestedResult: "Result A", authority: "BIG" },
+  );
+  const fitted = centre.fit(reviewed, {
+    lensId: "LENS-1",
+    lensReference: "lens://1",
+    fittedView: "View A",
+  });
+  const outbound = centre.leave(fitted, { destination: "destination://factory" });
+
+  assert.throws(
+    () => centre.review(outbound.work, {
+      task: "Replacement task",
+      requestedResult: "Replacement result",
+      authority: "BIG",
+    }),
+    /ARRIVED/,
+  );
+});

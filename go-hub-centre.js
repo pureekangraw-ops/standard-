@@ -131,3 +131,29 @@ export function createTestDestinationAdapter(handler = envelope => ({ received: 
     },
   });
 }
+
+
+export function createCentrePassage() {
+  return freeze({
+    enter(input = {}) {
+      return createCheckpoint(input);
+    },
+
+    review(work, input = {}) {
+      if (work?.status === CENTRE_STATES.WAIT) return resumeIntake(work, input);
+      return intakeTask(work, input);
+    },
+
+    fit(work, input = {}) {
+      return fitLens(work, input);
+    },
+
+    leave(work, input = {}) {
+      return createHandoff(work, input);
+    },
+
+    return(work, returned = {}) {
+      return receiveReturn(work, returned);
+    },
+  });
+}
