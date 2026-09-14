@@ -25,3 +25,27 @@ test("GO Hub shell registers the Code capability", () => {
   assert.match(shell, /go-hub-code-module\.js/);
   assert.match(shell, /runtime\.register\(["']Code["']/);
 });
+
+
+test("Code capability exposes machine-usable workstation lifecycle state", async () => {
+  const { pathToFileURL } = require("node:url");
+  const { createCodeCapability } = await import(pathToFileURL(codeModule).href);
+  const workspace = {
+    listFiles() {}, readText() {}, writeText() {}, createBranch() {}, compare() {},
+  };
+  const task = {
+    snapshot() {
+      return {
+        id: "task-19", state: "CI_RUNNING", nextAction: "check-ci", blocker: null,
+        repository: "pureekangraw-ops/standard-", baseBranch: "main", baseSha: "base-1",
+        workBranch: "feature-a", headSha: "head-1", pullRequest: { number: 19 }, ci: { conclusion: null },
+      };
+    },
+  };
+  const capability = createCodeCapability({ workspace, task });
+  assert.equal(capability.status, "ready");
+  assert.equal(capability.task.state, "CI_RUNNING");
+  assert.equal(capability.nextAction, "check-ci");
+  assert.equal(capability.headSha, "head-1");
+  assert.equal(capability.pullRequest.number, 19);
+});
