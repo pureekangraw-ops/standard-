@@ -11,7 +11,7 @@ test("GO Hub shell wires a GitHub workspace into Code", () => {
   assert.match(source, /go-hub-github-workspace\.js/);
   assert.match(source, /gatewayBase:\s*["']\/hub\/api\/github-workspace["']/);
   assert.match(source, /repository:\s*["']pureekangraw-ops\/standard-["']/);
-  assert.match(source, /createCodeCapability\(\{\s*workspace\s*\}\)/);
+  assert.match(source, /createCodeCapability\\(\\{\\s*workspace,\\s*task\\s*\\}\\)/);
 });
 
 test("active publication includes the workspace adapter", () => {
