@@ -1,3 +1,5 @@
+import { createCodeTask, createCodeTaskFromSnapshot } from "./go-hub-code-task.js";
+
 function hasMethod(target, name) {
   return Boolean(target && typeof target[name] === "function");
 }
@@ -38,5 +40,26 @@ export function createCodeCapability({ workspace = null, task = null } = {}) {
     ci: snapshot?.ci || null,
     deploy: snapshot?.deploy || null,
     verification: snapshot?.verification || null,
+  });
+}
+
+
+export function createCodeTaskSession({ persistence, initial = {} } = {}) {
+  if (!persistence || typeof persistence.loadState !== "function" ||
+      typeof persistence.commitState !== "function") {
+    throw new TypeError("task persistence port is required");
+  }
+  return Object.freeze({
+    async load() {
+      const stored = await persistence.loadState();
+      return stored ? createCodeTaskFromSnapshot(stored) : createCodeTask(initial);
+    },
+    async save(task) {
+      const proposed = typeof task?.snapshot === "function" ? task.snapshot() : structuredClone(task);
+      return persistence.commitState({
+        proposed,
+        command: { type: "SAVE_CODE_TASK" },
+      });
+    },
   });
 }
