@@ -9,13 +9,15 @@
     "dedicated GO Hub service worker",
     "offline GO Hub root startup",
     "provider-neutral Code capability",
-    "GitHub-backed Code workspace through trusted same-origin gateway"
+    "GitHub-backed Code workspace through trusted same-origin gateway",
+    "durable CENTRE checkpoint before destination access",
+    "single CENTRE entry and return passage for GO"
   ],
   "serviceWorker": {
     "file": "go-hub-sw.js",
     "mode": "go-hub-exclusive",
     "cachePrefix": "go-hub-app-",
-    "cacheGeneration": "v2-hard-cutover",
+    "cacheGeneration": "v6-centre-live-checkpoint",
     "autoActivate": true
   },
   "validation": {
@@ -27,33 +29,83 @@
       "active publication parity",
       "syntax",
       "utf8",
-      "no executable ride references"
+      "no executable ride references",
+      "CENTRE checkpoint identity and destination gate"
     ]
   },
-  "note": "GO Hub exclusively owns the active root and exposes Code through a trusted same-origin workspace gateway. Repository credentials remain server-side and are never stored in the browser client.",
+  "note": "GO Hub owns the active root. GO must review and fit at a durable CENTRE checkpoint before Code/Factory capability access, then return through the same checkpoint. Repository credentials remain server-side.",
   "productionFiles": [
-    { "path": "index.html" },
-    { "path": "go-hub.html" },
-    { "path": "go-hub.webmanifest" },
-    { "path": "go-hub-shell.css" },
-    { "path": "go-hub-shell.js" },
-    { "path": "go-hub-runtime.js" },
-    { "path": "go-hub-code-module.js" },
-    { "path": "go-hub-code-task.js" },
-    { "path": "go-hub-evidence-ledger.js" },
-    { "path": "go-hub-piece-qc.js" },
-    { "path": "go-hub-ready-gate.js" },
-    { "path": "go-hub-assembly-bench.js" },
-    { "path": "go-hub-assembly-qc.js" },
-    { "path": "go-hub-artifact.js" },
-    { "path": "go-hub-product-qc.js" },
-    { "path": "go-hub-verification-scanner.js" },
-    { "path": "go-hub-housekeeper.js" },
-    { "path": "go-hub-learning-recorder.js" },
-    { "path": "go-hub-workbench-model.js" },
-    { "path": "go-hub-github-workspace.js" },
-    { "path": "go-hub-persistence.js" },
-    { "path": "go-hub-sw-bootstrap.js" },
-    { "path": "go-hub-sw.js" }
+    {
+      "path": "index.html"
+    },
+    {
+      "path": "go-hub.html"
+    },
+    {
+      "path": "go-hub.webmanifest"
+    },
+    {
+      "path": "go-hub-shell.css"
+    },
+    {
+      "path": "go-hub-shell.js"
+    },
+    {
+      "path": "go-hub-runtime.js"
+    },
+    {
+      "path": "go-hub-centre.js"
+    },
+    {
+      "path": "go-hub-code-module.js"
+    },
+    {
+      "path": "go-hub-code-task.js"
+    },
+    {
+      "path": "go-hub-evidence-ledger.js"
+    },
+    {
+      "path": "go-hub-piece-qc.js"
+    },
+    {
+      "path": "go-hub-ready-gate.js"
+    },
+    {
+      "path": "go-hub-assembly-bench.js"
+    },
+    {
+      "path": "go-hub-assembly-qc.js"
+    },
+    {
+      "path": "go-hub-artifact.js"
+    },
+    {
+      "path": "go-hub-product-qc.js"
+    },
+    {
+      "path": "go-hub-verification-scanner.js"
+    },
+    {
+      "path": "go-hub-housekeeper.js"
+    },
+    {
+      "path": "go-hub-learning-recorder.js"
+    },
+    {
+      "path": "go-hub-workbench-model.js"
+    },
+    {
+      "path": "go-hub-github-workspace.js"
+    },
+    {
+      "path": "go-hub-persistence.js"
+    },
+    {
+      "path": "go-hub-sw-bootstrap.js"
+    },
+    {
+      "path": "go-hub-sw.js"
+    }
   ]
 }
