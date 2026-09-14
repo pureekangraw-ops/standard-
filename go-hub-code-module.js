@@ -53,6 +53,11 @@ export function createCodeCapability({ workspace = null, task = null } = {}) {
     ci: snapshot?.ci || null,
     deploy: snapshot?.deployment || null,
     verification: snapshot?.verification || null,
+    factoryStage: snapshot?.factoryStage || null,
+    workPackage: snapshot?.workPackage || null,
+    piece: snapshot?.piece || null,
+    pieceQc: snapshot?.pieceQc || null,
+    gateHandoff: snapshot?.gateHandoff || null,
   });
 }
 
