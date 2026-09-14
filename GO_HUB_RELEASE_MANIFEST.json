@@ -7,6 +7,7 @@
     { "path": "go-hub.html" },
     { "path": "go-hub-shell.css" },
     { "path": "go-hub-shell.js" },
+    { "path": "go-hub-workbench-model.js" },
     { "path": "go-hub-runtime.js" },
     { "path": "go-hub-foundation.js" },
     { "path": "go-hub-utils.js" },
