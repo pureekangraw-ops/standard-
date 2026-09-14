@@ -32,6 +32,8 @@ test("Code capability exposes machine-usable workstation lifecycle state", async
   const { createCodeCapability } = await import(pathToFileURL(codeModule).href);
   const workspace = {
     listFiles() {}, readText() {}, writeText() {}, createBranch() {}, compare() {},
+    openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
+    mergePullRequest() {}, getWorkflowRuns() {},
   };
   const task = {
     snapshot() {
@@ -80,6 +82,8 @@ test("Code capability projects deployment evidence from the task snapshot", asyn
   const { createCodeCapability } = await import(pathToFileURL(codeModule).href);
   const workspace = {
     listFiles() {}, readText() {}, writeText() {}, createBranch() {}, compare() {},
+    openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
+    mergePullRequest() {}, getWorkflowRuns() {},
   };
   const deployment = { status: "success", runId: 34809615501 };
   const task = {
@@ -94,4 +98,31 @@ test("Code capability projects deployment evidence from the task snapshot", asyn
   };
   const capability = createCodeCapability({ workspace, task });
   assert.deepEqual(capability.deploy, deployment);
+});
+
+test("Code capability does not claim full readiness when PR, CI, merge, or deploy routes are missing", async () => {
+  const { pathToFileURL } = require("node:url");
+  const { createCodeCapability } = await import(`${pathToFileURL(codeModule).href}?readiness=${Date.now()}`);
+  const partialWorkspace = {
+    listFiles() {}, readText() {}, writeText() {}, createBranch() {}, compare() {},
+  };
+  const partial = createCodeCapability({ workspace: partialWorkspace });
+  assert.notEqual(partial.status, "ready");
+  assert.equal(partial.canDiff, true);
+  assert.equal(partial.canPullRequest, false);
+  assert.equal(partial.canCI, false);
+  assert.equal(partial.canMerge, false);
+  assert.equal(partial.canObserveDeploy, false);
+
+  const fullWorkspace = {
+    ...partialWorkspace,
+    openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
+    mergePullRequest() {}, getWorkflowRuns() {},
+  };
+  const full = createCodeCapability({ workspace: fullWorkspace });
+  assert.equal(full.status, "ready");
+  assert.equal(full.canPullRequest, true);
+  assert.equal(full.canCI, true);
+  assert.equal(full.canMerge, true);
+  assert.equal(full.canObserveDeploy, true);
 });
