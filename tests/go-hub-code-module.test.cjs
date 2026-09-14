@@ -100,6 +100,20 @@ test("Code capability projects deployment evidence from the task snapshot", asyn
   assert.deepEqual(capability.deploy, deployment);
 });
 
+test("Code capability projects Engine 2 production truth from the same task snapshot", async () => {
+  const { pathToFileURL } = require("node:url");
+  const { createCodeCapability } = await import(`${pathToFileURL(codeModule).href}?engine2=${Date.now()}`);
+  const production = {
+    factoryStage: "READY_GATE",
+    workPackage: { id: "wp-1", blueprintRef: "spec.md" },
+    piece: { id: "piece-1", headSha: "head-1" },
+    pieceQc: { status: "pass", checkedHeadSha: "head-1", evidenceIds: ["ev-1"] },
+    gateHandoff: { status: "READY_FOR_ASSEMBLY", headSha: "head-1" },
+  };
+  const capability = createCodeCapability({ task: { snapshot: () => ({ ...production }) } });
+  for (const [key, value] of Object.entries(production)) assert.deepEqual(capability[key], value);
+});
+
 test("Code capability does not claim full readiness when PR, CI, merge, or deploy routes are missing", async () => {
   const { pathToFileURL } = require("node:url");
   const { createCodeCapability } = await import(`${pathToFileURL(codeModule).href}?readiness=${Date.now()}`);
