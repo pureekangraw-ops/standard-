@@ -1,437 +1,505 @@
-# GO Hub Code Workstation — Development Factory Design
+# GO Hub Code Workstation — Factory Blueprint
 
-Date: 2026-09-14
-Status: Design — awaiting final written-spec review
-Base repository truth when redesign began: `main` at `bbd43e1c5bfd0217efb335353a684e6a8581f854`
+วันที่: 2026-09-14  
+สถานะ: Design — รอการทบทวนเอกสารฉบับเขียนครั้งสุดท้าย  
+Base repository truth ตอนเริ่มออกแบบใหม่: `main` ที่ `bbd43e1c5bfd0217efb335353a684e6a8581f854`
 
 ## 1. North Star
 
-Code Workstation is GO's development desk for building applications for internal use or sale.
+Code Workstation คือโต๊ะพัฒนาแอปของ GO สำหรับสร้างของใช้เองหรือสร้างเป็นสินค้าขายได้
 
-The product goal is deliberately simple: any GO entering the workstation should be able to understand the job, continue it, inspect whether the result matches the design, and leave useful learning behind without reconstructing the project from chat history.
+เป้าหมายของผลิตภัณฑ์เรียบง่ายมาก: GO ตัวใดก็ตามที่เข้ามาใน Workstation ต้องเข้าใจงานปัจจุบันได้เร็ว ทำต่อได้ ตรวจได้ว่าสิ่งที่สร้างยังตรงกับแบบ และทิ้งบทเรียนที่ใช้ซ้ำได้โดยไม่ต้องย้อนประกอบบริบทจากแชต
 
-The workstation exists to correct four recurring failures:
+ปัญหาหลักที่ระบบนี้ต้องแก้มีสี่ข้อ:
 
-1. implementation drifts from the intended specification;
-2. the development process is inconvenient to operate;
-3. progress and responsibility are difficult to trace;
-4. lessons discovered during real work disappear instead of improving the next job.
+1. Implementation หลุดจากเจตนาและแบบที่ตกลงไว้
+2. Workflow ทำงานไม่สะดวก
+3. ติดตามความคืบหน้า สถานะ และหลักฐานยาก
+4. บทเรียนจากงานจริงหายไป ไม่ถูกนำกลับมาใช้
 
-The internal factory may be sophisticated. The operating surface must feel simple.
+ประสบการณ์เป้าหมายคือ:
 
-Target experience:
+`เข้ามาง่าย -> ทำงานง่าย -> ตรวจง่าย -> ตามงานง่าย -> กลับมาต่อง่าย -> ยิ่งทำยิ่งเรียนรู้`
 
-`Open workstation -> understand mission -> see blueprint -> see current piece -> continue work -> inspect evidence -> know next action`
+## 2. โมเดลหลัก: โต๊ะอยู่ด้านบน โรงงานอยู่ด้านล่าง
 
-## 2. Governing model: desk above, factory below
+Workbench ต้องแสดง Truth ชุดเดียวกับ Factory โดยไม่สร้าง Truth แยกอีกชุด
 
-The workstation has two views of the same truth.
+### Workbench View
 
-### Workbench view
+พื้นผิวหลักต้องเห็นอย่างต่อเนื่อง:
 
-The operator-facing desk continuously exposes:
+`Mission | Blueprint | Current Piece | Status | Evidence | Next`
 
-- Mission — what outcome is being built and why;
-- Blueprint — the approved/current design reference;
-- Current Piece — the module, bug, or bounded change currently in production;
-- Status — where that piece is in the factory;
-- Evidence — what proves the current claim;
-- Next — the next valid action or blocker.
+- **Mission** — กำลังสร้างอะไร และผลลัพธ์ที่ต้องการคืออะไร
+- **Blueprint** — แบบปัจจุบันที่ใช้ตัดสินความถูกต้อง
+- **Current Piece** — ชิ้นงานที่ Production กำลังทำ
+- **Status** — ตอนนี้อยู่สถานีไหน
+- **Evidence** — หลักฐานที่รองรับคำกล่าวว่า “ผ่าน” หรือ “พร้อม”
+- **Next** — การกระทำที่ถูกต้องถัดไป หรือ blocker
 
-This is not a decorative dashboard. It is the minimum context another GO needs to enter the workstation and continue safely.
+Workbench ไม่ใช่ dashboard สวย ๆ แต่คือบริบทขั้นต่ำที่ GO ตัวใหม่ต้องใช้เพื่อเข้ามาทำงานต่ออย่างปลอดภัย
 
-### Factory view
+### Factory View
 
-Under the desk, work moves through a production line:
+สายพานหลักคือ:
 
-`Design -> Production + Piece QC -> Ready Gate -> Assembly + Assembly QC -> Build -> Product QC -> Package / Run`
+`Design -> Production -> Piece QC -> Ready Gate -> Assembly -> Assembly QC -> Build -> Product QC -> Package / Run`
 
-The stages are responsibility boundaries. A stage must finish its own responsibility before it may hand work forward.
+แต่ละจุดคือ **ขอบเขตความรับผิดชอบ** ไม่ใช่ชื่อ state เฉย ๆ สถานีหนึ่งต้องทำหน้าที่ของตัวเองให้ครบก่อนส่งของต่อ
 
-## 3. The blueprint stays mounted
+## 3. กฎกลาง: Blueprint stays mounted
 
-The central anti-drift rule is:
+กฎกันหลุดแบบคือ:
 
 **Blueprint stays mounted.**
 
-Once work enters production, the design reference remains visible and addressable throughout the life of the piece. Production does not read the design once and then operate from memory.
+เมื่อเข้า Production แล้ว GO ต้องยังเห็นและอ้างอิง Blueprint ได้ตลอด ไม่อ่านครั้งเดียวแล้วทำจากความจำ
 
-At any point GO must be able to compare:
+ระหว่างทำงานต้องเปรียบเทียบได้เสมอ:
 
 `Blueprint | Current implementation | Latest evidence`
 
-Production may choose implementation mechanisms freely, but it may not silently rewrite the blueprint to make an implementation appear correct.
+Production มีอิสระเลือกวิธีสร้าง แต่ไม่มีสิทธิ์แก้ Blueprint เงียบ ๆ เพื่อให้ Implementation ดูเหมือนถูก
 
-If reality proves that the design itself must materially change, that is a design conflict. The work returns to Design with evidence. It does not mutate product intent invisibly inside Production.
+ถ้าความจริงพิสูจน์ว่า Blueprint ต้องเปลี่ยนอย่างมีนัยสำคัญ งานต้องกลับ Design พร้อม Evidence
 
-## 4. Design — define what is to be built
+## 4. หลักการออกแบบโรงงาน
 
-Design converts a mission into a blueprint that Production can execute without repeatedly asking the Owner how to implement it.
+ลำดับการตัดสินใจต้องเป็น:
 
-Design answers:
+**Responsibility -> Lens -> Tool -> Infrastructure**
 
-- what is being built;
-- why it exists;
-- required behavior and user-visible outcome;
-- important interfaces and constraints;
-- what it must connect to;
-- acceptance conditions;
-- material boundaries that Production must not change silently.
+ไม่ใช่:
 
-GO may use appropriate reasoning lenses to form the design. A useful default chain is:
+`มี Tool -> มี API -> เอามาประกอบ -> แล้วค่อยคิดว่ามันเอาไว้ทำอะไร`
 
-`CRYSTALLIZE -> ARCHITECT -> CARTOGRAPHER -> reality check`
+นิยาม:
 
-The purpose of the lenses is judgment, not ceremony.
+- **Factory** = ลำดับของขอบเขตความรับผิดชอบ
+- **Lens** = วิธีที่ GO ใช้มองความจริง ณ สถานีนั้น
+- **Checklist** = สิ่งที่ Lens คาดว่าจะต้องเห็น
+- **Tool** = เครื่องมือที่ GO ใช้ลงมือหรือเก็บหลักฐาน
+- **Evidence** = สิ่งที่ Reality ส่งกลับมา
+- **GO** = ผู้เลือก Lens/Tool ให้เหมาะกับบริบท
 
-BIG remains Owner / highest authority. Owner authority does not mean every implementation decision requires a human approval gate. Once mission and authority are sufficient, GO should operate the factory autonomously. Return to BIG only when a real authority boundary is crossed, product intent must materially change, required permission/secret is unavailable, or contradictory truths cannot be reconciled safely.
+## 5. Lens Fitting v1
 
-## 5. Work Package — the unit that enters Production
+| Station | Lens Stack | หน้าที่หลัก |
+| --- | --- | --- |
+| Design | `CRYSTALLIZE -> ARCHITECT -> CARTOGRAPHER` | จับแก่น วางโครง วางทางไหล |
+| Production | `ERGASTERION / HEPHAESTUS -> CRYSTALLIZE` | สร้างจริงและคุมไม่ให้หลุด Blueprint |
+| Piece QC | `CRYSTALLIZE -> CARTOGRAPHER` | ตรวจหน้าที่ของชิ้นและรอยต่อ |
+| Ready Gate | `CARTOGRAPHER` | ตรวจ handoff ว่าพร้อมส่งต่อ |
+| Assembly | `ARCHITECT -> CARTOGRAPHER` | ประกอบโครงและทางไหลของหลายชิ้น |
+| Assembly QC | `ARCHITECT -> CARTOGRAPHER -> CRYSTALLIZE` | พิสูจน์ระบบรวมยังถูก |
+| Build | `ERGASTERION / HEPHAESTUS` | ผลิต Artifact จริง |
+| Product QC | `CRYSTALLIZE -> GHOSTBUSTERS -> REALITY` | ตรวจของจริง หาอาการผิด และพิสูจน์การใช้งาน |
+| Close / Learn | `HOUSEKEEPER -> TEACHER` | เก็บโต๊ะและสกัดบทเรียน |
 
-Production does not receive an entire vague project as one undifferentiated task. Design yields bounded Work Packages.
+`GHOSTBUSTERS` ยังทำหน้าที่เป็น Verification Scan ครอบทั้งโรงงานเมื่อปลายทางล้มเหลว
 
-A Work Package can be, for example:
+## 6. Design Station
 
-- one module;
-- one bug fix;
-- one adapter;
-- one coherent behavior change.
+Design เปลี่ยน Mission ให้เป็น Blueprint ที่ Production ใช้ได้โดยไม่ต้องกลับมาถามเจตนาเดิมซ้ำ
 
-Each package carries enough context to manufacture and inspect the piece:
+Design ต้องตอบให้ชัด:
 
-- mission reference;
-- blueprint reference;
-- piece identity and purpose;
-- required behavior;
-- relevant interfaces/dependencies;
-- constraints;
-- piece-level acceptance criteria;
-- current repository/branch/head evidence;
-- known risks or blockers.
+- กำลังสร้างอะไร
+- ทำไปทำไม
+- outcome ที่ถือว่าถูกคืออะไร
+- ส่วนประกอบหลักมีอะไร
+- boundary/interface อยู่ตรงไหน
+- dependency สำคัญมีอะไร
+- data/state/action flow เดินอย่างไร
+- ข้อจำกัดใดห้าม Production เปลี่ยนเงียบ ๆ
 
-The package is a production contract, not a prescription of every function or file GO must write.
+Reality check ของ Design คือ:
 
-## 6. Production — the heart of the workstation
+> ถ้าเอา Blueprint นี้ให้ GO ที่ไม่ได้อยู่ในบทสนทนา มันเข้าใจได้ไหมว่าต้องสร้างอะไร และอะไรถือว่าถูก
 
-Production is where GO turns a Work Package into a finished, individually verified piece.
+ถ้าไม่ = Design แดง  
+ถ้าใช่ = `DESIGN READY`
 
-GO owns the manufacturing method. BIG does not need to specify algorithms, file edits, task decomposition, specialist count, or the exact sequence of internal coding operations.
+## 7. Production Station
 
-The production loop is:
+Production คือจุดที่ GO เปลี่ยน Blueprint ให้เป็น Piece จริง
 
-`Receive package -> inspect current reality -> choose manufacturing approach -> create/change -> compare with blueprint -> piece QC -> repair if needed -> seal -> Ready Gate`
+GO Controller เป็นผู้เลือกวิธีผลิต และมีสิทธิ์แตกตัวเป็น specialist เช่น Code-GO, Test-GO, Debug-GO, Inspector ตามความจำเป็น
 
-### 6.1 GO controls the machines
-
-GO is the production controller. It may select tools, inspect files, edit code, run tests, debug, compare behavior, and use other available capabilities as required by the piece.
-
-The workstation should not hard-code one universal micro-sequence for every development task. The package defines the required output and boundaries; GO chooses the practical manufacturing route.
-
-### 6.2 GO may split into specialists
-
-GO may create temporary specialist roles whenever useful — for example implementation, debugging, testing, inspection, or another focused duty.
-
-The controller decides dynamically:
-
-- whether splitting is useful;
-- which specialists are needed;
-- whether they work sequentially or in parallel;
-- when their work is complete.
-
-Specialization must never split authoritative truth. All specialist outputs return to the controlling mission as work, findings, and evidence. GO Controller reconciles them against the mounted Blueprint before the piece may advance.
-
-Principle:
+กติกาคือ:
 
 **Split capability, not ownership or truth.**
 
-### 6.3 Piece QC belongs to Production
+ทุก specialist ทำงานใต้ Mission, Blueprint และ Current Piece เดียวกัน ผลงานและ Evidence ต้องกลับมาที่ GO Controller
 
-Production is responsible for checking its own piece before handoff.
+Production ใช้เครื่องเดิมที่มีอยู่แล้วเป็นหลัก เช่น inspect, tree, read, branch, write, delete และ diff
 
-Piece QC asks whether this module/bug/change itself matches its blueprint and piece-level acceptance conditions. Appropriate checks depend on the work: focused tests, static checks, behavior probes, diff review, interface checks, or other evidence.
+Production ไม่ถูกบังคับให้เดิน micro-sequence เดียวกันทุกงาน แต่ต้องรักษาเงื่อนไขว่า Implementation ยังตรง Blueprint
 
-A piece that has merely been edited is not finished.
+## 8. Piece QC
 
-A piece is production-complete only when:
+Piece QC ตรวจชิ้นงานก่อนปล่อยออกจาก Production
 
-- the intended behavior exists;
-- relevant piece-level checks pass or an explicitly allowed limitation is recorded;
-- implementation is compared with the mounted blueprint;
-- exact code/head evidence is known;
-- known failure is not being handed to Assembly as unfinished production work.
+คำถามหลักคือ:
 
-## 7. Ready Gate — accepted inventory, not an approval ceremony
+`Purpose correct? -> Behavior correct? -> Interface correct? -> Evidence exists?`
 
-Ready Gate is the holding boundary for pieces that Production has completed and sealed.
+Evidence อาจเป็น test, diff, runtime probe, build result, interface check หรือหลักฐานชนิดอื่นตามธรรมชาติของงาน
 
-It is not primarily a human approval gate.
+หลักการสำคัญ:
 
-A piece entering Ready Gate carries a handoff packet containing at least:
+> Piece QC ไม่ได้ถามว่า “มี test ไหม” แต่ถามว่า “มีหลักฐานพอไหมว่าชิ้นนี้ทำหน้าที่ของมันถูกต้อง”
 
-- piece identity;
-- blueprint/version reference;
-- exact repository/head evidence;
-- changed paths/diff evidence;
-- Piece QC result;
-- relevant interface/dependency notes;
-- known limitations;
-- lessons or anomalies discovered during production.
+ไม่มี Evidence = ไม่ผ่าน
 
-Anything failing Piece QC stays in Production. Assembly should not become the place where unfinished manufacturing is completed.
+ผ่านแล้ว = `SEALED PIECE`
 
-## 8. Assembly — integrate completed pieces and inspect the joints
+## 9. Ready Gate
 
-Assembly accepts sealed pieces from Ready Gate and takes responsibility for the system formed by connecting them.
+Ready Gate ไม่ใช่ approval ceremony และไม่ตรวจงานเดิมซ้ำ
 
-Its job is not to repeat Production's Piece QC. It checks a different class of truth:
+มันเป็นลานพักสำหรับ Piece ที่ผ่าน Piece QC แล้ว และรอ Assembly รับไปต่อ
 
-- interfaces fit;
-- dependencies are satisfied;
-- shared state remains coherent;
-- pieces do not conflict;
-- integration does not introduce regression;
-- repository integration/merge is safe;
-- assembled behavior still satisfies the relevant blueprint.
+Gate ตรวจว่าข้อมูลส่งต่อครบ เช่น:
 
-Typical flow:
+- Piece identity
+- Blueprint reference
+- input/output
+- dependency
+- exact repository/head evidence
+- changed paths/diff evidence
+- Piece QC result
+- known limitations
+- จุดที่จะนำไปประกอบ
 
-`Receive sealed piece(s) -> verify handoff -> integrate/merge -> Assembly QC -> accepted assembly`
+Lens หลักคือ `CARTOGRAPHER`
 
-If Assembly finds a defect inside a piece, it routes the defect back to the responsible Production package with evidence. If the failure is specifically at the joint between otherwise correct pieces, Assembly owns diagnosing and resolving that integration responsibility.
+ผ่านแล้ว = `READY FOR ASSEMBLY`
 
-This creates two distinct quality layers:
+## 10. Assembly Station
 
-- **Piece QC:** is each manufactured piece correct?
-- **Assembly QC:** are the completed pieces correct when connected?
+Assembly รับ sealed pieces หลายชิ้นมาสร้างเป็นระบบรวม
 
-Passing one does not imply passing the other.
+Lens:
 
-## 9. Build — create the deliverable artifact
+`ARCHITECT -> CARTOGRAPHER`
 
-After the assembled source is accepted, Build creates the actual deliverable artifact appropriate to the project.
+ตรวจว่า:
 
-For an Android application this may be an APK. Other projects may produce another deployable/package artifact.
+- โครงของหลายชิ้นเข้ากันหรือไม่
+- interface ตรงกันหรือไม่
+- dependency ครบหรือไม่
+- state/data/control flow วิ่งถูกหรือไม่
+- การ merge/integration ปลอดภัยหรือไม่
 
-Build evidence must bind the artifact to the accepted source/revision so the workstation can answer which code produced the deliverable.
+Assembly ใช้ PR / CI / merge machinery ของเดิมได้ แต่เครื่องมือเหล่านั้นเป็นเพียงเครื่องจักร ไม่ใช่ความหมายของสถานี
 
-A successful build means an artifact was produced. It does not prove that the artifact works correctly for the recipient.
+## 11. Assembly QC
 
-## 10. Product QC — inspect what will actually be delivered
+Assembly QC ไม่ย้อนทำ Piece QC ใหม่ แต่ตรวจรอยต่อและพฤติกรรมรวม
 
-Product QC checks the real artifact, not merely source code or a successful build job.
+Lens:
 
-For an APK this can include, as applicable:
+`ARCHITECT -> CARTOGRAPHER -> CRYSTALLIZE`
 
-- artifact/package identity;
-- version/configuration;
-- installability;
-- launch/runtime behavior;
-- critical user flows;
-- connection to expected services/configuration;
-- confirmation that the delivered behavior matches the blueprint.
+Pass criteria:
 
-Only a Product-QC-passed artifact is eligible for packaging/delivery/run.
+`Structure correct? -> Flow correct? -> Combined behavior correct? -> Evidence exists?`
 
-Thus the workstation has three different quality responsibilities:
+ผ่านแล้ว = `ACCEPTED ASSEMBLY`
 
-1. Piece QC — the part is correct;
-2. Assembly QC — the connected system is correct;
-3. Product QC — the actual deliverable is correct.
+## 12. Build Station
 
-## 11. Package / Run — close the production line
+Build รับ Accepted Assembly แล้วผลิต Artifact จริงตามชนิดสินค้า
 
-Once Product QC passes, the artifact may be wrapped for its destination: release metadata, signing/version information, checksum or other required packaging, and delivery/run instructions as appropriate.
+ตัวอย่าง:
 
-The workstation records the exact artifact and result returned to the mission. Deployment success must not be substituted for Product QC when real-target verification is required.
+- Android -> APK
+- Web -> deployable bundle
+- อื่น ๆ -> package/executable ที่เหมาะกับผลิตภัณฑ์
 
-## 12. Diagnostics — failures return to their owner
+Lens คือ `ERGASTERION / HEPHAESTUS`
 
-The factory must make defects easy to locate rather than forcing every failure back to the beginning.
+Build Evidence ต้องผูก Artifact กับ source/revision ที่ยอมรับแล้ว เพื่อย้อนตอบได้ว่า Artifact นี้สร้างจากอะไร
 
-The diagnostic question is:
+Build สำเร็จแปลว่า “มี Artifact” ไม่ได้แปลว่า “สินค้าทำงานถูก”
 
-**Which responsibility boundary owns the failed truth?**
+## 13. Product QC
 
-Examples:
+Product QC ตรวจ **ของจริงที่กำลังจะถึงมือลูกค้า** ไม่ใช่ตรวจแค่ source หรือ CI
 
-- implementation differs from piece blueprint -> Production;
-- individual piece test fails -> Production;
-- two correct modules disagree at their interface -> Assembly;
-- merge/integration regression -> Assembly;
-- build cannot create artifact from accepted assembly -> Build;
-- APK installs but required user flow fails -> Product QC identifies the defect and routes it to the responsible Production/Assembly/Build boundary;
-- blueprint is impossible or materially wrong -> Design.
+Lens:
 
-Each boundary should have enough local evidence and diagnostic capability to investigate its own responsibility deeply.
+`CRYSTALLIZE -> GHOSTBUSTERS -> REALITY`
 
-## 13. Continuity — another GO can continue without reconstruction
+สำหรับ Android ตัวอย่างเช่น:
 
-Continuity is not a terminal station. It is a property of the entire workstation.
+`APK ถูกตัว? -> Install ได้? -> เปิดได้? -> Core flow ใช้ได้? -> ผลลัพธ์ตรง Blueprint? -> Evidence ครบ?`
 
-At every meaningful boundary the system preserves enough truth to resume:
+ผ่านแล้ว = `PRODUCT VERIFIED`
 
-- Mission;
-- current Blueprint and version/reference;
-- current Work Package;
-- current factory stage;
-- exact repository/branch/head evidence;
-- completed QC evidence;
-- blocker;
-- next valid action;
-- relevant handoff/lesson records.
+สามชั้นคุณภาพต้องแยกกันชัด:
 
-Chat memory, UI labels, or local cache must not silently replace repository/project truth.
+1. Piece QC — ชิ้นถูก
+2. Assembly QC — ระบบรวมถูก
+3. Product QC — Artifact จริงถูกและใช้ได้จริง
 
-GitHub remains source of truth for repository code and repository state. Other connected systems may retain their appropriate responsibilities; this design does not require replacing them.
+## 14. Package / Run / Learn
 
-## 14. Learning — work should improve the next work
+หลัง Product QC ผ่านจึงค่อยห่อของและส่ง
 
-Learning is also cross-cutting rather than a final station.
+`HOUSEKEEPER` ทำหน้าที่:
 
-When real work reveals something reusable, record a compact lesson:
+- เก็บ temporary state/artifact ที่ไม่ควรค้าง
+- ปิดสถานะที่จบแล้ว
+- ระบุ final artifact ให้ชัด
+- ลดขยะและ state เก่า
 
-- what failed or surprised us;
-- why it happened;
-- what fixed it;
-- what should be checked or done differently next time;
-- where the lesson applies.
+`TEACHER` ทำหน้าที่เก็บบทเรียนแบบกระชับ:
 
-The purpose is not to create a giant log archive. Lessons must be retrievable at the relevant future Design, Production, Assembly, Build, or Product QC context.
+- ทำอะไร
+- เจออะไร
+- แก้อย่างไร
+- อะไรควรใช้ซ้ำ
+- lesson นี้ใช้กับบริบทใด
 
-A completed job should leave both a product result and better operating knowledge.
+จากนั้นจึง `DELIVER / RUN`
 
-## 15. Responsibility contract shared by factory stages
+## 15. GHOSTBUSTERS Verification Scan
 
-Every factory boundary must be explainable with five questions:
+เมื่อปลายทางพัง โรงงานไม่เริ่มจากการเดาว่าใครผิด
 
-1. What does it receive?
-2. What truth is it responsible for?
-3. What proves that responsibility is complete?
-4. What exactly does it hand forward?
-5. Where does failure return?
+ให้ `GHOSTBUSTERS` เดินจากต้นสาย:
 
-If a stage cannot answer these clearly, its boundary is not ready.
+`Design -> Production/Piece QC -> Ready Gate -> Assembly QC -> Build -> Product QC`
 
-## 16. Relationship to the existing Code Station implementation
+เมื่อถึงสถานีใด ให้ใช้ Lens Stack ของสถานีนั้นถามว่า:
 
-The previous architecture organized the station primarily as:
+> Evidence ตรงนี้ยังพิสูจน์สิ่งที่สถานีอ้างว่าผ่านอยู่ไหม
 
-`Inspect -> Work -> Validate -> Integrate -> Release`
+ถ้าใช่ -> เดินต่อ  
+ถ้าไม่ -> `FIRST BROKEN TRUTH`
 
-That model captured useful lifecycle machinery but mixed tools, quality checks, and responsibility boundaries at one level.
+เมื่อเจอจุดแรกที่ความจริงแตก ให้ซ่อมจากจุดนั้น แล้ว rerun งานไปข้างหน้าใหม่
 
-The existing implementation remains valuable. It should be remapped rather than discarded blindly:
+หลักการคือ:
 
-- inspect/tree/read/SHA capabilities become machinery available to Design, Production, Assembly, and diagnostics where needed;
-- branch-safe mutation/diff/conflict handling primarily serves Production;
-- focused validation becomes Piece QC;
-- PR/CI/merge machinery primarily serves Assembly and Assembly QC;
-- deploy/build observation contributes to Build/Package/Run;
-- real-target verification contributes to Product QC;
-- task/persistence/audit machinery contributes to Workbench continuity and traceability.
+**เราไม่ย้อนหาคนผิด เราหาความจริงเริ่มผิดตรงไหน**
 
-Existing code is implementation material. It does not define the new factory boundaries merely because it already exists.
+## 16. Tool Inventory ปัจจุบัน
 
-## 17. Workbench information model
+ของที่มีแล้วและควร reuse ก่อนซื้อใหม่:
 
-The minimum persistent operating model should eventually make these relationships explicit:
+- repository inspect/tree/read
+- branch creation
+- write/delete
+- diff/compare
+- pull request open/read
+- CI observation/rerun
+- guarded merge
+- workflow/deploy observation
+- task state/audit/verification/rollback primitives
+- task session/persistence hook
+
+ของใหม่ที่ต้องสร้างเพราะเป็น responsibility ใหม่ของโรงงาน:
+
+### P0
+- Blueprint Holder
+- Workbench Console
+- Piece Controller
+- Evidence Ledger
+- Piece QC Bench
+
+### P1
+- Ready Gate / Sealer
+- Assembly Bench
+- Assembly QC Bench
+
+### P2
+- Artifact Inspector
+- Verification Scanner
+
+### P3
+- Learning Recorder
+
+หลักการจัดซื้อคือ YAGNI: ไม่ซื้อเครื่องที่ของเดิมทำงานได้อยู่แล้ว
+
+## 17. Workbench Information Model
+
+อย่างน้อยต้องมีความสัมพันธ์เหล่านี้ชัดเจน:
 
 ### Mission
-The requested outcome and authority context.
+Outcome และ authority context
 
 ### Blueprint
-The current design reference against which implementation is judged.
+Design reference ปัจจุบัน
 
-### Work Package
-One bounded production unit tied to the Blueprint.
+### Current Piece / Work Package
+หน่วยงาน bounded ที่กำลังผลิต
 
 ### Piece
-The implementation result of a Work Package, with exact code evidence.
+ผล implementation ของ Work Package พร้อม exact code evidence
 
 ### QC Evidence
-Evidence tied to the thing it proves: piece, assembly, or product artifact.
+Evidence ที่ผูกกับสิ่งที่มันพิสูจน์: piece, assembly หรือ artifact
 
 ### Gate Handoff
-A sealed production result accepted into Ready Gate.
+แพ็กเกจส่งต่อของ sealed piece
 
 ### Assembly
-The integrated source/result composed from accepted pieces.
+ผลรวมจาก pieces ที่ยอมรับแล้ว
 
 ### Artifact
-The build output bound to the accepted assembly/source revision.
+ผล build ที่ผูกกับ accepted assembly/source revision
 
 ### Lesson
-A reusable finding tied to relevant context.
+ความรู้ reusable จากงานจริง
 
-The exact storage implementation is intentionally not fixed by this design. Server-side task authority, revisions, dedupe, and leases may be introduced when required for correctness, but they must serve this operating model rather than become the product themselves.
+รูปแบบ storage ยังไม่ถูกล็อกใน Blueprint นี้ Durable authority, revision, dedupe, lease หรือ server-side state จะเพิ่มเมื่อจำเป็นต่อ correctness เท่านั้น ไม่ใช่เพราะอยากสร้าง framework
 
-## 18. Development strategy for the workstation itself
+## 18. Continuity
 
-Build the workstation using the same factory principle it is intended to provide.
+Continuity เป็นคุณสมบัติของทั้ง Workstation ไม่ใช่สถานีปลายทาง
 
-### Phase 1 — Workbench Truth
-Make Mission, Blueprint, Current Piece, Status, Evidence, and Next Action visible and resumable from real state.
+ทุก boundary สำคัญต้องเก็บ Truth พอให้ทำงานต่อได้:
 
-Success condition: another GO can enter and understand/continue the active job without reconstructing it from chat history.
+- Mission
+- Blueprint/reference
+- Current Piece
+- current factory stage
+- repository/branch/head
+- Evidence ที่ผ่านแล้ว
+- blocker
+- Next Action
+- handoff/lesson ที่เกี่ยวข้อง
 
-### Phase 2 — Production Engine
-Close one real Work Package end-to-end:
+Chat memory หรือ local cache ห้ามแอบกลายเป็น source of truth
 
-`Blueprint -> manufacture -> compare -> Piece QC -> seal -> Ready Gate`
+GitHub ยังคงเป็น source of truth สำหรับ repository code/state ตามบทบาทของมัน
 
-Success condition: one module or bug fix can be produced, verified against its mounted blueprint, and handed forward with sufficient evidence.
+## 19. Development Strategy ของโรงงานเอง
 
-This is the first major implementation focus because Production is the heart of the workstation.
+สร้าง Workstation ด้วยหลักเดียวกับโรงงานที่มันกำลังสร้าง
 
-### Phase 3 — Assembly Engine
-Accept sealed pieces, integrate them, inspect their joints, and produce an accepted assembly.
+### Engine 1 — Truth & Workbench
 
-Success condition: Assembly can distinguish piece defects from integration defects and route failures to the correct owner.
+สร้าง:
 
-### Phase 4 — Product Pipeline
-Build a real artifact, perform Product QC, package it, and run/deliver it.
+- Blueprint Holder
+- Workbench Console
+- Mission / Current Piece / Evidence / Next ที่ resumable
 
-For Android work the concrete proof should eventually include a real APK path.
+Success condition:
 
-### Phase 5 — Learning and Diagnostics
-Make defect routing and reusable lessons easy to inspect and retrieve during future work.
+> GO ตัวใหม่เข้ามาแล้วเข้าใจงานปัจจุบันและทำต่อได้โดยไม่ประกอบบริบทจากแชต
 
-Learning capture may exist earlier in minimal form; this phase makes it operationally useful rather than merely stored.
+### Engine 2 — Production Line
 
-### Final workstation assembly review
+สร้าง:
 
-After the phases work individually, evaluate the workstation as one operating environment:
+- Piece Controller
+- Evidence Ledger
+- Piece QC Bench
+- Ready Gate / Sealer
 
-- Can a GO enter and immediately understand the job?
-- Is the mounted Blueprint continuously available during production?
-- Can a piece be traced from design through delivered artifact?
-- Can every quality claim be inspected through evidence?
-- Does a defect route to the responsibility that owns it?
-- Can work resume after interruption without reconstructing hidden state?
-- Does the interface expose complexity only when needed?
-- Are useful lessons available to later work?
+พิสูจน์เส้น:
 
-The final standard is not architectural elegance. It is the operating experience:
+`Blueprint -> Build Piece -> Piece QC -> Seal -> Ready Gate`
 
-**"Easy to enter, easy to work, easy to verify, easy to continue, easy to learn from."**
+Success condition:
 
-## 19. Non-goals
+> หนึ่ง Work Package สามารถถูกสร้าง ตรวจ และส่งต่อพร้อม Evidence โดยไม่หลุด Blueprint
 
-This design does not require:
+### Engine 3 — Assembly & Product
 
-- replacing GitHub, Notion, or existing connectors;
-- exposing every internal machine on the main workbench screen;
-- a human approval prompt before every production action;
-- fixed specialist counts or fixed subtask decomposition;
-- building a generalized orchestration framework before one real production package works;
-- preserving old slot names when they obscure the new responsibility model.
+สร้าง:
 
-## 20. Immediate next step after design approval
+- Assembly Bench
+- Assembly QC
+- Build integration
+- Artifact Inspector
+- Product QC
 
-Do not immediately refactor the entire Code Station.
+พิสูจน์เส้น:
 
-First map the existing implementation onto this factory design and create an implementation plan for **Phase 1 Workbench Truth + the minimum boundary needed to begin Phase 2 Production**.
+`Ready Pieces -> Assembly -> Assembly QC -> Build -> Product QC -> Verified Artifact`
 
-The first implementation slice must prove the user experience that motivated the redesign: GO enters the workstation, sees the mounted Blueprint and current production truth, and can continue one bounded piece without relying on chat reconstruction.
+### Engine 4 — Recovery & Learning
 
-Only after that slice works in reality should the workstation expand deeper into Production machinery.
+สร้าง:
+
+- Verification Scanner
+- Ghostbusters first-broken-truth flow
+- Housekeeper closeout
+- Teacher / Learning Recorder
+- continuity hardening เท่าที่ Evidence พิสูจน์ว่าจำเป็น
+
+### กติกาสร้างแต่ละ Engine
+
+ใช้จังหวะเดียวกัน:
+
+`มองว่าจะเอาไปต่ออะไร -> สร้างให้ครบเป็น Engine -> Functional Test -> Assembly Review -> ผ่านแล้วล็อก -> ไป Engine ถัดไป`
+
+RED/GREEN ไม่ใช่จังหวะหลักของการพัฒนา ใช้เฉพาะ boundary เสี่ยงสูงที่คุ้ม เช่น state transition, permission, stale SHA, merge/deploy guard, data loss และ recovery
+
+## 20. Design Fidelity Gate
+
+การผ่าน approval หรือ CI ไม่ได้พิสูจน์ว่า Product ยังตรงเจตนา
+
+ก่อน implementation:
+
+`Original intent -> Blueprint -> Implementation Plan`
+
+ต้องสอดคล้องกัน
+
+หลัง implementation:
+
+`Running behavior -> Blueprint -> Original intent`
+
+ต้องสอดคล้องกัน
+
+ถ้า test/CI เขียวแต่ behavior หลุดแบบ = **ไม่ถือว่าเสร็จ**
+
+## 21. Authority Model
+
+- **BIG** = Owner / highest authority
+- **GO** = Primary operator / factory controller
+- **GO Hub** = operating environment
+
+GO มีสิทธิ์เลือก tool, route, specialist split และวิธี implementation ภายใน authority ที่ได้รับ
+
+กลับหา BIG เมื่อมีอย่างน้อยหนึ่งกรณี:
+
+- ต้องเปลี่ยน product intent อย่างมีนัยสำคัญ
+- ต้องใช้ secret/permission ที่ GO ไม่มี
+- มี authority boundary จริง
+- มี Conflict ของ Truth ที่แก้ไม่ได้อย่างปลอดภัยจาก Evidence
+
+ไม่ต้องมี human approval ทุกสถานี
+
+## 22. Non-goals
+
+Blueprint นี้ไม่บังคับให้:
+
+- แทนที่ GitHub, Notion หรือ connector ที่มีอยู่
+- สร้าง unified gateway สำหรับทุกเครื่องมือทันที
+- เปิด internal machinery ทุกอย่างบน Workbench
+- ใช้ TDD ทุก micro-step
+- กำหนดจำนวน specialist ตายตัว
+- สร้าง orchestration framework ใหญ่ก่อน Engine แรกทำงานจริง
+- รื้อของเก่าที่ reuse ได้
+
+## 23. Immediate Next Step หลังอนุมัติเอกสาร
+
+หลัง Blueprint ฉบับเขียนนี้ผ่าน ให้สร้าง Implementation Plan สำหรับสี่ Engine ตามลำดับ โดยเริ่มที่:
+
+**Engine 1 — Truth & Workbench**
+
+Implementation Plan ต้อง map ของเดิมใน `main` เข้ากับ responsibility ใหม่ก่อนสร้าง component ใหม่ทุกครั้ง
+
+เป้าหมายชิ้นแรกไม่ใช่ “เพิ่ม feature ให้เยอะ” แต่คือพิสูจน์ประสบการณ์หลัก:
+
+> GO เข้ามา -> เห็น Mission/Blueprint/Current Piece/Evidence/Next -> ทำงานต่อได้จาก Truth จริง
+
+เมื่อ Engine 1 ผ่าน Functional Test + Assembly Review แล้วจึงเดิน Engine 2 ต่อ
