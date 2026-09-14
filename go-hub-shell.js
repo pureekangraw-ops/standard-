@@ -1,8 +1,13 @@
 import { createHubRuntime } from "./go-hub-runtime.js";
 import { createCodeCapability } from "./go-hub-code-module.js";
+import { createGitHubWorkspace } from "./go-hub-github-workspace.js";
 
 const runtime = createHubRuntime();
-runtime.register("Code", createCodeCapability());
+const workspace = createGitHubWorkspace({
+  gatewayBase: "/hub/api/github-workspace",
+  repository: "pureekangraw-ops/standard-",
+});
+runtime.register("Code", createCodeCapability({ workspace }));
 
 const status = document.querySelector("[data-hub-status]");
 const list = document.querySelector("[data-hub-capabilities]");
