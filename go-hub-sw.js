@@ -12,6 +12,7 @@ const APP_SHELL = [
   "./go-hub-runtime.js",
   "./go-hub-code-module.js",
   "./go-hub-code-task.js",
+  "./go-hub-workbench-model.js",
   "./go-hub-github-workspace.js",
   "./go-hub-persistence.js",
   "./go-hub-sw-bootstrap.js",
