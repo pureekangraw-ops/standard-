@@ -49,7 +49,7 @@ test("GO Hub shell restores the durable Code task before capability registration
   assert.match(source, /go-hub-persistence\.js/);
   assert.match(source, /createLocalStorageKeyValueStore/);
   assert.match(source, /createCodeTaskSession/);
-  assert.match(source, /await session\.load\(\)/);
+  assert.match(source, /await taskSession\.load\(\)/);
   assert.match(source, /createCodeCapability\(\{ workspace, task \}\)/);
 });
 
@@ -70,4 +70,38 @@ test("GO Hub shell mounts the six truths from the restored Code task projection"
     assert.match(goHubHtml, new RegExp(selector));
     assert.match(indexHtml, new RegExp(selector));
   });
+});
+
+
+test("CENTRE is the durable entry and exit gate before Code capability access", () => {
+  const source = read("go-hub-shell.js");
+  const htmlFiles = [read("index.html"), read("go-hub.html")];
+
+  for (const marker of [
+    "createCentreSession",
+    "await centreSession.load()",
+    "admitDestination",
+    "destination://factory",
+    "runtime.register(\"Code\", access.capability)",
+    "runtime.unregister(\"Code\")",
+    "REVIEW_AT_CENTRE",
+    "FIT_LENS",
+    "LEAVE_CENTRE",
+    "RETURN_TO_CENTRE",
+  ]) {
+    assert.equal(source.includes(marker), true, `shell must include ${marker}`);
+  }
+
+  for (const html of htmlFiles) {
+    for (const marker of [
+      "data-centre-state",
+      "data-centre-checkpoint",
+      "data-centre-work",
+      "data-centre-form",
+      "data-centre-action",
+      "data-centre-return",
+    ]) {
+      assert.equal(html.includes(marker), true, `Centre surface must include ${marker}`);
+    }
+  }
 });
