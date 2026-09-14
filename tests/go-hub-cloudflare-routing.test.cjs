@@ -12,5 +12,5 @@ function loadWranglerConfig() {
 
 test("GO Hub API routes run the Worker before SPA asset fallback", () => {
   const config = loadWranglerConfig();
-  assert.deepEqual(config.assets?.run_worker_first, ["/hub/api/github-workspace/*"]);
+  assert.deepEqual(config.assets?.run_worker_first, ["/hub/api/github-workspace/*", "/mcp", "/oauth/*", "/.well-known/*"]);
 });

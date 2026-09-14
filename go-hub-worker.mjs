@@ -1,3 +1,7 @@
+import { createOAuthHandler, verifyAccessToken } from "./go-hub-oauth.mjs";
+import { createMcpRegistry } from "./go-hub-mcp-registry.mjs";
+import { createMcpHandler } from "./go-hub-mcp.mjs";
+
 const API_ROOT = "/hub/api/github-workspace";
 const ALLOWED_OWNER = "pureekangraw-ops";
 
@@ -387,10 +391,83 @@ async function getWorkflowRuns(fetchImpl, token, repository, sha) {
   return json({ headSha: sha, runs });
 }
 
+export function createGithubLifecycleService({ fetchImpl = fetch, token } = {}) {
+  return Object.freeze({
+    inspect(input = {}) {
+      return inspectRepository(fetchImpl, token, assertRepository(input.repository), input.branch ? assertRef(input.branch, "branch") : null);
+    },
+    tree(input = {}) {
+      return listTree(fetchImpl, token, assertRepository(input.repository), assertRef(input.ref));
+    },
+    readFile(input = {}) {
+      return readFile(fetchImpl, token, assertRepository(input.repository), assertSafePath(input.path), input.ref ? assertRef(input.ref) : null);
+    },
+    createBranch(input = {}) {
+      return createBranch(fetchImpl, token, assertRepository(input.repository), assertRef(input.name, "branch"), assertRef(input.fromSha, "sha"));
+    },
+    putFile(input = {}) {
+      return mutateFile(fetchImpl, token, assertRepository(input.repository), assertSafePath(input.path), assertRef(input.branch, "branch"), input.expectedSha, input.content, "PUT");
+    },
+    deleteFile(input = {}) {
+      return mutateFile(fetchImpl, token, assertRepository(input.repository), assertSafePath(input.path), assertRef(input.branch, "branch"), input.expectedSha, null, "DELETE");
+    },
+    compare(input = {}) {
+      return compareRefs(fetchImpl, token, assertRepository(input.repository), assertRef(input.base, "base"), assertRef(input.head, "head"));
+    },
+    openPullRequest(input = {}) {
+      return openPullRequest(fetchImpl, token, assertRepository(input.repository), assertRef(input.branch, "branch"), assertRef(input.base, "base"), String(input.title || "").trim() || badRequest("title is required"), String(input.body || ""));
+    },
+    getPullRequest(input = {}) {
+      return getPullRequest(fetchImpl, token, assertRepository(input.repository), assertPositiveInteger(input.number, "pull request number"));
+    },
+    getCI(input = {}) {
+      return getCI(fetchImpl, token, assertRepository(input.repository), assertRef(input.sha, "sha"));
+    },
+    rerunFailed(input = {}) {
+      return rerunFailed(fetchImpl, token, assertRepository(input.repository), assertPositiveInteger(input.runId, "run id"));
+    },
+    mergePullRequest(input = {}) {
+      const method = String(input.method || "squash");
+      if (!["merge", "squash", "rebase"].includes(method)) badRequest("invalid merge method");
+      return mergePullRequest(fetchImpl, token, assertRepository(input.repository), assertPositiveInteger(input.number, "pull request number"), assertRef(input.expectedHeadSha, "expected head sha"), method);
+    },
+    getWorkflowRuns(input = {}) {
+      return getWorkflowRuns(fetchImpl, token, assertRepository(input.repository), assertRef(input.sha, "sha"));
+    },
+  });
+}
+
 export function createWorkerHandler({ fetchImpl = fetch } = {}) {
   return {
     async fetch(request, env) {
       const url = new URL(request.url);
+      const oauthPaths = new Set([
+        "/.well-known/oauth-authorization-server",
+        "/.well-known/oauth-protected-resource",
+        "/oauth/authorize",
+        "/oauth/token",
+      ]);
+      const oauthConfig = {
+        issuer: url.origin,
+        signingKey: env?.GOHUB_OAUTH_SIGNING_KEY,
+        ownerPasscodeHash: env?.GOHUB_OWNER_PASSCODE_HASH,
+        clientId: env?.GOHUB_OAUTH_CLIENT_ID,
+        clientSecret: env?.GOHUB_OAUTH_CLIENT_SECRET,
+        redirectUri: env?.GOHUB_OAUTH_REDIRECT_URI,
+      };
+      if (oauthPaths.has(url.pathname)) {
+        return createOAuthHandler(oauthConfig)(request);
+      }
+      if (url.pathname === "/mcp") {
+        if (!env?.GITHUB_TOKEN) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
+        const lifecycle = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
+        const registry = createMcpRegistry({ lifecycle });
+        return createMcpHandler({
+          registry,
+          issuer: url.origin,
+          authenticate: current => verifyAccessToken(current, oauthConfig),
+        })(request);
+      }
       if (!url.pathname.startsWith(API_ROOT)) {
         if (env?.ASSETS && typeof env.ASSETS.fetch === "function") return env.ASSETS.fetch(request);
         return new Response("GO Hub", { status: 200 });
