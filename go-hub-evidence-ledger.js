@@ -23,7 +23,8 @@ export function createEvidenceEntry(input = {}) {
     headSha: input.headSha == null ? null : String(input.headSha).trim(),
     recordedAt: input.recordedAt == null ? new Date().toISOString() : String(input.recordedAt),
   };
-  if (scope === "piece" && !entry.headSha) throw new Error("headSha is required for piece evidence");
+  if ((scope === "piece" || scope === "assembly") && !entry.headSha) throw new Error(`headSha is required for ${scope} evidence`);
+  if (scope === "artifact" && !String(entry.value?.digest || "").trim()) throw new Error("digest is required for artifact evidence");
   return Object.freeze(entry);
 }
 

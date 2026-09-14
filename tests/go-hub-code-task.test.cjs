@@ -198,6 +198,7 @@ test("task restores exact durable snapshot and appends specialist audit to one a
   let task = createCodeTaskFromSnapshot(stored);
   assert.deepEqual(task.snapshot(), {
     ...stored, factoryStage: null, workPackage: null, piece: null, pieceQc: null, gateHandoff: null,
+    assembly: null, assemblyQc: null, buildArtifact: null, productQc: null,
   });
   task = task.appendAudit("SPECIALIST_RETURN", { specialist: "slice-c", result: "green" });
   const resumed = task.snapshot();
@@ -250,6 +251,10 @@ test("legacy snapshots restore with safe workbench defaults", async () => {
   assert.equal(restored.piece, null);
   assert.equal(restored.pieceQc, null);
   assert.equal(restored.gateHandoff, null);
+  assert.equal(restored.assembly, null);
+  assert.equal(restored.assemblyQc, null);
+  assert.equal(restored.buildArtifact, null);
+  assert.equal(restored.productQc, null);
 });
 
 test("production truth is resumable and bound to the mounted blueprint", async () => {
@@ -344,4 +349,36 @@ test("task cannot enter Ready Gate by recording a handoff that bypasses exact-he
     status: "READY_FOR_ASSEMBLY", pieceId: "piece-1", workPackageId: "wp-1",
     blueprintRef: "spec.md", headSha: "head-1", evidenceIds: ["missing"],
   }), /evidence/);
+});
+
+test("assembly and product truth is resumable and invalidates downstream results", async () => {
+  const { createCodeTask, createCodeTaskFromSnapshot } = await load();
+  let task = createCodeTask({ id: "e3-task" }).setWorkbenchTruth({ blueprint: { ref: "spec.md" } })
+    .setWorkPackage({ id: "wp-1", title: "Piece", purpose: "input", blueprintRef: "spec.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "app" })
+    .recordPiece({ id: "piece-1", workPackageId: "wp-1", repository: "repo", branch: "e2", headSha: "piece-head" })
+    .addEvidence({ id: "piece-ev", scope: "piece", claim: "purpose-correct", kind: "test", headSha: "piece-head" })
+    .recordPieceQc({ status: "pass", checkedHeadSha: "piece-head", checks: {}, evidenceIds: ["piece-ev"], checkedAt: "now" })
+    .recordGateHandoff({ status: "READY_FOR_ASSEMBLY", pieceId: "piece-1", workPackageId: "wp-1", blueprintRef: "spec.md", headSha: "piece-head", evidenceIds: ["piece-ev"] });
+
+  task = task.recordAssembly({ id: "assembly-1", blueprintRef: "spec.md", pieceIds: ["piece-1"], sourceHeads: ["piece-head"], repository: "repo", integrationBranch: "e3", integrationHeadSha: "assembly-head", status: "ASSEMBLED" });
+  assert.equal(task.factoryStage, "ASSEMBLY");
+  task = task.addEvidence({ id: "assembly-ev", scope: "assembly", claim: "structure-correct", kind: "test", headSha: "assembly-head" })
+    .recordAssemblyQc({ status: "pass", checkedHeadSha: "assembly-head", checks: {}, evidenceIds: ["assembly-ev"], checkedAt: "now" });
+  task = task.recordBuildArtifact({ id: "artifact-1", kind: "web", assemblyId: "assembly-1", sourceHeadSha: "assembly-head", blueprintRef: "spec.md", digest: "digest-1", location: "https://example.test", builtAt: "now", status: "BUILT" });
+  task = task.addEvidence({ id: "artifact-ev", scope: "artifact", claim: "artifact-loads", kind: "probe", value: { digest: "digest-1" } })
+    .recordProductQc({ status: "pass", artifactId: "artifact-1", artifactDigest: "digest-1", checks: {}, evidenceIds: ["artifact-ev"], checkedAt: "now" });
+  const restored = createCodeTaskFromSnapshot(task.snapshot()).snapshot();
+  assert.equal(restored.factoryStage, "PRODUCT_VERIFIED");
+  assert.equal(restored.assembly.integrationHeadSha, "assembly-head");
+  assert.equal(restored.buildArtifact.digest, "digest-1");
+
+  task = task.recordBuildArtifact({ id: "artifact-2", kind: "web", assemblyId: "assembly-1", sourceHeadSha: "assembly-head", blueprintRef: "spec.md", digest: "digest-2", location: "https://example.test/v2", builtAt: "later", status: "BUILT" });
+  assert.equal(task.factoryStage, "BUILD");
+  assert.equal(task.productQc, null);
+});
+
+test("product verification rejects stale assembly and artifact evidence", async () => {
+  const { createCodeTask } = await load();
+  const task = createCodeTask({ id: "e3-guard" }).setWorkbenchTruth({ blueprint: { ref: "spec.md" } });
+  assert.throws(() => task.recordAssembly({ status: "ASSEMBLED" }), /Ready Gate/);
 });
