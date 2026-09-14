@@ -314,6 +314,69 @@ async function rerunFailed(fetchImpl, token, repository, runId) {
   return json({ ok: true, runId }, 202);
 }
 
+async function exactHeadCI(fetchImpl, token, repository, sha) {
+  const [runsResult, checksResult] = await Promise.all([
+    githubRequest(fetchImpl, token, `https://api.github.com/repos/${repository}/actions/runs?head_sha=${encodeURIComponent(sha)}`),
+    githubRequest(fetchImpl, token, `https://api.github.com/repos/${repository}/commits/${encodeURIComponent(sha)}/check-runs`),
+  ]);
+  if (!runsResult.response.ok) return { error: upstreamError(runsResult.response) };
+  if (!checksResult.response.ok) return { error: upstreamError(checksResult.response) };
+  const runs = Array.isArray(runsResult.payload.workflow_runs)
+    ? runsResult.payload.workflow_runs.filter(run => run.head_sha === sha)
+    : [];
+  const checks = Array.isArray(checksResult.payload.check_runs)
+    ? checksResult.payload.check_runs.filter(check => check.head_sha === sha)
+    : [];
+  return { runs, checks };
+}
+
+async function mergePullRequest(fetchImpl, token, repository, number, expectedHeadSha, method) {
+  const pull = await githubRequest(
+    fetchImpl, token, `https://api.github.com/repos/${repository}/pulls/${number}`,
+  );
+  if (!pull.response.ok) return upstreamError(pull.response);
+  const currentHeadSha = pull.payload?.head?.sha || null;
+  if (currentHeadSha !== expectedHeadSha) {
+    return json({ code: "STALE_PULL_REQUEST_HEAD" }, 409);
+  }
+  const ci = await exactHeadCI(fetchImpl, token, repository, expectedHeadSha);
+  if (ci.error) return ci.error;
+  const signals = [...ci.runs, ...ci.checks];
+  const green = signals.length > 0 && signals.every(item =>
+    item.status === "completed" && item.conclusion === "success"
+  );
+  if (!green) return json({ code: "CURRENT_HEAD_CI_NOT_GREEN" }, 409);
+  const result = await githubRequest(
+    fetchImpl, token, `https://api.github.com/repos/${repository}/pulls/${number}/merge`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sha: expectedHeadSha, merge_method: method }),
+    },
+  );
+  if (!result.response.ok) return upstreamError(result.response);
+  if (result.payload?.merged !== true || !result.payload?.sha) {
+    return json({ code: "MERGE_REJECTED" }, 409);
+  }
+  return json({ merged: true, mergeSha: result.payload.sha, headSha: expectedHeadSha });
+}
+
+async function getWorkflowRuns(fetchImpl, token, repository, sha) {
+  const result = await githubRequest(
+    fetchImpl, token, `https://api.github.com/repos/${repository}/actions/runs?head_sha=${encodeURIComponent(sha)}`,
+  );
+  if (!result.response.ok) return upstreamError(result.response);
+  const runs = Array.isArray(result.payload.workflow_runs)
+    ? result.payload.workflow_runs
+        .filter(run => run.head_sha === sha)
+        .map(run => ({
+          id: run.id, name: run.name, status: run.status, conclusion: run.conclusion,
+          headSha: run.head_sha, url: run.html_url || null,
+        }))
+    : [];
+  return json({ headSha: sha, runs });
+}
+
 export function createWorkerHandler({ fetchImpl = fetch } = {}) {
   return {
     async fetch(request, env) {
@@ -405,6 +468,26 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
             fetchImpl, env.GITHUB_TOKEN,
             assertRepository(body.repository),
             assertPositiveInteger(body.runId, "run id"),
+          );
+        }
+        if (request.method === "POST" && url.pathname === `${API_ROOT}/pull-request/merge`) {
+          const body = await request.json().catch(() => null);
+          if (!body) return json({ code: "INVALID_JSON" }, 400);
+          const method = String(body.method || "squash");
+          if (!["merge", "squash", "rebase"].includes(method)) badRequest("invalid merge method");
+          return mergePullRequest(
+            fetchImpl, env.GITHUB_TOKEN,
+            assertRepository(body.repository),
+            assertPositiveInteger(body.number, "pull request number"),
+            assertRef(body.expectedHeadSha, "expected head sha"),
+            method,
+          );
+        }
+        if (request.method === "GET" && url.pathname === `${API_ROOT}/workflow-runs`) {
+          return getWorkflowRuns(
+            fetchImpl, env.GITHUB_TOKEN,
+            assertRepository(url.searchParams.get("repository")),
+            assertRef(url.searchParams.get("sha"), "sha"),
           );
         }
         if (request.method === "GET" && url.pathname === `${API_ROOT}/compare`) {
