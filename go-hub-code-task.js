@@ -42,6 +42,8 @@ function normalizeInitial(initial = {}) {
     touchedPaths: [],
     diffFingerprint: null,
     blocker: null,
+    pullRequest: null,
+    ci: null,
     audit: [{ at: now(), event: "TASK_CREATED", state: "INSPECTING" }],
   };
 }
@@ -62,10 +64,16 @@ function transitionState(current, nextState, evidence = {}) {
   if (Object.hasOwn(evidence, "workBranch")) next.workBranch = evidence.workBranch == null ? null : String(evidence.workBranch);
   if (Object.hasOwn(evidence, "headSha")) next.headSha = incomingHead;
   if (Object.hasOwn(evidence, "touchedPaths")) next.touchedPaths = Array.isArray(evidence.touchedPaths) ? [...evidence.touchedPaths] : [];
+  if (Object.hasOwn(evidence, "pullRequest")) next.pullRequest = evidence.pullRequest == null ? null : clone(evidence.pullRequest);
+  if (Object.hasOwn(evidence, "ci")) next.ci = evidence.ci == null ? null : clone(evidence.ci);
   if (Object.hasOwn(evidence, "blocker")) next.blocker = evidence.blocker == null ? null : String(evidence.blocker);
   else if (state !== "BLOCKED" && state !== "CONFLICT") next.blocker = null;
 
-  if (priorHead && incomingHead && priorHead !== incomingHead) next.diffFingerprint = null;
+  if (priorHead && incomingHead && priorHead !== incomingHead) {
+    next.diffFingerprint = null;
+    next.pullRequest = null;
+    next.ci = null;
+  }
   if (state === "DIFF_REVIEWED") {
     if (!incomingHead) throw new Error("headSha is required for DIFF_REVIEWED");
     next.headSha = incomingHead;
