@@ -58,6 +58,10 @@ export function createCodeCapability({ workspace = null, task = null } = {}) {
     piece: snapshot?.piece || null,
     pieceQc: snapshot?.pieceQc || null,
     gateHandoff: snapshot?.gateHandoff || null,
+    assembly: snapshot?.assembly || null,
+    assemblyQc: snapshot?.assemblyQc || null,
+    buildArtifact: snapshot?.buildArtifact || null,
+    productQc: snapshot?.productQc || null,
   });
 }
 

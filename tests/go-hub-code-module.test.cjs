@@ -114,6 +114,12 @@ test("Code capability projects Engine 2 production truth from the same task snap
   for (const [key, value] of Object.entries(production)) assert.deepEqual(capability[key], value);
 });
 
+test("Code capability projects Engine 3 truth from the same task snapshot", async () => {
+  const { pathToFileURL } = require("node:url"); const { createCodeCapability } = await import(`${pathToFileURL(codeModule).href}?e3=${Date.now()}`);
+  const truth={assembly:{id:"a1"},assemblyQc:{status:"pass"},buildArtifact:{id:"art1",digest:"d1"},productQc:{status:"pass"}};
+  const capability=createCodeCapability({task:{snapshot:()=>truth}}); for(const [key,value] of Object.entries(truth)) assert.deepEqual(capability[key],value);
+});
+
 test("Code capability does not claim full readiness when PR, CI, merge, or deploy routes are missing", async () => {
   const { pathToFileURL } = require("node:url");
   const { createCodeCapability } = await import(`${pathToFileURL(codeModule).href}?readiness=${Date.now()}`);

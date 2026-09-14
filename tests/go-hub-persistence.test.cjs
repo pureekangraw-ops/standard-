@@ -221,3 +221,54 @@ test("one Work Package travels from mounted Blueprint to a resumable Ready Gate"
   assert.deepEqual(restored.pieceQc.evidenceIds, restored.gateHandoff.evidenceIds);
   assert.equal(capability.gateHandoff.status, "READY_FOR_ASSEMBLY");
 });
+
+test("Engine 3 assembles a Ready Gate Piece into a resumable verified Product", async () => {
+  const nonce = `${Date.now()}-${Math.random()}`;
+  const load = file => import(`${pathToFileURL(path.join(root, file)).href}?engine3=${nonce}`);
+  const { createMemoryKeyValueStore, createStatePersistence } = await import(`${pathToFileURL(modulePath).href}?engine3=${nonce}`);
+  const { createCodeTask } = await load("go-hub-code-task.js");
+  const { createCodeTaskSession, createCodeCapability } = await load("go-hub-code-module.js");
+  const { createWorkbenchView } = await load("go-hub-workbench-model.js");
+  const { evaluatePieceQc } = await load("go-hub-piece-qc.js");
+  const { sealReadyGate } = await load("go-hub-ready-gate.js");
+  const { assembleReadyPieces } = await load("go-hub-assembly-bench.js");
+  const { evaluateAssemblyQc } = await load("go-hub-assembly-qc.js");
+  const { createBuildArtifact, inspectArtifact } = await load("go-hub-artifact.js");
+  const { evaluateProductQc } = await load("go-hub-product-qc.js");
+  const blueprintRef = "docs/superpowers/specs/2026-09-14-go-hub-code-station-engine-map-design.md";
+  const blueprint = { title: "Factory Blueprint", ref: blueprintRef, status: "approved" };
+
+  let task = createCodeTask({ id: "engine-3-functional", repository: "pureekangraw-ops/standard-" })
+    .setWorkbenchTruth({ mission: { summary: "Build Engine 3", outcome: "Verified Product" }, blueprint })
+    .setWorkPackage({ id: "wp-3", title: "Assembly & Product", purpose: "assemble and verify", blueprintRef, inputs: ["Piece"], expectedOutputs: ["Product"], dependencies: [], assemblyTarget: "Product" })
+    .recordPiece({ id: "piece-3", workPackageId: "wp-3", repository: "pureekangraw-ops/standard-", branch: "engine-3", headSha: "piece-head", changedPaths: ["piece.js"], outputs: ["piece"] });
+  for (const [id, claim] of [["piece-purpose", "purpose-correct"], ["piece-behavior", "behavior-correct"], ["piece-interface", "interface-correct"]]) {
+    task = task.addEvidence({ id, scope: "piece", claim, kind: "functional-test", headSha: "piece-head" });
+  }
+  task = task.recordPieceQc(evaluatePieceQc(task.snapshot()));
+  task = task.recordGateHandoff(sealReadyGate(task.snapshot()));
+
+  const assembly = assembleReadyPieces({ id: "assembly-3", blueprint, handoffs: [task.snapshot().gateHandoff], repository: "pureekangraw-ops/standard-", integrationBranch: "engine-3", integrationHeadSha: "assembly-head" });
+  task = task.recordAssembly(assembly);
+  for (const [id, claim] of [["assembly-structure", "structure-correct"], ["assembly-flow", "flow-correct"], ["assembly-behavior", "combined-behavior-correct"]]) {
+    task = task.addEvidence({ id, scope: "assembly", claim, kind: "functional-test", headSha: "assembly-head" });
+  }
+  task = task.recordAssemblyQc(evaluateAssemblyQc({ assembly: task.snapshot().assembly, blueprint, evidence: task.snapshot().evidence }));
+  const artifact = createBuildArtifact({ id: "artifact-3", kind: "worker", assembly: task.snapshot().assembly, assemblyQc: task.snapshot().assemblyQc, digest: "sha256:engine-3", location: "production", builtAt: "2026-09-14T12:00:00.000Z" });
+  task = task.recordBuildArtifact(artifact);
+  for (const [id, claim] of [["artifact-load", "artifact-loads"], ["artifact-binding", "source-binding-correct"], ["artifact-flow", "core-flow-correct"], ["artifact-outcome", "blueprint-outcome-correct"]]) {
+    task = task.addEvidence({ id, scope: "artifact", claim, kind: "functional-test", value: { digest: artifact.digest } });
+  }
+  assert.equal(inspectArtifact({ artifact, evidence: task.snapshot().evidence }).status, "pass");
+  task = task.recordProductQc(evaluateProductQc({ artifact, blueprint, evidence: task.snapshot().evidence }));
+
+  const session = createCodeTaskSession({ persistence: createStatePersistence({ store: createMemoryKeyValueStore(), key: "active-task" }) });
+  await session.save(task);
+  const restored = (await session.load()).snapshot();
+  assert.equal(createWorkbenchView(restored).status, "PRODUCT_VERIFIED");
+  assert.equal(restored.blueprint.ref, blueprintRef);
+  assert.deepEqual(restored.assembly.sourceHeads, ["piece-head"]);
+  assert.equal(restored.buildArtifact.sourceHeadSha, restored.assembly.integrationHeadSha);
+  assert.deepEqual(restored.productQc.evidenceIds, ["artifact-load", "artifact-flow", "artifact-outcome"]);
+  assert.equal(createCodeCapability({ task: restored }).productQc.status, "pass");
+});

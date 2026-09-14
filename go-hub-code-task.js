@@ -59,6 +59,10 @@ function normalizeInitial(initial = {}) {
     piece: null,
     pieceQc: null,
     gateHandoff: null,
+    assembly: null,
+    assemblyQc: null,
+    buildArtifact: null,
+    productQc: null,
     audit: [{ at: now(), event: "TASK_CREATED", state: "INSPECTING" }],
   };
 }
@@ -166,6 +170,10 @@ function normalizeSnapshot(value) {
   state.piece = state.piece == null ? null : clone(state.piece);
   state.pieceQc = state.pieceQc == null ? null : clone(state.pieceQc);
   state.gateHandoff = state.gateHandoff == null ? null : clone(state.gateHandoff);
+  state.assembly = state.assembly == null ? null : clone(state.assembly);
+  state.assemblyQc = state.assemblyQc == null ? null : clone(state.assemblyQc);
+  state.buildArtifact = state.buildArtifact == null ? null : clone(state.buildArtifact);
+  state.productQc = state.productQc == null ? null : clone(state.productQc);
   return state;
 }
 
@@ -281,6 +289,86 @@ function addEvidenceState(current, input = {}) {
   return next;
 }
 
+function recordAssemblyState(current, input = {}) {
+  if (current.gateHandoff?.status !== "READY_FOR_ASSEMBLY") throw new Error("Ready Gate handoff is required before Assembly");
+  if (input.status !== "ASSEMBLED" || input.blueprintRef !== current.blueprint?.ref) {
+    throw new Error("Assembly must match the mounted Blueprint");
+  }
+  const pieceIds = Array.isArray(input.pieceIds) ? input.pieceIds.map(String) : [];
+  if (!pieceIds.includes(current.gateHandoff.pieceId)) throw new Error("Assembly must include the Ready Gate Piece");
+  const next = clone(current);
+  next.assembly = {
+    ...clone(input), id: requiredString(input.id, "Assembly id"),
+    repository: requiredString(input.repository, "Assembly repository"),
+    integrationBranch: requiredString(input.integrationBranch, "Assembly integrationBranch"),
+    integrationHeadSha: requiredString(input.integrationHeadSha, "Assembly integrationHeadSha"),
+    pieceIds,
+    sourceHeads: Array.isArray(input.sourceHeads) ? input.sourceHeads.map(String) : [],
+  };
+  next.factoryStage = "ASSEMBLY";
+  next.assemblyQc = null;
+  next.buildArtifact = null;
+  next.productQc = null;
+  next.audit.push({ at: now(), event: "ASSEMBLY_RECORDED", assemblyId: next.assembly.id, headSha: next.assembly.integrationHeadSha });
+  return next;
+}
+
+function recordAssemblyQcState(current, input = {}) {
+  if (!current.assembly) throw new Error("Assembly is required before Assembly QC");
+  if (!['pass', 'fail'].includes(input.status) || input.checkedHeadSha !== current.assembly.integrationHeadSha) {
+    throw new Error("Assembly QC must match the current Assembly head");
+  }
+  const evidenceIds = Array.isArray(input.evidenceIds) ? input.evidenceIds.map(String) : [];
+  if (input.status === "pass" && (!evidenceIds.length || evidenceIds.some(id => !current.evidence.some(item =>
+    item?.id === id && item?.scope === "assembly" && item?.headSha === current.assembly.integrationHeadSha)))) {
+    throw new Error("Assembly QC pass requires exact-head evidence");
+  }
+  const next = clone(current);
+  next.assemblyQc = clone(input);
+  next.factoryStage = "ASSEMBLY_QC";
+  next.buildArtifact = null;
+  next.productQc = null;
+  next.audit.push({ at: now(), event: "ASSEMBLY_QC_RECORDED", status: input.status, headSha: input.checkedHeadSha });
+  return next;
+}
+
+function recordBuildArtifactState(current, input = {}) {
+  if (current.assemblyQc?.status !== "pass" || current.assemblyQc.checkedHeadSha !== current.assembly?.integrationHeadSha) {
+    throw new Error("passed Assembly QC for the current head is required before Build");
+  }
+  if (input.status !== "BUILT" || input.assemblyId !== current.assembly.id ||
+      input.sourceHeadSha !== current.assembly.integrationHeadSha || input.blueprintRef !== current.blueprint?.ref) {
+    throw new Error("Build Artifact must match the accepted Assembly and mounted Blueprint");
+  }
+  const next = clone(current);
+  next.buildArtifact = {
+    ...clone(input), id: requiredString(input.id, "Artifact id"), kind: requiredString(input.kind, "Artifact kind"),
+    digest: requiredString(input.digest, "Artifact digest"), location: requiredString(input.location, "Artifact location"),
+    builtAt: requiredString(input.builtAt, "Artifact builtAt"),
+  };
+  next.factoryStage = "BUILD";
+  next.productQc = null;
+  next.audit.push({ at: now(), event: "BUILD_ARTIFACT_RECORDED", artifactId: next.buildArtifact.id, digest: next.buildArtifact.digest });
+  return next;
+}
+
+function recordProductQcState(current, input = {}) {
+  if (!current.buildArtifact || input.artifactId !== current.buildArtifact.id || input.artifactDigest !== current.buildArtifact.digest) {
+    throw new Error("Product QC must match the current Artifact digest");
+  }
+  if (!['pass', 'fail'].includes(input.status)) throw new Error("Product QC status must be pass or fail");
+  const evidenceIds = Array.isArray(input.evidenceIds) ? input.evidenceIds.map(String) : [];
+  if (input.status === "pass" && (!evidenceIds.length || evidenceIds.some(id => !current.evidence.some(item =>
+    item?.id === id && item?.scope === "artifact" && item?.value?.digest === current.buildArtifact.digest)))) {
+    throw new Error("Product QC pass requires exact-digest evidence");
+  }
+  const next = clone(current);
+  next.productQc = clone(input);
+  next.factoryStage = input.status === "pass" ? "PRODUCT_VERIFIED" : "PRODUCT_QC";
+  next.audit.push({ at: now(), event: "PRODUCT_QC_RECORDED", status: input.status, digest: input.artifactDigest });
+  return next;
+}
+
 function setWorkbenchTruthState(current, input = {}) {
   const next = clone(current);
   if (Object.hasOwn(input, "mission")) next.mission = input.mission == null ? null : clone(input.mission);
@@ -327,6 +415,18 @@ function wrap(state) {
     },
     addEvidence(input = {}) {
       return wrap(addEvidenceState(state, input));
+    },
+    recordAssembly(input = {}) {
+      return wrap(recordAssemblyState(state, input));
+    },
+    recordAssemblyQc(input = {}) {
+      return wrap(recordAssemblyQcState(state, input));
+    },
+    recordBuildArtifact(input = {}) {
+      return wrap(recordBuildArtifactState(state, input));
+    },
+    recordProductQc(input = {}) {
+      return wrap(recordProductQcState(state, input));
     },
   });
 }
