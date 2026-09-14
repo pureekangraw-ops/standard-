@@ -1,287 +1,437 @@
-# GO Hub Code Station — Engine Map & Connection Audit
+# GO Hub Code Workstation — Development Factory Design
 
 Date: 2026-09-14
-Status: Design / architecture audit
-Base truth: `main` at `bbd43e1c5bfd0217efb335353a684e6a8581f854`
+Status: Design — awaiting final written-spec review
+Base repository truth when redesign began: `main` at `bbd43e1c5bfd0217efb335353a684e6a8581f854`
 
-## 1. Purpose
+## 1. North Star
 
-Code Station is the GO Hub operating engine that takes a coding mission from Centre and carries it from unknown repository state to a verified released result, then returns evidence and next state to Centre.
+Code Workstation is GO's development desk for building applications for internal use or sale.
 
-The station must be designed as a connected engine, not as a list of APIs or passing tests.
+The product goal is deliberately simple: any GO entering the workstation should be able to understand the job, continue it, inspect whether the result matches the design, and leave useful learning behind without reconstructing the project from chat history.
 
-Primary flow:
+The workstation exists to correct four recurring failures:
 
-`Centre -> Inspect -> Work -> Validate -> Integrate -> Release -> Result/Centre`
+1. implementation drifts from the intended specification;
+2. the development process is inconvenient to operate;
+3. progress and responsibility are difficult to trace;
+4. lessons discovered during real work disappear instead of improving the next job.
 
-A shared Task / Continuity / Authority engine runs underneath every stage. It is not a sixth sequential slot.
+The internal factory may be sophisticated. The operating surface must feel simple.
 
-## 2. Design rule
+Target experience:
 
-A slot is complete only when all four conditions hold:
+`Open workstation -> understand mission -> see blueprint -> see current piece -> continue work -> inspect evidence -> know next action`
 
-1. It receives a defined input from the previous boundary.
-2. It performs its responsibility end-to-end.
-3. It emits evidence/output that the next slot can consume without reconstructing hidden state.
-4. Its failure path returns to an explicit prior slot or blocker state without losing the mission.
+## 2. Governing model: desk above, factory below
 
-Presence of methods, tests, or UI labels does not make a slot complete.
+The workstation has two views of the same truth.
 
-## 3. Slot map
+### Workbench view
 
-### Slot 1 — Inspect
+The operator-facing desk continuously exposes:
 
-Purpose: establish exact repository reality before mutation.
+- Mission — what outcome is being built and why;
+- Blueprint — the approved/current design reference;
+- Current Piece — the module, bug, or bounded change currently in production;
+- Status — where that piece is in the factory;
+- Evidence — what proves the current claim;
+- Next — the next valid action or blocker.
 
-Input:
-- coding mission / repository target from Centre
+This is not a decorative dashboard. It is the minimum context another GO needs to enter the workstation and continue safely.
 
-Required output:
-- repository
-- default/base branch
-- base SHA
-- selected/work branch when present
-- current head SHA
-- recursive tree
-- file identity / content SHA where mutation will occur
-- relevant current task context
+### Factory view
 
-Current implementation assets:
-- GitHub workspace `inspect`
-- recursive `listTree`
-- `listFiles`
-- `readText`
-- Worker repository / branch / tree / file reads
+Under the desk, work moves through a production line:
 
-Gap to completion:
-- shell/runtime does not yet run an inspect mission and commit its evidence into the active task as an authoritative transition
-- capability readiness proves method presence, not a completed inspect handoff
+`Design -> Production + Piece QC -> Ready Gate -> Assembly + Assembly QC -> Build -> Product QC -> Package / Run`
 
-Assessment: strong components, incomplete end-to-end slot.
+The stages are responsibility boundaries. A stage must finish its own responsibility before it may hand work forward.
 
-### Slot 2 — Work
+## 3. The blueprint stays mounted
 
-Purpose: mutate only an isolated work branch while preserving branch and SHA truth.
+The central anti-drift rule is:
 
-Input:
-- inspected base/head evidence
-- requested change
+**Blueprint stays mounted.**
 
-Required output:
-- work branch
-- touched paths
-- resulting head SHA
-- diff evidence/fingerprint
-- explicit conflict or blocker when mutation cannot be applied safely
+Once work enters production, the design reference remains visible and addressable throughout the life of the piece. Production does not read the design once and then operate from memory.
 
-Current implementation assets:
-- branch creation
-- create/update/delete file
-- default-branch write guard
-- stale file SHA conflict mapping
-- compare/diff
-- task fields for workBranch/headSha/touchedPaths/diffFingerprint
+At any point GO must be able to compare:
 
-Gap to completion:
-- no mission-level orchestrator connects inspect -> branch -> edit -> diff -> persisted task transition
-- shell currently loads a task and registers capability but does not execute or save this cycle
+`Blueprint | Current implementation | Latest evidence`
 
-Assessment: strong components, incomplete end-to-end slot.
+Production may choose implementation mechanisms freely, but it may not silently rewrite the blueprint to make an implementation appear correct.
 
-### Slot 3 — Validate
+If reality proves that the design itself must materially change, that is a design conflict. The work returns to Design with evidence. It does not mutate product intent invisibly inside Production.
 
-Purpose: decide whether the work actually satisfies the intended change before integration.
+## 4. Design — define what is to be built
 
-Input:
-- reviewed diff/head SHA
-- mission intent and acceptance behavior
+Design converts a mission into a blueprint that Production can execute without repeatedly asking the Owner how to implement it.
 
-Required output:
-- validation result bound to exact head SHA
-- test evidence when applicable
-- functional acceptance evidence
-- explicit defer reason when a test cannot or should not run
-- route back to Work on failure
-
-Current implementation assets:
-- task states `DIFF_REVIEWED` and `TESTED_OR_TEST_DEFERRED`
-- later CI observation exists in integration
-
-Gap to completion:
-- no Code Station validation engine exists that executes/records functional validation against the mission intent
-- CI is not a substitute for this slot; CI answers repository integration checks, not necessarily whether the requested behavior is correct
-- current state model can record a target state without a strict source->target transition graph
+Design answers:
 
-Assessment: first clearly incomplete functional engine and the next sequential slot that must be finished before extending later stages.
+- what is being built;
+- why it exists;
+- required behavior and user-visible outcome;
+- important interfaces and constraints;
+- what it must connect to;
+- acceptance conditions;
+- material boundaries that Production must not change silently.
 
-## 4. Later slots already contain useful machinery but are not yet complete engines
+GO may use appropriate reasoning lenses to form the design. A useful default chain is:
 
-### Slot 4 — Integrate
+`CRYSTALLIZE -> ARCHITECT -> CARTOGRAPHER -> reality check`
 
-Purpose: turn validated work into a safely merged repository result.
+The purpose of the lenses is judgment, not ceremony.
 
-Current assets:
-- open/read PR
-- exact-head CI observation
-- rerun failed jobs
-- guarded merge with expected head SHA
-- PR/CI/merge task evidence
+BIG remains Owner / highest authority. Owner authority does not mean every implementation decision requires a human approval gate. Once mission and authority are sufficient, GO should operate the factory autonomously. Return to BIG only when a real authority boundary is crossed, product intent must materially change, required permission/secret is unavailable, or contradictory truths cannot be reconciled safely.
 
-Remaining assembly concerns:
-- no complete orchestrated Validate -> PR -> CI -> Merge mission loop
-- required-check policy may be looser than actual branch-protection requirements and must be audited before declaring the slot complete
-- state machine does not yet enforce a strict legal transition graph
+## 5. Work Package — the unit that enters Production
 
-Assessment: advanced machinery, not yet a complete slot.
+Production does not receive an entire vague project as one undifferentiated task. Design yields bounded Work Packages.
 
-### Slot 5 — Release
+A Work Package can be, for example:
 
-Purpose: observe deployment of the merged SHA, verify the real target, and recover when release verification fails.
+- one module;
+- one bug fix;
+- one adapter;
+- one coherent behavior change.
 
-Current assets:
-- workflow-run observation by SHA
-- deployment and verification task fields/states
-- rollback state vocabulary
+Each package carries enough context to manufacture and inspect the piece:
 
-Remaining gaps:
-- no complete deploy -> real-target verification executor
-- no fully wired rollback/recovery execution path
-- deploy success must remain distinct from external production verification
+- mission reference;
+- blueprint reference;
+- piece identity and purpose;
+- required behavior;
+- relevant interfaces/dependencies;
+- constraints;
+- piece-level acceptance criteria;
+- current repository/branch/head evidence;
+- known risks or blockers.
 
-Assessment: partial engine.
+The package is a production contract, not a prescription of every function or file GO must write.
 
-## 5. Shared engine — Task / Continuity / Authority
+## 6. Production — the heart of the workstation
 
-This engine is orthogonal to slots 1-5.
+Production is where GO turns a Work Package into a finished, individually verified piece.
 
-Responsibilities:
-- mission identity
-- current slot/state
-- exact repository/head evidence
-- durable snapshot
-- audit journal
-- revision/version
-- command idempotency
-- conflict detection
-- resume after browser/process restart
-- blocker and next action
-- eventual specialist ownership/lease without splitting central truth
+GO owns the manufacturing method. BIG does not need to specify algorithms, file edits, task decomposition, specialist count, or the exact sequence of internal coding operations.
 
-Current assets:
-- `go-hub-code-task.js` snapshot/state/audit vocabulary
-- local persistence abstraction with durable readback check
-- localStorage-backed session load/save
+The production loop is:
 
-Current structural problem:
-- localStorage is currently the effective state store in shell
-- there is no server-side single writer
-- no revision concurrency enforcement
-- no command dedupe/idempotency
-- no lease/ownership model
-- shell loads the task but does not show a complete transition -> save -> resume execution loop
+`Receive package -> inspect current reality -> choose manufacturing approach -> create/change -> compare with blueprint -> piece QC -> repair if needed -> seal -> Ready Gate`
 
-Conclusion:
-Task Authority is required infrastructure, but it must be treated as a shared engine under every slot, not as Slot 6 and not as an excuse to skip Slot 3 Validate.
+### 6.1 GO controls the machines
 
-## 6. Correct connection graph
+GO is the production controller. It may select tools, inspect files, edit code, run tests, debug, compare behavior, and use other available capabilities as required by the piece.
 
-Forward path:
+The workstation should not hard-code one universal micro-sequence for every development task. The package defines the required output and boundaries; GO chooses the practical manufacturing route.
 
-`Centre`
-`  -> Inspect`
-`  -> Work`
-`  -> Validate`
-`  -> Integrate`
-`  -> Release`
-`  -> Result/Centre`
+### 6.2 GO may split into specialists
 
-Failure routes:
+GO may create temporary specialist roles whenever useful — for example implementation, debugging, testing, inspection, or another focused duty.
 
-- Inspect uncertainty -> remain Inspect / BLOCKED
-- Work conflict -> Work / CONFLICT
-- Validate failure -> Work
-- Integrate CI failure -> Work or Validate depending on cause
-- stale PR/head -> Work/Integrate reconciliation, never blind merge
-- deploy failure -> Release recovery
-- verification failure -> Release or Work/Validate according to defect class
+The controller decides dynamically:
 
-Shared underneath all routes:
+- whether splitting is useful;
+- which specialists are needed;
+- whether they work sequentially or in parallel;
+- when their work is complete.
 
-`Task / Continuity / Authority`
+Specialization must never split authoritative truth. All specialist outputs return to the controlling mission as work, findings, and evidence. GO Controller reconciles them against the mounted Blueprint before the piece may advance.
 
-No stage may silently reconstruct authoritative mission state from UI memory.
+Principle:
 
-## 7. Important correction to previous completeness estimate
+**Split capability, not ownership or truth.**
 
-The earlier estimate that several slots were "complete" was too generous because it measured available capabilities rather than complete connected behavior.
+### 6.3 Piece QC belongs to Production
 
-Using the engine definition in this document:
+Production is responsible for checking its own piece before handoff.
 
-- Inspect: components strong, engine incomplete
-- Work: components strong, engine incomplete
-- Validate: incomplete
-- Integrate: advanced components, engine incomplete
-- Release: partial
-- Shared Task Authority: partial/local only
+Piece QC asks whether this module/bug/change itself matches its blueprint and piece-level acceptance conditions. Appropriate checks depend on the work: focused tests, static checks, behavior probes, diff review, interface checks, or other evidence.
 
-Therefore Code Station currently has **zero fully closed end-to-end slots by the stricter engine definition**, even though Slots 1, 2, and 4 already contain substantial production-grade machinery.
+A piece that has merely been edited is not finished.
 
-This is not a regression. It is a correction of the measuring lens.
+A piece is production-complete only when:
 
-## 8. Build order from here
+- the intended behavior exists;
+- relevant piece-level checks pass or an explicitly allowed limitation is recorded;
+- implementation is compared with the mounted blueprint;
+- exact code/head evidence is known;
+- known failure is not being handed to Assembly as unfinished production work.
 
-Do not chase whichever bug or API appears next.
+## 7. Ready Gate — accepted inventory, not an approval ceremony
 
-Build order:
+Ready Gate is the holding boundary for pieces that Production has completed and sealed.
 
-1. Close Slot 1 Inspect as a complete mission handoff.
-2. Close Slot 2 Work as a complete branch/edit/diff handoff.
-3. Build and close Slot 3 Validate.
-4. Assembly-review Slots 1-3 together.
-5. Close Slot 4 Integrate using existing PR/CI/merge machinery.
-6. Close Slot 5 Release with real verification and recovery.
-7. Assembly-review the entire station.
+It is not primarily a human approval gate.
 
-Task Authority is developed only to the degree required to provide shared truth beneath this sequence; it is not counted as a later slot. Its server-side authority upgrade remains a separate architectural engine and should be introduced without changing the sequential slot order.
+A piece entering Ready Gate carries a handoff packet containing at least:
 
-## 9. Definition of Done for the first three slots
+- piece identity;
+- blueprint/version reference;
+- exact repository/head evidence;
+- changed paths/diff evidence;
+- Piece QC result;
+- relevant interface/dependency notes;
+- known limitations;
+- lessons or anomalies discovered during production.
 
-### Inspect done
-A fresh mission can start with only repository + intent and finish with a persisted, exact inspect snapshot that Work can consume directly.
+Anything failing Piece QC stays in Production. Assembly should not become the place where unfinished manufacturing is completed.
 
-### Work done
-Given an Inspect snapshot, Code Station can create/use an isolated branch, mutate files with SHA safety, produce exact diff/head evidence, persist it, and surface conflicts without losing the task.
+## 8. Assembly — integrate completed pieces and inspect the joints
 
-### Validate done
-Given Work evidence and mission intent, Code Station can evaluate the requested behavior, bind validation evidence to the exact head SHA, explicitly pass/fail/defer, and route failure back to Work.
+Assembly accepts sealed pieces from Ready Gate and takes responsibility for the system formed by connecting them.
 
-## 10. Assembly review criteria
+Its job is not to repeat Production's Piece QC. It checks a different class of truth:
 
-After each engine is complete, review the assembly rather than merely its unit tests:
+- interfaces fit;
+- dependencies are satisfied;
+- shared state remains coherent;
+- pieces do not conflict;
+- integration does not introduce regression;
+- repository integration/merge is safe;
+- assembled behavior still satisfies the relevant blueprint.
 
-- output from prior slot is sufficient input for next slot
-- exact SHA truth survives each boundary
-- stale evidence is invalidated on head changes
-- failures return to a valid prior state
-- task state survives reload/resume
-- no UI/local cache is treated as repository truth
-- GitHub remains repository source of truth
-- Centre receives explicit result/blocker/next action
-- green CI cannot override failed functional acceptance
-- deployment success cannot masquerade as production verification
+Typical flow:
 
-## 11. Non-goals of this design
+`Receive sealed piece(s) -> verify handoff -> integrate/merge -> Assembly QC -> accepted assembly`
 
-- no UI redesign
-- no generalized plugin/tool gateway
-- no Workflow/webhook/event-resume implementation yet
-- no replacement of GitHub or Notion
-- no broad refactor unrelated to Code Station engine boundaries
+If Assembly finds a defect inside a piece, it routes the defect back to the responsible Production package with evidence. If the failure is specifically at the joint between otherwise correct pieces, Assembly owns diagnosing and resolving that integration responsibility.
 
-## 12. Immediate next engine
+This creates two distinct quality layers:
 
-The next implementation target is **Slot 1 Inspect closure**, not Task Authority v1 in isolation and not Slot 4/5 hardening.
+- **Piece QC:** is each manufactured piece correct?
+- **Assembly QC:** are the completed pieces correct when connected?
 
-Minimal shared-state changes may accompany Slot 1 only when needed to preserve its exact handoff and resume behavior. Larger Durable Object Task Authority work follows as a shared-engine upgrade after the slot boundary is proven, or earlier only if Inspect closure demonstrably cannot be correct without it.
+Passing one does not imply passing the other.
 
-This ordering exists to prevent another architecture jump: finish the engine in front of us, test its real behavior, review how it connects, then move to the next engine.
+## 9. Build — create the deliverable artifact
+
+After the assembled source is accepted, Build creates the actual deliverable artifact appropriate to the project.
+
+For an Android application this may be an APK. Other projects may produce another deployable/package artifact.
+
+Build evidence must bind the artifact to the accepted source/revision so the workstation can answer which code produced the deliverable.
+
+A successful build means an artifact was produced. It does not prove that the artifact works correctly for the recipient.
+
+## 10. Product QC — inspect what will actually be delivered
+
+Product QC checks the real artifact, not merely source code or a successful build job.
+
+For an APK this can include, as applicable:
+
+- artifact/package identity;
+- version/configuration;
+- installability;
+- launch/runtime behavior;
+- critical user flows;
+- connection to expected services/configuration;
+- confirmation that the delivered behavior matches the blueprint.
+
+Only a Product-QC-passed artifact is eligible for packaging/delivery/run.
+
+Thus the workstation has three different quality responsibilities:
+
+1. Piece QC — the part is correct;
+2. Assembly QC — the connected system is correct;
+3. Product QC — the actual deliverable is correct.
+
+## 11. Package / Run — close the production line
+
+Once Product QC passes, the artifact may be wrapped for its destination: release metadata, signing/version information, checksum or other required packaging, and delivery/run instructions as appropriate.
+
+The workstation records the exact artifact and result returned to the mission. Deployment success must not be substituted for Product QC when real-target verification is required.
+
+## 12. Diagnostics — failures return to their owner
+
+The factory must make defects easy to locate rather than forcing every failure back to the beginning.
+
+The diagnostic question is:
+
+**Which responsibility boundary owns the failed truth?**
+
+Examples:
+
+- implementation differs from piece blueprint -> Production;
+- individual piece test fails -> Production;
+- two correct modules disagree at their interface -> Assembly;
+- merge/integration regression -> Assembly;
+- build cannot create artifact from accepted assembly -> Build;
+- APK installs but required user flow fails -> Product QC identifies the defect and routes it to the responsible Production/Assembly/Build boundary;
+- blueprint is impossible or materially wrong -> Design.
+
+Each boundary should have enough local evidence and diagnostic capability to investigate its own responsibility deeply.
+
+## 13. Continuity — another GO can continue without reconstruction
+
+Continuity is not a terminal station. It is a property of the entire workstation.
+
+At every meaningful boundary the system preserves enough truth to resume:
+
+- Mission;
+- current Blueprint and version/reference;
+- current Work Package;
+- current factory stage;
+- exact repository/branch/head evidence;
+- completed QC evidence;
+- blocker;
+- next valid action;
+- relevant handoff/lesson records.
+
+Chat memory, UI labels, or local cache must not silently replace repository/project truth.
+
+GitHub remains source of truth for repository code and repository state. Other connected systems may retain their appropriate responsibilities; this design does not require replacing them.
+
+## 14. Learning — work should improve the next work
+
+Learning is also cross-cutting rather than a final station.
+
+When real work reveals something reusable, record a compact lesson:
+
+- what failed or surprised us;
+- why it happened;
+- what fixed it;
+- what should be checked or done differently next time;
+- where the lesson applies.
+
+The purpose is not to create a giant log archive. Lessons must be retrievable at the relevant future Design, Production, Assembly, Build, or Product QC context.
+
+A completed job should leave both a product result and better operating knowledge.
+
+## 15. Responsibility contract shared by factory stages
+
+Every factory boundary must be explainable with five questions:
+
+1. What does it receive?
+2. What truth is it responsible for?
+3. What proves that responsibility is complete?
+4. What exactly does it hand forward?
+5. Where does failure return?
+
+If a stage cannot answer these clearly, its boundary is not ready.
+
+## 16. Relationship to the existing Code Station implementation
+
+The previous architecture organized the station primarily as:
+
+`Inspect -> Work -> Validate -> Integrate -> Release`
+
+That model captured useful lifecycle machinery but mixed tools, quality checks, and responsibility boundaries at one level.
+
+The existing implementation remains valuable. It should be remapped rather than discarded blindly:
+
+- inspect/tree/read/SHA capabilities become machinery available to Design, Production, Assembly, and diagnostics where needed;
+- branch-safe mutation/diff/conflict handling primarily serves Production;
+- focused validation becomes Piece QC;
+- PR/CI/merge machinery primarily serves Assembly and Assembly QC;
+- deploy/build observation contributes to Build/Package/Run;
+- real-target verification contributes to Product QC;
+- task/persistence/audit machinery contributes to Workbench continuity and traceability.
+
+Existing code is implementation material. It does not define the new factory boundaries merely because it already exists.
+
+## 17. Workbench information model
+
+The minimum persistent operating model should eventually make these relationships explicit:
+
+### Mission
+The requested outcome and authority context.
+
+### Blueprint
+The current design reference against which implementation is judged.
+
+### Work Package
+One bounded production unit tied to the Blueprint.
+
+### Piece
+The implementation result of a Work Package, with exact code evidence.
+
+### QC Evidence
+Evidence tied to the thing it proves: piece, assembly, or product artifact.
+
+### Gate Handoff
+A sealed production result accepted into Ready Gate.
+
+### Assembly
+The integrated source/result composed from accepted pieces.
+
+### Artifact
+The build output bound to the accepted assembly/source revision.
+
+### Lesson
+A reusable finding tied to relevant context.
+
+The exact storage implementation is intentionally not fixed by this design. Server-side task authority, revisions, dedupe, and leases may be introduced when required for correctness, but they must serve this operating model rather than become the product themselves.
+
+## 18. Development strategy for the workstation itself
+
+Build the workstation using the same factory principle it is intended to provide.
+
+### Phase 1 — Workbench Truth
+Make Mission, Blueprint, Current Piece, Status, Evidence, and Next Action visible and resumable from real state.
+
+Success condition: another GO can enter and understand/continue the active job without reconstructing it from chat history.
+
+### Phase 2 — Production Engine
+Close one real Work Package end-to-end:
+
+`Blueprint -> manufacture -> compare -> Piece QC -> seal -> Ready Gate`
+
+Success condition: one module or bug fix can be produced, verified against its mounted blueprint, and handed forward with sufficient evidence.
+
+This is the first major implementation focus because Production is the heart of the workstation.
+
+### Phase 3 — Assembly Engine
+Accept sealed pieces, integrate them, inspect their joints, and produce an accepted assembly.
+
+Success condition: Assembly can distinguish piece defects from integration defects and route failures to the correct owner.
+
+### Phase 4 — Product Pipeline
+Build a real artifact, perform Product QC, package it, and run/deliver it.
+
+For Android work the concrete proof should eventually include a real APK path.
+
+### Phase 5 — Learning and Diagnostics
+Make defect routing and reusable lessons easy to inspect and retrieve during future work.
+
+Learning capture may exist earlier in minimal form; this phase makes it operationally useful rather than merely stored.
+
+### Final workstation assembly review
+
+After the phases work individually, evaluate the workstation as one operating environment:
+
+- Can a GO enter and immediately understand the job?
+- Is the mounted Blueprint continuously available during production?
+- Can a piece be traced from design through delivered artifact?
+- Can every quality claim be inspected through evidence?
+- Does a defect route to the responsibility that owns it?
+- Can work resume after interruption without reconstructing hidden state?
+- Does the interface expose complexity only when needed?
+- Are useful lessons available to later work?
+
+The final standard is not architectural elegance. It is the operating experience:
+
+**"Easy to enter, easy to work, easy to verify, easy to continue, easy to learn from."**
+
+## 19. Non-goals
+
+This design does not require:
+
+- replacing GitHub, Notion, or existing connectors;
+- exposing every internal machine on the main workbench screen;
+- a human approval prompt before every production action;
+- fixed specialist counts or fixed subtask decomposition;
+- building a generalized orchestration framework before one real production package works;
+- preserving old slot names when they obscure the new responsibility model.
+
+## 20. Immediate next step after design approval
+
+Do not immediately refactor the entire Code Station.
+
+First map the existing implementation onto this factory design and create an implementation plan for **Phase 1 Workbench Truth + the minimum boundary needed to begin Phase 2 Production**.
+
+The first implementation slice must prove the user experience that motivated the redesign: GO enters the workstation, sees the mounted Blueprint and current production truth, and can continue one bounded piece without relying on chat reconstruction.
+
+Only after that slice works in reality should the workstation expand deeper into Production machinery.
