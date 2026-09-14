@@ -19,6 +19,7 @@ const activeHubFiles = [
   "go-hub-code-module.js",
   "go-hub-code-task.js",
   "go-hub-github-workspace.js",
+  "go-hub-persistence.js",
   "go-hub-sw-bootstrap.js",
   "go-hub-sw.js",
 ];
@@ -61,7 +62,7 @@ test("active publication truth declares exclusive GO Hub ownership", () => {
 
 test("deploy syntax gate covers every active GO Hub JavaScript entry", () => {
   const pkg = JSON.parse(read("package.json"));
-  for (const file of ["go-hub-shell.js", "go-hub-runtime.js", "go-hub-code-module.js", "go-hub-code-task.js", "go-hub-github-workspace.js", "go-hub-sw-bootstrap.js", "go-hub-sw.js"]) {
+  for (const file of ["go-hub-shell.js", "go-hub-runtime.js", "go-hub-code-module.js", "go-hub-code-task.js", "go-hub-github-workspace.js", "go-hub-persistence.js", "go-hub-sw-bootstrap.js", "go-hub-sw.js"]) {
     assert.match(pkg.scripts["check:syntax"], new RegExp(file.replaceAll(".", "\\.")), `${file} must be syntax checked`);
   }
 });
