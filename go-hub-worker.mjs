@@ -208,7 +208,12 @@ async function mutateFile(fetchImpl, token, repository, filePath, branch, expect
       body: JSON.stringify(body),
     },
   );
-  if (!result.response.ok) return upstreamError(result.response);
+  if (!result.response.ok) {
+    if (safeExpectedSha && (result.response.status === 409 || result.response.status === 422)) {
+      return json({ code: "STALE_FILE_SHA" }, 409);
+    }
+    return upstreamError(result.response);
+  }
   return json({
     ok: true,
     commit: result.payload?.commit?.sha || null,
