@@ -127,3 +127,97 @@ test("Code task session restores and projects the exact six workbench truths", a
     blocker: null,
   });
 });
+
+test("Code task session restores exact Engine 2 production truth at Ready Gate", async () => {
+  const { createMemoryKeyValueStore, createStatePersistence } = await import(pathToFileURL(modulePath).href);
+  const { createCodeTask } = await import(`${pathToFileURL(path.join(root, "go-hub-code-task.js")).href}?engine2=${Date.now()}`);
+  const { createCodeTaskSession } = await import(`${pathToFileURL(path.join(root, "go-hub-code-module.js")).href}?engine2=${Date.now()}`);
+  const { createWorkbenchView } = await import(`${pathToFileURL(path.join(root, "go-hub-workbench-model.js")).href}?engine2=${Date.now()}`);
+  const persistence = createStatePersistence({ store: createMemoryKeyValueStore(), key: "active-task" });
+  const session = createCodeTaskSession({ persistence });
+  let task = createCodeTask({ id: "engine-2-resume" }).setWorkbenchTruth({ blueprint: { ref: "spec.md" } });
+  task = task.setWorkPackage({
+    id: "wp-1", title: "Production Line", purpose: "seal one piece", blueprintRef: "spec.md",
+    inputs: ["truth"], expectedOutputs: ["piece"], dependencies: [], assemblyTarget: "future assembly",
+  }).recordPiece({
+    id: "piece-1", workPackageId: "wp-1", repository: "repo", branch: "engine-2",
+    headSha: "head-1", changedPaths: ["piece.js"], outputs: ["piece"],
+  }).addEvidence({
+    id: "ev-1", scope: "piece", claim: "purpose-correct", kind: "test", headSha: "head-1",
+  }).recordPieceQc({
+    status: "pass", checkedHeadSha: "head-1", checks: { purpose: true, behavior: true, interface: true, evidence: true },
+    evidenceIds: ["ev-1"], checkedAt: "2026-09-14T12:00:00.000Z",
+  }).recordGateHandoff({
+    status: "READY_FOR_ASSEMBLY", pieceId: "piece-1", workPackageId: "wp-1",
+    blueprintRef: "spec.md", headSha: "head-1", evidenceIds: ["ev-1"],
+  });
+
+  await session.save(task);
+  const restored = (await session.load()).snapshot();
+  assert.equal(restored.factoryStage, "READY_GATE");
+  assert.equal(restored.workPackage.blueprintRef, "spec.md");
+  assert.equal(restored.piece.headSha, "head-1");
+  assert.deepEqual(restored.pieceQc.evidenceIds, ["ev-1"]);
+  assert.deepEqual(restored.gateHandoff.evidenceIds, ["ev-1"]);
+  assert.equal(createWorkbenchView(restored).status, "READY_GATE");
+});
+
+test("one Work Package travels from mounted Blueprint to a resumable Ready Gate", async () => {
+  const nonce = `${Date.now()}-${Math.random()}`;
+  const { createMemoryKeyValueStore, createStatePersistence } = await import(`${pathToFileURL(modulePath).href}?line=${nonce}`);
+  const { createCodeTask } = await import(`${pathToFileURL(path.join(root, "go-hub-code-task.js")).href}?line=${nonce}`);
+  const { createCodeTaskSession, createCodeCapability } = await import(`${pathToFileURL(path.join(root, "go-hub-code-module.js")).href}?line=${nonce}`);
+  const { createWorkbenchView } = await import(`${pathToFileURL(path.join(root, "go-hub-workbench-model.js")).href}?line=${nonce}`);
+  const { evaluatePieceQc } = await import(`${pathToFileURL(path.join(root, "go-hub-piece-qc.js")).href}?line=${nonce}`);
+  const { sealReadyGate } = await import(`${pathToFileURL(path.join(root, "go-hub-ready-gate.js")).href}?line=${nonce}`);
+
+  const blueprintRef = "docs/superpowers/specs/2026-09-14-go-hub-code-station-engine-map-design.md";
+  let task = createCodeTask({
+    id: "engine-2-functional", repository: "pureekangraw-ops/standard-",
+  }).setWorkbenchTruth({
+    mission: { summary: "Build Engine 2", outcome: "One evidenced piece reaches Ready Gate" },
+    blueprint: { title: "Factory Blueprint", ref: blueprintRef, status: "approved" },
+  }).setWorkPackage({
+    id: "wp-production-line", title: "Production Line", purpose: "produce and seal one bounded piece",
+    blueprintRef, inputs: ["Engine 1 CodeTask truth"], expectedOutputs: ["Ready Gate handoff"],
+    dependencies: ["Engine 1 accepted main"], assemblyTarget: "Engine 3 Assembly input",
+  }).recordPiece({
+    id: "piece-production-line", workPackageId: "wp-production-line",
+    repository: "pureekangraw-ops/standard-", branch: "go-hub-factory-engine-2-production-line",
+    headSha: "engine-2-functional-head",
+    changedPaths: ["go-hub-code-task.js", "go-hub-evidence-ledger.js", "go-hub-piece-qc.js", "go-hub-ready-gate.js"],
+    outputs: ["Piece Controller", "Evidence Ledger", "Piece QC", "Ready Gate"],
+  });
+  for (const [id, claim] of [
+    ["ev-purpose", "purpose-correct"],
+    ["ev-behavior", "behavior-correct"],
+    ["ev-interface", "interface-correct"],
+  ]) {
+    task = task.addEvidence({
+      id, scope: "piece", claim, kind: "functional-test", value: true,
+      repository: "pureekangraw-ops/standard-", headSha: "engine-2-functional-head",
+      recordedAt: "2026-09-14T12:00:00.000Z",
+    });
+  }
+  const production = task.snapshot();
+  const pieceQc = evaluatePieceQc(production);
+  task = task.recordPieceQc(pieceQc);
+  const checked = task.snapshot();
+  const gateHandoff = sealReadyGate({ ...checked, knownLimitations: ["Engine 3 is out of scope"] });
+  task = task.recordGateHandoff(gateHandoff);
+
+  const persistence = createStatePersistence({ store: createMemoryKeyValueStore(), key: "active-task" });
+  const session = createCodeTaskSession({ persistence });
+  await session.save(task);
+  const restored = (await session.load()).snapshot();
+  const view = createWorkbenchView(restored);
+  const capability = createCodeCapability({ task: restored });
+
+  assert.equal(view.status, "READY_GATE");
+  assert.equal(restored.blueprint.ref, blueprintRef);
+  assert.equal(restored.gateHandoff.blueprintRef, blueprintRef);
+  assert.equal(restored.gateHandoff.headSha, restored.piece.headSha);
+  assert.deepEqual(restored.gateHandoff.evidenceIds, ["ev-purpose", "ev-behavior", "ev-interface"]);
+  assert.deepEqual(restored.pieceQc.evidenceIds, restored.gateHandoff.evidenceIds);
+  assert.equal(capability.gateHandoff.status, "READY_FOR_ASSEMBLY");
+});
