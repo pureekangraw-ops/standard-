@@ -222,7 +222,7 @@ test("Destination capability is admitted only by an exact AWAY handoff", async (
     centre.enter({ checkpointId: "CENTRE-001", workId: "WORK-A" }),
     { task: "Build", requestedResult: "Verified build", authority: "BIG" },
   );
-  const capability = { id: "code", status: "ready" };
+  const capability = { id: "code", status: "ready", run() { return "real method"; } };
 
   assert.throws(
     () => admitDestination(reviewed, {
@@ -256,7 +256,8 @@ test("Destination capability is admitted only by an exact AWAY handoff", async (
     createReturnPacket(access, { status: "verified" }),
   );
 
-  assert.equal(access.capability.id, "code");
+  assert.equal(access.capability, capability);
+  assert.equal(access.capability.run(), "real method");
   assert.equal(returned.status, "RETURNED");
   assert.equal(returned.checkpointId, "CENTRE-001");
 });
