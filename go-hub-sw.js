@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "go-hub-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v3-code-module`;
+const CACHE_NAME = `${CACHE_PREFIX}v2-hard-cutover`;
 const APP_SHELL = [
   "./",
   "./index.html",
