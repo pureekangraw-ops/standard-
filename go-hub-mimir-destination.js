@@ -79,3 +79,66 @@ export function createMimirSearchDestination({ search } = {}) {
     },
   });
 }
+
+
+const FIVE_W_KEYS = Object.freeze(["WHO", "WHY", "WHAT", "WHERE", "WHEN"]);
+const FIVE_W_STATES = Object.freeze(["FACT", "INFERENCE", "UNKNOWN", "CONFLICT"]);
+
+function normalizeCoordinate(key, input, availableRecordIds) {
+  if (input == null || input === "") {
+    return { key, state: "UNKNOWN", value: null, evidenceRecordIds: [] };
+  }
+  const coordinate = typeof input === "object" && !Array.isArray(input)
+    ? input
+    : { state: "FACT", value: input };
+  const state = String(coordinate.state || "UNKNOWN").toUpperCase();
+  if (!FIVE_W_STATES.includes(state)) {
+    throw new Error(`${key} state must be FACT, INFERENCE, UNKNOWN, or CONFLICT`);
+  }
+  const evidenceRecordIds = Array.isArray(coordinate.evidenceRecordIds)
+    ? coordinate.evidenceRecordIds.map(String)
+    : [];
+  if (evidenceRecordIds.some(id => !availableRecordIds.has(id))) {
+    throw new Error(`${key} references a record that MIMIR did not return`);
+  }
+  if ((state === "FACT" || state === "CONFLICT") && evidenceRecordIds.length === 0) {
+    throw new Error(`${key} ${state} requires MIMIR record evidence`);
+  }
+  const value = coordinate.value == null || coordinate.value === ""
+    ? null
+    : structuredClone(coordinate.value);
+  if (state !== "UNKNOWN" && value == null) {
+    throw new Error(`${key} ${state} requires a value`);
+  }
+  return { key, state, value, evidenceRecordIds };
+}
+
+export function applyFiveWAfterSearch(returnPacket, input = {}) {
+  const payload = returnPacket?.payload;
+  if (!payload || payload.kind !== "MIMIR_SEARCH_RESULT") {
+    throw new Error("MIMIR search result is required before 5W");
+  }
+  if (!Array.isArray(payload.records)) {
+    throw new Error("MIMIR records must be observed before 5W");
+  }
+  const availableRecordIds = new Set(
+    payload.records.map(record => String(record?.id || "")).filter(Boolean),
+  );
+  const fiveW = {};
+  for (const key of FIVE_W_KEYS) {
+    fiveW[key] = normalizeCoordinate(
+      key,
+      input[key] ?? input[key.toLowerCase()],
+      availableRecordIds,
+    );
+  }
+  return snapshot({
+    ...returnPacket,
+    payload: {
+      ...payload,
+      fiveW,
+      fiveWAppliedAfterSearch: true,
+      next: "GO_DECIDE",
+    },
+  });
+}
