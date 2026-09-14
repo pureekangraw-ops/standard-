@@ -123,17 +123,46 @@ export function createGitHubWorkspace({
       return String(payload.content ?? "");
     },
 
-    async writeText(path, content) {
-      const safePath = assertSafePath(path);
+    async createBranch({ name, fromSha } = {}) {
+      return request("/branch", {
+        method: "POST",
+        body: JSON.stringify({
+          repository: repo,
+          name: assertRef(name, "branch"),
+          fromSha: assertRef(fromSha, "sha"),
+        }),
+      });
+    },
 
+    async writeText(path, content, { branch, expectedSha } = {}) {
       return request("/file", {
         method: "PUT",
         body: JSON.stringify({
           repository: repo,
-          path: safePath,
+          path: assertSafePath(path),
           content: String(content ?? ""),
+          branch: assertRef(branch, "branch"),
+          expectedSha: assertRef(expectedSha, "sha"),
         }),
       });
+    },
+
+    async deletePath(path, { branch, expectedSha } = {}) {
+      return request("/file", {
+        method: "DELETE",
+        body: JSON.stringify({
+          repository: repo,
+          path: assertSafePath(path),
+          branch: assertRef(branch, "branch"),
+          expectedSha: assertRef(expectedSha, "sha"),
+        }),
+      });
+    },
+
+    async compare({ base: baseRef, head } = {}) {
+      return request(
+        `/compare?repository=${encodeURIComponent(repo)}&base=${encodeURIComponent(assertRef(baseRef, "base"))}&head=${encodeURIComponent(assertRef(head, "head"))}`
+      );
     },
   });
 }
