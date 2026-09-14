@@ -209,7 +209,7 @@ export function admitDestination(work, { destination, capability } = {}) {
   if (!capability || typeof capability !== "object") {
     throw new Error("Destination capability is required");
   }
-  return snapshot({
+  return Object.freeze({
     workId: work.workId,
     checkpointId: work.checkpointId,
     returnAddress: work.handoff.returnAddress,
