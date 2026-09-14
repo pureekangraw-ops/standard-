@@ -112,3 +112,51 @@ test("workspace creates a branch, mutates files with SHA guards, and compares re
     assert.equal("authorization" in (call.init.headers || {}), false);
   }
 });
+
+
+test("workspace exposes PR and exact-head CI operations without Authorization", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    const value = String(url);
+    if (value.endsWith("/pull-request") && init.method === "POST") {
+      return response({ number: 19, headBranch: "feature-c", headSha: "head-c", baseBranch: "main" }, 201);
+    }
+    if (value.includes("/pull-request?")) {
+      return response({ number: 19, headBranch: "feature-c", headSha: "head-c", baseBranch: "main" });
+    }
+    if (value.includes("/ci?")) {
+      return response({ headSha: "head-c", runs: [{ id: 7 }], checks: [{ id: 8 }] });
+    }
+    if (value.endsWith("/ci/rerun-failed") && init.method === "POST") {
+      return response({ ok: true, runId: 7 }, 202);
+    }
+    throw new Error(\`unexpected request \${value}\`);
+  };
+  const { createGitHubWorkspace } = await import(\`\${moduleUrl}?prci=\${Date.now()}\`);
+  const workspace = createGitHubWorkspace({
+    gatewayBase: "/hub/api/github-workspace",
+    repository: "pureekangraw-ops/standard-",
+    fetchImpl,
+  });
+
+  assert.equal((await workspace.openPullRequest({
+    branch: "feature-c", base: "main", title: "Slice C", body: "details",
+  })).headSha, "head-c");
+  assert.equal((await workspace.getPullRequest({ number: 19 })).number, 19);
+  assert.equal((await workspace.getCI({ sha: "head-c" })).headSha, "head-c");
+  assert.deepEqual(await workspace.rerunFailed({ runId: 7 }), { ok: true, runId: 7 });
+
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    repository: "pureekangraw-ops/standard-", branch: "feature-c", base: "main", title: "Slice C", body: "details",
+  });
+  assert.match(calls[1].url, /number=19/);
+  assert.match(calls[2].url, /sha=head-c/);
+  assert.deepEqual(JSON.parse(calls[3].init.body), {
+    repository: "pureekangraw-ops/standard-", runId: 7,
+  });
+  for (const call of calls) {
+    assert.equal("Authorization" in (call.init.headers || {}), false);
+    assert.equal("authorization" in (call.init.headers || {}), false);
+  }
+});
