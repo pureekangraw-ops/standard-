@@ -174,3 +174,89 @@ test("the Centre passage rejects a second entry while work is already in flight"
     /ARRIVED/,
   );
 });
+
+
+test("Centre session restores the exact checkpoint after reload", async () => {
+  const nonce = `${Date.now()}-${Math.random()}`;
+  const { createCentrePassage, createCentreSession } = await import(`${moduleUrl}?session=${nonce}`);
+  const persistenceUrl = pathToFileURL(path.resolve(__dirname, "../go-hub-persistence.js")).href;
+  const { createMemoryKeyValueStore, createStatePersistence } = await import(`${persistenceUrl}?session=${nonce}`);
+  const persistence = createStatePersistence({
+    store: createMemoryKeyValueStore(),
+    key: "active-checkpoint",
+  });
+  const centre = createCentrePassage();
+  const session = createCentreSession({
+    persistence,
+    passage: centre,
+    initial: { checkpointId: "CENTRE-001", workId: "WORK-A" },
+  });
+
+  const arrived = await session.load();
+  const reviewed = centre.review(arrived, {
+    task: "Task A",
+    requestedResult: "Result A",
+    authority: "BIG",
+  });
+  const fitted = centre.fit(reviewed, {
+    lensId: "LENS-1",
+    lensReference: "lens://1",
+    fittedView: "View A",
+  });
+  const away = centre.leave(fitted, { destination: "destination://factory" }).work;
+  await session.save(away, "LEAVE_CENTRE");
+
+  const restored = await session.load();
+  assert.equal(restored.status, "AWAY");
+  assert.equal(restored.workId, "WORK-A");
+  assert.equal(restored.checkpointId, "CENTRE-001");
+  assert.equal(restored.handoff.returnAddress, "CENTRE-001");
+});
+
+test("Destination capability is admitted only by an exact AWAY handoff", async () => {
+  const {
+    createCentrePassage, admitDestination, createReturnPacket,
+  } = await load();
+  const centre = createCentrePassage();
+  const reviewed = centre.review(
+    centre.enter({ checkpointId: "CENTRE-001", workId: "WORK-A" }),
+    { task: "Build", requestedResult: "Verified build", authority: "BIG" },
+  );
+  const capability = { id: "code", status: "ready" };
+
+  assert.throws(
+    () => admitDestination(reviewed, {
+      destination: "destination://factory",
+      capability,
+    }),
+    /AWAY/,
+  );
+
+  const fitted = centre.fit(reviewed, {
+    lensId: "LENS-1",
+    lensReference: "lens://1",
+    fittedView: "Build against repository truth",
+  });
+  const away = centre.leave(fitted, { destination: "destination://factory" }).work;
+
+  assert.throws(
+    () => admitDestination(away, {
+      destination: "destination://mimir",
+      capability,
+    }),
+    /does not match/,
+  );
+
+  const access = admitDestination(away, {
+    destination: "destination://factory",
+    capability,
+  });
+  const returned = centre.return(
+    away,
+    createReturnPacket(access, { status: "verified" }),
+  );
+
+  assert.equal(access.capability.id, "code");
+  assert.equal(returned.status, "RETURNED");
+  assert.equal(returned.checkpointId, "CENTRE-001");
+});
