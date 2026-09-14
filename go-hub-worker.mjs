@@ -1,6 +1,7 @@
 import { createOAuthHandler, verifyAccessToken } from "./go-hub-oauth.mjs";
 import { createMcpRegistry } from "./go-hub-mcp-registry.mjs";
 import { createMcpHandler } from "./go-hub-mcp.mjs";
+import { createNotionCatalogService } from "./go-hub-notion-catalog.mjs";
 
 const API_ROOT = "/hub/api/github-workspace";
 const ALLOWED_OWNER = "pureekangraw-ops";
@@ -461,7 +462,17 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
       if (url.pathname === "/mcp") {
         if (!env?.GITHUB_TOKEN) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
         const lifecycle = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
-        const registry = createMcpRegistry({ lifecycle });
+        const catalog = createNotionCatalogService({
+          fetchImpl,
+          token: env?.NOTION_TOKEN,
+          dataSourceId: env?.NOTION_CATALOG_DATA_SOURCE_ID,
+        });
+        const registry = createMcpRegistry({
+          lifecycle: Object.freeze({
+            ...lifecycle,
+            searchCatalog: input => catalog.searchCatalog(input),
+          }),
+        });
         return createMcpHandler({
           registry,
           issuer: url.origin,

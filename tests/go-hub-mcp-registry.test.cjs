@@ -32,6 +32,7 @@ test("registry publishes exact lifecycle tools with safe annotations", async () 
     "go_hub_rerun_failed_jobs",
     "go_hub_merge_pull_request",
     "go_hub_get_workflow_runs",
+    "go_hub_mimir_search_catalog",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
   assert.deepEqual(tools[0].securitySchemes, [{ type: "oauth2", scopes: ["go-hub"] }]);
