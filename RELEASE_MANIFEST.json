@@ -39,6 +39,7 @@
     { "path": "go-hub-shell.js" },
     { "path": "go-hub-runtime.js" },
     { "path": "go-hub-code-module.js" },
+    { "path": "go-hub-code-task.js" },
     { "path": "go-hub-github-workspace.js" },
     { "path": "go-hub-sw-bootstrap.js" },
     { "path": "go-hub-sw.js" }
