@@ -1,3 +1,7 @@
+import { createOAuthHandler, verifyAccessToken } from "./go-hub-oauth.mjs";
+import { createMcpRegistry } from "./go-hub-mcp-registry.mjs";
+import { createMcpHandler } from "./go-hub-mcp.mjs";
+
 const API_ROOT = "/hub/api/github-workspace";
 const ALLOWED_OWNER = "pureekangraw-ops";
 
@@ -437,6 +441,33 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
   return {
     async fetch(request, env) {
       const url = new URL(request.url);
+      const oauthPaths = new Set([
+        "/.well-known/oauth-authorization-server",
+        "/.well-known/oauth-protected-resource",
+        "/oauth/authorize",
+        "/oauth/token",
+      ]);
+      const oauthConfig = {
+        issuer: url.origin,
+        signingKey: env?.GOHUB_OAUTH_SIGNING_KEY,
+        ownerPasscodeHash: env?.GOHUB_OWNER_PASSCODE_HASH,
+        clientId: env?.GOHUB_OAUTH_CLIENT_ID,
+        clientSecret: env?.GOHUB_OAUTH_CLIENT_SECRET,
+        redirectUri: env?.GOHUB_OAUTH_REDIRECT_URI,
+      };
+      if (oauthPaths.has(url.pathname)) {
+        return createOAuthHandler(oauthConfig)(request);
+      }
+      if (url.pathname === "/mcp") {
+        if (!env?.GITHUB_TOKEN) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
+        const lifecycle = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
+        const registry = createMcpRegistry({ lifecycle });
+        return createMcpHandler({
+          registry,
+          issuer: url.origin,
+          authenticate: current => verifyAccessToken(current, oauthConfig),
+        })(request);
+      }
       if (!url.pathname.startsWith(API_ROOT)) {
         if (env?.ASSETS && typeof env.ASSETS.fetch === "function") return env.ASSETS.fetch(request);
         return new Response("GO Hub", { status: 200 });
