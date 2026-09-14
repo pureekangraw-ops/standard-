@@ -272,3 +272,97 @@ test("Worker maps rerun failed to GitHub's failed-jobs endpoint", async () => {
   assert.equal(response.status, 202);
   assert.deepEqual(await response.json(), { ok: true, runId: 77 });
 });
+
+
+test("Worker merges only when expected head is current and exact-head CI is green", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    const value = String(url);
+    if (value === "https://api.github.com/repos/" + repository + "/pulls/19") {
+      return jsonResponse({ number: 19, mergeable: true, head: { ref: "feature-d", sha: "head-d" }, base: { ref: "main", sha: "base-d" } });
+    }
+    if (value === "https://api.github.com/repos/" + repository + "/actions/runs?head_sha=head-d") {
+      return jsonResponse({ workflow_runs: [
+        { id: 70, name: "Safety Gate", status: "completed", conclusion: "success", head_sha: "head-d" },
+      ] });
+    }
+    if (value === "https://api.github.com/repos/" + repository + "/commits/head-d/check-runs") {
+      return jsonResponse({ check_runs: [
+        { id: 80, name: "test", status: "completed", conclusion: "success", head_sha: "head-d" },
+      ] });
+    }
+    if (value === "https://api.github.com/repos/" + repository + "/pulls/19/merge") {
+      assert.equal(init.method, "PUT");
+      assert.deepEqual(JSON.parse(init.body), { sha: "head-d", merge_method: "squash" });
+      return jsonResponse({ merged: true, sha: "merge-d", message: "Pull Request successfully merged" });
+    }
+    throw new Error("unexpected upstream " + value);
+  };
+  const { createWorkerHandler } = await import(workerUrl + "?merge=" + Date.now());
+  const handler = createWorkerHandler({ fetchImpl });
+  const response = await handler.fetch(new Request("https://hub.example/hub/api/github-workspace/pull-request/merge", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ repository, number: 19, expectedHeadSha: "head-d", method: "squash" }),
+  }), { GITHUB_TOKEN: "token" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { merged: true, mergeSha: "merge-d", headSha: "head-d" });
+  assert.equal(calls.at(-1).url.endsWith("/pulls/19/merge"), true);
+});
+
+test("Worker blocks stale-head and non-green CI merges before upstream merge", async () => {
+  for (const scenario of ["stale", "failed-ci"]) {
+    const calls = [];
+    const fetchImpl = async (url) => {
+      calls.push(String(url));
+      const value = String(url);
+      if (value.endsWith("/pulls/19")) {
+        return jsonResponse({ number: 19, mergeable: true, head: { ref: "feature-d", sha: "head-current" }, base: { ref: "main", sha: "base-d" } });
+      }
+      if (value.endsWith("/actions/runs?head_sha=head-current")) {
+        return jsonResponse({ workflow_runs: [
+          { id: 70, name: "Safety Gate", status: "completed", conclusion: "failure", head_sha: "head-current" },
+        ] });
+      }
+      if (value.endsWith("/commits/head-current/check-runs")) {
+        return jsonResponse({ check_runs: [] });
+      }
+      throw new Error("unexpected upstream " + value);
+    };
+    const { createWorkerHandler } = await import(workerUrl + "?merge-block=" + scenario + Date.now());
+    const handler = createWorkerHandler({ fetchImpl });
+    const response = await handler.fetch(new Request("https://hub.example/hub/api/github-workspace/pull-request/merge", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        repository, number: 19,
+        expectedHeadSha: scenario === "stale" ? "head-stale" : "head-current",
+        method: "merge",
+      }),
+    }), { GITHUB_TOKEN: "token" });
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), {
+      code: scenario === "stale" ? "STALE_PULL_REQUEST_HEAD" : "CURRENT_HEAD_CI_NOT_GREEN",
+    });
+    assert.equal(calls.some(value => value.endsWith("/pulls/19/merge")), false);
+  }
+});
+
+test("Worker observes workflow runs for one exact deploy SHA", async () => {
+  const fetchImpl = async url => {
+    assert.equal(String(url), "https://api.github.com/repos/" + repository + "/actions/runs?head_sha=merge-d");
+    return jsonResponse({ workflow_runs: [
+      { id: 91, name: "Deploy", status: "completed", conclusion: "success", head_sha: "merge-d", html_url: "https://github.test/run/91" },
+      { id: 90, name: "Old", status: "completed", conclusion: "success", head_sha: "old" },
+    ] });
+  };
+  const { createWorkerHandler } = await import(workerUrl + "?deploy-runs=" + Date.now());
+  const handler = createWorkerHandler({ fetchImpl });
+  const response = await handler.fetch(new Request(
+    "https://hub.example/hub/api/github-workspace/workflow-runs?repository=" + encodeURIComponent(repository) + "&sha=merge-d"
+  ), { GITHUB_TOKEN: "token" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    headSha: "merge-d",
+    runs: [{ id: 91, name: "Deploy", status: "completed", conclusion: "success", headSha: "merge-d", url: "https://github.test/run/91" }],
+  });
+});
