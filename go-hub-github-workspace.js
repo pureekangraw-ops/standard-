@@ -207,5 +207,27 @@ export function createGitHubWorkspace({
         }),
       });
     },
+
+    async mergePullRequest({ number, expectedHeadSha, method = "squash" } = {}) {
+      const mergeMethod = String(method);
+      if (!["merge", "squash", "rebase"].includes(mergeMethod)) {
+        throw new Error("invalid merge method");
+      }
+      return request("/pull-request/merge", {
+        method: "POST",
+        body: JSON.stringify({
+          repository: repo,
+          number: assertPositiveInteger(number, "pull request number"),
+          expectedHeadSha: assertRef(expectedHeadSha, "expected head sha"),
+          method: mergeMethod,
+        }),
+      });
+    },
+
+    async getWorkflowRuns({ sha } = {}) {
+      return request(
+        `/workflow-runs?repository=${encodeURIComponent(repo)}&sha=${encodeURIComponent(assertRef(sha, "sha"))}`
+      );
+    },
   });
 }
