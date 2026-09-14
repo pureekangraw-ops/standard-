@@ -199,6 +199,7 @@ test("task restores exact durable snapshot and appends specialist audit to one a
   assert.deepEqual(task.snapshot(), {
     ...stored, factoryStage: null, workPackage: null, piece: null, pieceQc: null, gateHandoff: null,
     assembly: null, assemblyQc: null, buildArtifact: null, productQc: null,
+    verificationScan: null, closeout: null, lessons: [],
   });
   task = task.appendAudit("SPECIALIST_RETURN", { specialist: "slice-c", result: "green" });
   const resumed = task.snapshot();
@@ -381,4 +382,32 @@ test("product verification rejects stale assembly and artifact evidence", async 
   const { createCodeTask } = await load();
   const task = createCodeTask({ id: "e3-guard" }).setWorkbenchTruth({ blueprint: { ref: "spec.md" } });
   assert.throws(() => task.recordAssembly({ status: "ASSEMBLED" }), /Ready Gate/);
+});
+
+test("Engine 4 truth records scan closeout and lessons with exact artifact binding", async () => {
+  const { createCodeTask, createCodeTaskFromSnapshot } = await load();
+  let task = createCodeTask({ id: "e4" });
+  const base = task.snapshot();
+  task = createCodeTaskFromSnapshot({ ...base, factoryStage: "PRODUCT_VERIFIED", blueprint: { ref: "spec.md" }, buildArtifact: { id: "artifact", digest: "digest-1", status: "BUILT" }, productQc: { status: "pass", artifactId: "artifact", artifactDigest: "digest-1" } });
+  task = task.recordVerificationScan({ status: "VERIFIED_CHAIN", artifactId: "artifact", artifactDigest: "digest-1", checkedStations: ["product-qc"], scannedAt: "now" });
+  assert.equal(task.factoryStage, "VERIFIED_CHAIN");
+  task = task.recordCloseout({ status: "CLOSEOUT_READY", taskId: "e4", finalArtifact: { id: "artifact", digest: "digest-1" }, transientKeys: [], obsoleteKeys: [], plannedAt: "now" });
+  assert.equal(task.factoryStage, "CLOSED");
+  task = task.recordLesson({ id: "lesson", context: "stale head", action: "scan", finding: "first break", resolution: "rerun qc", reusableWhen: "head changes", sourceTaskId: "e4", sourceArtifactDigest: "digest-1", recordedAt: "now", status: "RECORDED" });
+  const restored = createCodeTaskFromSnapshot(task.snapshot()).snapshot();
+  assert.equal(restored.factoryStage, "LEARNED");
+  assert.equal(restored.verificationScan.artifactDigest, "digest-1");
+  assert.equal(restored.closeout.finalArtifact.digest, "digest-1");
+  assert.deepEqual(restored.lessons.map(item => item.id), ["lesson"]);
+  assert.throws(() => task.recordLesson({ id: "stale", sourceTaskId: "e4", sourceArtifactDigest: "other", status: "RECORDED" }), /current Artifact/);
+});
+
+test("legacy task snapshots restore with empty Engine 4 truth", async () => {
+  const { createCodeTask, createCodeTaskFromSnapshot } = await load();
+  const snapshot = createCodeTask({ id: "legacy" }).snapshot();
+  delete snapshot.verificationScan; delete snapshot.closeout; delete snapshot.lessons;
+  const restored = createCodeTaskFromSnapshot(snapshot).snapshot();
+  assert.equal(restored.verificationScan, null);
+  assert.equal(restored.closeout, null);
+  assert.deepEqual(restored.lessons, []);
 });

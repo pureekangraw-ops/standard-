@@ -272,3 +272,22 @@ test("Engine 3 assembles a Ready Gate Piece into a resumable verified Product", 
   assert.deepEqual(restored.productQc.evidenceIds, ["artifact-load", "artifact-flow", "artifact-outcome"]);
   assert.equal(createCodeCapability({ task: restored }).productQc.status, "pass");
 });
+
+test("Engine 4 scans closes and learns through exact persistence", async () => {
+  const nonce = `${Date.now()}-${Math.random()}`; const load=file=>import(`${pathToFileURL(path.join(root,file)).href}?e4=${nonce}`);
+  const { createMemoryKeyValueStore, createStatePersistence } = await import(`${pathToFileURL(modulePath).href}?e4=${nonce}`);
+  const { createCodeTask, createCodeTaskFromSnapshot }=await load("go-hub-code-task.js");
+  const { createCodeTaskSession, createCodeCapability }=await load("go-hub-code-module.js");
+  const { createWorkbenchView }=await load("go-hub-workbench-model.js");
+  const { scanFactoryTruth }=await load("go-hub-verification-scanner.js");
+  const { planCloseout }=await load("go-hub-housekeeper.js");
+  const { recordLesson }=await load("go-hub-learning-recorder.js");
+  const initial=createCodeTask({id:"engine-4-functional"}).snapshot();
+  const truth={...initial,factoryStage:"PRODUCT_VERIFIED",blueprint:{ref:"spec.md",status:"approved"},piece:{id:"p",headSha:"piece-head"},pieceQc:{status:"pass",checkedHeadSha:"piece-head"},gateHandoff:{status:"READY_FOR_ASSEMBLY",headSha:"piece-head",blueprintRef:"spec.md"},assembly:{id:"assembly",status:"ASSEMBLED",integrationHeadSha:"assembly-head",blueprintRef:"spec.md"},assemblyQc:{status:"pass",checkedHeadSha:"assembly-head"},buildArtifact:{id:"artifact",status:"BUILT",digest:"digest-4",sourceHeadSha:"assembly-head",blueprintRef:"spec.md"},productQc:{status:"pass",artifactId:"artifact",artifactDigest:"digest-4"}};
+  const broken=structuredClone(truth); broken.assemblyQc.checkedHeadSha="stale"; assert.equal(scanFactoryTruth(broken).station,"assembly-qc");
+  let task=createCodeTaskFromSnapshot(truth); const scan=scanFactoryTruth(task.snapshot()); task=task.recordVerificationScan(scan);
+  task=task.recordCloseout(planCloseout({task:task.snapshot(),scan,transientKeys:["draft"],obsoleteKeys:["old-cache"]}));
+  task=task.recordLesson(recordLesson({id:"lesson-4",context:"exact chain closeout",action:"scan in station order",finding:"no broken truth",resolution:"close verified artifact",reusableWhen:"closing a verified product",sourceTaskId:"engine-4-functional",sourceArtifactDigest:"digest-4",recordedAt:"2026-09-14T13:00:00.000Z"}));
+  const session=createCodeTaskSession({persistence:createStatePersistence({store:createMemoryKeyValueStore(),key:"active-task"})}); await session.save(task); const restored=(await session.load()).snapshot();
+  assert.equal(createWorkbenchView(restored).status,"LEARNED"); assert.equal(restored.verificationScan.artifactDigest,"digest-4"); assert.equal(restored.closeout.finalArtifact.digest,"digest-4"); assert.deepEqual(restored.lessons.map(x=>x.id),["lesson-4"]); assert.equal(createCodeCapability({task:restored}).lessons[0].status,"RECORDED");
+});

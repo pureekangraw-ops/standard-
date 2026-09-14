@@ -62,6 +62,9 @@ export function createCodeCapability({ workspace = null, task = null } = {}) {
     assemblyQc: snapshot?.assemblyQc || null,
     buildArtifact: snapshot?.buildArtifact || null,
     productQc: snapshot?.productQc || null,
+    verificationScan: snapshot?.verificationScan || null,
+    closeout: snapshot?.closeout || null,
+    lessons: Array.isArray(snapshot?.lessons) ? snapshot.lessons : [],
   });
 }
 
