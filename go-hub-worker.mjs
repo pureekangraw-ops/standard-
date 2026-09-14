@@ -449,11 +449,11 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
       ]);
       const oauthConfig = {
         issuer: url.origin,
-        signingKey: env?.GOHUB_OAUTH_SIGNING_KEY,
-        ownerPasscodeHash: env?.GOHUB_OWNER_PASSCODE_HASH,
-        clientId: env?.GOHUB_OAUTH_CLIENT_ID,
-        clientSecret: env?.GOHUB_OAUTH_CLIENT_SECRET,
-        redirectUri: env?.GOHUB_OAUTH_REDIRECT_URI,
+        signingKey: env?.GOHUB_MASTER_KEY,
+        ownerPasscode: env?.GOHUB_OWNER_PASSCODE,
+        clientId: "go-hub-chatgpt",
+        clientSecret: env?.GOHUB_OWNER_PASSCODE,
+        redirectUri: "https://chatgpt.com/connector_platform_oauth_redirect",
       };
       if (oauthPaths.has(url.pathname)) {
         return createOAuthHandler(oauthConfig)(request);
