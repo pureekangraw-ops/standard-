@@ -30,6 +30,8 @@ const definitions = [
     schema({ repository: string, number: integer, expectedHeadSha: string, method: { type: "string", enum: ["merge", "squash", "rebase"] } }, ["repository", "number", "expectedHeadSha"]), { readOnlyHint: false, destructiveHint: true }],
   ["go_hub_get_workflow_runs", "Observe workflow and deployment runs for one exact SHA.", "getWorkflowRuns",
     schema({ repository: string, sha: string }, ["repository", "sha"]), { readOnlyHint: true, destructiveHint: false }],
+  ["go_hub_mimir_search_catalog", "Search the live owner-scoped Notion catalog, apply current Gate before GO Rating, and return PASS or explicit WAIT evidence.", "searchCatalog",
+    schema({ task: string, requestedResult: string, lensReference: string }, ["task", "requestedResult"]), { readOnlyHint: true, destructiveHint: false }],
 ].map(([name, description, operation, inputSchema, annotations]) =>
   Object.freeze({
     name, description, operation, inputSchema,
