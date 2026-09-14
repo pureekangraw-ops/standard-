@@ -139,6 +139,24 @@ function transitionState(current, nextState, evidence = {}) {
   return next;
 }
 
+function normalizeSnapshot(value) {
+  const state = clone(value);
+  if (!state || typeof state !== "object" || Array.isArray(state)) throw new Error("task snapshot is required");
+  if (!NEXT_ACTION[state.state] || state.nextAction !== NEXT_ACTION[state.state]) {
+    throw new Error("task snapshot state is invalid");
+  }
+  if (!Array.isArray(state.audit)) throw new Error("task snapshot audit is required");
+  return state;
+}
+
+function appendAuditState(current, event, details = {}) {
+  const name = String(event || "").trim();
+  if (!name) throw new Error("audit event is required");
+  const next = clone(current);
+  next.audit.push({ ...clone(details), at: now(), event: name });
+  return next;
+}
+
 function wrap(state) {
   const snapshot = () => clone(state);
   return Object.freeze({
@@ -147,9 +165,16 @@ function wrap(state) {
     transition(nextState, evidence = {}) {
       return wrap(transitionState(state, nextState, evidence));
     },
+    appendAudit(event, details = {}) {
+      return wrap(appendAuditState(state, event, details));
+    },
   });
 }
 
 export function createCodeTask(initial = {}) {
   return wrap(normalizeInitial(initial));
+}
+
+export function createCodeTaskFromSnapshot(snapshot) {
+  return wrap(normalizeSnapshot(snapshot));
 }
