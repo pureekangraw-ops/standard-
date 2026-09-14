@@ -157,3 +157,74 @@ export function createCentrePassage() {
     },
   });
 }
+
+
+export function validateCentreWork(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Centre work snapshot is required");
+  }
+  required(value.checkpointId, "Checkpoint ID");
+  required(value.workId, "Work ID");
+  required(value.createdAt, "Created At");
+  if (!Object.values(CENTRE_STATES).includes(value.status)) {
+    throw new Error("Centre status is invalid");
+  }
+  if (value.status === CENTRE_STATES.AWAY) {
+    if (!value.handoff || value.handoff.workId !== value.workId ||
+        value.handoff.checkpointId !== value.checkpointId ||
+        value.handoff.returnAddress !== value.checkpointId) {
+      throw new Error("AWAY work requires an exact Centre handoff");
+    }
+  }
+  return snapshot(value);
+}
+
+export function createCentreSession({ persistence, initial = {}, passage = createCentrePassage() } = {}) {
+  if (!persistence || typeof persistence.loadState !== "function" ||
+      typeof persistence.commitState !== "function") {
+    throw new TypeError("Centre persistence port is required");
+  }
+  return freeze({
+    async load() {
+      const stored = await persistence.loadState();
+      return stored ? validateCentreWork(stored) : passage.enter(initial);
+    },
+
+    async save(work, commandType = "SAVE_CENTRE_WORK") {
+      const proposed = validateCentreWork(work);
+      return persistence.commitState({
+        proposed,
+        command: { type: commandType },
+      });
+    },
+  });
+}
+
+export function admitDestination(work, { destination, capability } = {}) {
+  assertState(work, CENTRE_STATES.AWAY);
+  const target = required(destination, "Destination");
+  if (work.handoff?.destination !== target) {
+    throw new Error("Destination does not match the Centre handoff");
+  }
+  if (!capability || typeof capability !== "object") {
+    throw new Error("Destination capability is required");
+  }
+  return snapshot({
+    workId: work.workId,
+    checkpointId: work.checkpointId,
+    returnAddress: work.handoff.returnAddress,
+    destination: target,
+    capability,
+  });
+}
+
+export function createReturnPacket(access, payload = null) {
+  if (!access || access.checkpointId !== access.returnAddress) {
+    throw new Error("Destination access has no valid Return Address");
+  }
+  return snapshot({
+    workId: access.workId,
+    checkpointId: access.returnAddress,
+    payload,
+  });
+}
