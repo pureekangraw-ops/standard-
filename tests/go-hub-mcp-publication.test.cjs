@@ -22,11 +22,8 @@ test("deployment publishes MCP and OAuth routes and checks every module", () => 
 
   const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "go-hub-deploy.yml"), "utf8");
   for (const secret of [
-    "GOHUB_OAUTH_SIGNING_KEY",
-    "GOHUB_OWNER_PASSCODE_HASH",
-    "GOHUB_OAUTH_CLIENT_ID",
-    "GOHUB_OAUTH_CLIENT_SECRET",
-    "GOHUB_OAUTH_REDIRECT_URI",
+    "GOHUB_MASTER_KEY",
+    "GOHUB_OWNER_PASSCODE",
   ]) assert.match(workflow, new RegExp(secret));
   assert.match(workflow, /chmod 600/);
 });

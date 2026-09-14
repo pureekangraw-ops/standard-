@@ -64,7 +64,7 @@ async function sha256Hex(value) {
 
 function configured(config) {
   return Boolean(
-    config.issuer && config.signingKey && config.ownerPasscodeHash &&
+    config.issuer && config.signingKey && config.ownerPasscode &&
     config.clientId && config.clientSecret && config.redirectUri,
   );
 }
@@ -207,8 +207,8 @@ export function createOAuthHandler(config = {}) {
           values.set(key, String(form.get(key) || ""));
         }
         const checked = validateAuthorize(values, config);
-        const suppliedHash = await sha256Hex(String(form.get("passcode") || ""));
-        if (!timingSafeEqual(suppliedHash, config.ownerPasscodeHash)) return json({ code: "OWNER_AUTH_FAILED" }, 403);
+        const suppliedPasscode = String(form.get("passcode") || "");
+        if (!timingSafeEqual(suppliedPasscode, config.ownerPasscode)) return json({ code: "OWNER_AUTH_FAILED" }, 403);
         const code = await createTestAuthorizationCode({ ...config, codeChallenge: checked.codeChallenge, resource: checked.resource });
         const redirect = new URL(checked.redirectUri);
         redirect.searchParams.set("code", code);

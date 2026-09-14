@@ -15,11 +15,8 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       GOHUB_GITHUB_TOKEN: ${{ secrets.GOHUB_GITHUB_TOKEN }}
-      GOHUB_OAUTH_SIGNING_KEY: ${{ secrets.GOHUB_OAUTH_SIGNING_KEY }}
-      GOHUB_OWNER_PASSCODE_HASH: ${{ secrets.GOHUB_OWNER_PASSCODE_HASH }}
-      GOHUB_OAUTH_CLIENT_ID: ${{ secrets.GOHUB_OAUTH_CLIENT_ID }}
-      GOHUB_OAUTH_CLIENT_SECRET: ${{ secrets.GOHUB_OAUTH_CLIENT_SECRET }}
-      GOHUB_OAUTH_REDIRECT_URI: ${{ secrets.GOHUB_OAUTH_REDIRECT_URI }}
+      GOHUB_MASTER_KEY: ${{ secrets.GOHUB_MASTER_KEY }}
+      GOHUB_OWNER_PASSCODE: ${{ secrets.GOHUB_OWNER_PASSCODE }}
 
     steps:
       - name: Check out repository
@@ -45,12 +42,9 @@ jobs:
           if [ -n "${GOHUB_GITHUB_TOKEN}" ]; then
             printf 'GITHUB_TOKEN=%s\n' "${GOHUB_GITHUB_TOKEN}" >> "${secrets_file}"
           fi
-          if [ -n "${GOHUB_OAUTH_SIGNING_KEY}" ] && [ -n "${GOHUB_OWNER_PASSCODE_HASH}" ] && [ -n "${GOHUB_OAUTH_CLIENT_ID}" ] && [ -n "${GOHUB_OAUTH_CLIENT_SECRET}" ] && [ -n "${GOHUB_OAUTH_REDIRECT_URI}" ]; then
-            printf 'GOHUB_OAUTH_SIGNING_KEY=%s\n' "${GOHUB_OAUTH_SIGNING_KEY}" >> "${secrets_file}"
-            printf 'GOHUB_OWNER_PASSCODE_HASH=%s\n' "${GOHUB_OWNER_PASSCODE_HASH}" >> "${secrets_file}"
-            printf 'GOHUB_OAUTH_CLIENT_ID=%s\n' "${GOHUB_OAUTH_CLIENT_ID}" >> "${secrets_file}"
-            printf 'GOHUB_OAUTH_CLIENT_SECRET=%s\n' "${GOHUB_OAUTH_CLIENT_SECRET}" >> "${secrets_file}"
-            printf 'GOHUB_OAUTH_REDIRECT_URI=%s\n' "${GOHUB_OAUTH_REDIRECT_URI}" >> "${secrets_file}"
+          if [ -n "${GOHUB_MASTER_KEY}" ] && [ -n "${GOHUB_OWNER_PASSCODE}" ]; then
+            printf 'GOHUB_MASTER_KEY=%s\n' "${GOHUB_MASTER_KEY}" >> "${secrets_file}"
+            printf 'GOHUB_OWNER_PASSCODE=%s\n' "${GOHUB_OWNER_PASSCODE}" >> "${secrets_file}"
           else
             echo "GO Hub OAuth secrets are incomplete; MCP will remain fail-closed."
           fi

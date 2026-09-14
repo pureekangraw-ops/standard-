@@ -9,7 +9,7 @@ const issuer = "https://hub.example";
 const config = {
   issuer,
   signingKey: "test-signing-key-with-enough-entropy",
-  ownerPasscodeHash: null,
+  ownerPasscode: "owner-passcode",
   clientId: "chatgpt-go-hub",
   clientSecret: "client-secret",
   redirectUri: "https://chatgpt.com/connector_platform_oauth_redirect",
@@ -24,7 +24,7 @@ async function sha256Hex(value) {
 
 test("OAuth publishes issuer-bound authorization and protected-resource metadata", async () => {
   const { createOAuthHandler } = await import(oauthUrl + "?metadata=" + Date.now());
-  const handler = createOAuthHandler({ ...config, ownerPasscodeHash: await sha256Hex("owner-passcode") });
+  const handler = createOAuthHandler(config);
 
   const authorization = await handler(new Request(issuer + "/.well-known/oauth-authorization-server"));
   assert.equal(authorization.status, 200);
@@ -55,8 +55,7 @@ test("OAuth exchanges a short-lived PKCE code for an audience-bound access token
   const verifier = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~";
   const challengeBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
   const challenge = Buffer.from(challengeBytes).toString("base64url");
-  const ownerPasscodeHash = await sha256Hex("owner-passcode");
-  const handler = createOAuthHandler({ ...config, ownerPasscodeHash });
+  const handler = createOAuthHandler(config)
   const code = await createTestAuthorizationCode({ ...config, codeChallenge: challenge });
 
   const basic = Buffer.from(config.clientId + ":" + config.clientSecret).toString("base64");
@@ -111,7 +110,7 @@ test("OAuth binds authorization and tokens to the requested MCP resource", async
   const verifier = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~";
   const challengeBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
   const challenge = Buffer.from(challengeBytes).toString("base64url");
-  const handler = createOAuthHandler({ ...config, ownerPasscodeHash: await sha256Hex("owner-passcode") });
+  const handler = createOAuthHandler(config);
   const code = await createTestAuthorizationCode({ ...config, codeChallenge: challenge, resource: issuer + "/mcp" });
   const basic = Buffer.from(config.clientId + ":" + config.clientSecret).toString("base64");
   const missingResource = await handler(new Request(issuer + "/oauth/token", {
