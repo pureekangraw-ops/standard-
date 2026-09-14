@@ -56,6 +56,19 @@ function transitionState(current, nextState, evidence = {}) {
   const priorHead = next.headSha;
   const incomingHead = evidence.headSha == null ? priorHead : String(evidence.headSha);
 
+  if (state === "PR_OPEN") {
+    const pullRequestHead = evidence.pullRequest?.headSha == null ? null : String(evidence.pullRequest.headSha);
+    if (!incomingHead || !pullRequestHead || pullRequestHead !== incomingHead) {
+      throw new Error("pull request head SHA does not match current head");
+    }
+  }
+  if (state === "CI_RUNNING" || state === "CI_GREEN" || state === "CI_FAILED") {
+    const ciHead = evidence.ci?.headSha == null ? null : String(evidence.ci.headSha);
+    if (!incomingHead || !ciHead || ciHead !== incomingHead) {
+      throw new Error("CI head SHA does not match current head");
+    }
+  }
+
   next.state = state;
   next.nextAction = NEXT_ACTION[state];
 
