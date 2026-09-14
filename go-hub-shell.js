@@ -3,7 +3,15 @@ import { createCodeCapability, createCodeTaskSession } from "./go-hub-code-modul
 import { createLocalStorageKeyValueStore, createStatePersistence } from "./go-hub-persistence.js";
 import { createGitHubWorkspace } from "./go-hub-github-workspace.js";
 import { createWorkbenchView } from "./go-hub-workbench-model.js";
+import {
+  CENTRE_STATES,
+  admitDestination,
+  createCentrePassage,
+  createCentreSession,
+  createReturnPacket,
+} from "./go-hub-centre.js";
 
+const FACTORY_DESTINATION = "destination://factory";
 const runtime = createHubRuntime();
 const workspace = createGitHubWorkspace({
   gatewayBase: "/hub/api/github-workspace",
@@ -16,7 +24,7 @@ const taskPersistence = createStatePersistence({
   }),
   key: "active-task",
 });
-const session = createCodeTaskSession({
+const taskSession = createCodeTaskSession({
   persistence: taskPersistence,
   initial: {
     id: "active-code-task",
@@ -24,12 +32,48 @@ const session = createCodeTaskSession({
     repository: workspace.repository,
   },
 });
-const task = await session.load();
-runtime.register("Code", createCodeCapability({ workspace, task }));
+const task = await taskSession.load();
+const codeCapability = createCodeCapability({ workspace, task });
+
+const centre = createCentrePassage();
+const centrePersistence = createStatePersistence({
+  store: createLocalStorageKeyValueStore({
+    storage: globalThis.localStorage,
+    namespace: "go-hub-centre",
+  }),
+  key: "active-checkpoint",
+});
+const centreSession = createCentreSession({
+  persistence: centrePersistence,
+  passage: centre,
+});
+let centreWork = await centreSession.load();
 
 const status = document.querySelector("[data-hub-status]");
 const list = document.querySelector("[data-hub-capabilities]");
 const empty = document.querySelector("[data-hub-empty]");
+const workbenchShell = document.querySelector("[data-workbench-shell]");
+const centreForm = document.querySelector("[data-centre-form]");
+const centreAction = document.querySelector("[data-centre-action]");
+const centreError = document.querySelector("[data-centre-error]");
+
+function field(name) {
+  return centreForm?.elements.namedItem(name) || null;
+}
+
+function syncFactoryAccess() {
+  const shouldOpen = centreWork.status === CENTRE_STATES.AWAY
+    && centreWork.handoff?.destination === FACTORY_DESTINATION;
+  if (shouldOpen && !runtime.get("Code")) {
+    const access = admitDestination(centreWork, {
+      destination: FACTORY_DESTINATION,
+      capability: codeCapability,
+    });
+    runtime.register("Code", access.capability);
+  } else if (!shouldOpen && runtime.get("Code")) {
+    runtime.unregister("Code");
+  }
+}
 
 function renderWorkbench(snapshot) {
   const view = createWorkbenchView(snapshot || {});
@@ -46,16 +90,53 @@ function renderWorkbench(snapshot) {
   if (workbenchStatus) workbenchStatus.textContent = view.status || "UNKNOWN";
   if (evidence) {
     evidence.textContent = view.evidence.length
-      ? view.evidence.map((item) => item.label || item.kind || String(item.value || "evidence")).join(" · ")
+      ? view.evidence.map(item => item.label || item.kind || String(item.value || "evidence")).join(" · ")
       : "—";
   }
   if (next) next.textContent = view.blocker ? `BLOCKED — ${view.blocker}` : (view.next || "—");
 }
 
+function renderCentre() {
+  document.querySelector("[data-centre-state]").textContent = centreWork.status;
+  document.querySelector("[data-centre-checkpoint]").textContent = centreWork.checkpointId;
+  document.querySelector("[data-centre-work]").textContent = centreWork.workId;
+  document.querySelector("[data-centre-return]").textContent = centreWork.checkpointId;
+
+  field("task").value = centreWork.task || "";
+  field("requestedResult").value = centreWork.requestedResult || "";
+  field("authority").value = centreWork.authority || "BIG";
+  field("lensReference").value = centreWork.lens?.lensReference || "";
+  field("fittedView").value = centreWork.lens?.fittedView || "";
+
+  const reviewed = centreWork.status !== CENTRE_STATES.ARRIVED
+    && centreWork.status !== CENTRE_STATES.WAIT;
+  const fitted = Boolean(centreWork.lens);
+  ["task", "requestedResult", "authority"].forEach(name => {
+    field(name).disabled = reviewed;
+  });
+  ["lensReference", "fittedView"].forEach(name => {
+    field(name).disabled = !reviewed || fitted;
+  });
+
+  const labels = {
+    [CENTRE_STATES.ARRIVED]: "Review task",
+    [CENTRE_STATES.WAIT]: "Review task",
+    [CENTRE_STATES.READY]: fitted ? "Leave for Factory" : "Fit Lens",
+    [CENTRE_STATES.AWAY]: "Receive return",
+    [CENTRE_STATES.RETURNED]: "Returned to checkpoint",
+  };
+  centreAction.textContent = labels[centreWork.status] || "Unavailable";
+  centreAction.disabled = centreWork.status === CENTRE_STATES.RETURNED;
+}
+
 function render() {
+  syncFactoryAccess();
   const capabilities = runtime.list();
-  status.textContent = "Neutral runtime ready.";
+  status.textContent = centreWork.status === CENTRE_STATES.AWAY
+    ? "GO is away from Centre."
+    : "GO is at Centre.";
   empty.hidden = capabilities.length > 0;
+  workbenchShell.hidden = !runtime.get("Code");
   list.replaceChildren(
     ...capabilities.map(({ name, capability }) => {
       const item = document.createElement("li");
@@ -66,7 +147,48 @@ function render() {
       return item;
     }),
   );
+  renderCentre();
   renderWorkbench(task.snapshot());
 }
+
+centreForm?.addEventListener("submit", async event => {
+  event.preventDefault();
+  centreError.textContent = "";
+  try {
+    if (centreWork.status === CENTRE_STATES.ARRIVED || centreWork.status === CENTRE_STATES.WAIT) {
+      centreWork = centre.review(centreWork, {
+        task: field("task").value,
+        requestedResult: field("requestedResult").value,
+        authority: field("authority").value,
+      });
+      await centreSession.save(centreWork, "REVIEW_AT_CENTRE");
+    } else if (centreWork.status === CENTRE_STATES.READY && !centreWork.lens) {
+      centreWork = centre.fit(centreWork, {
+        lensId: field("lensReference").value,
+        lensReference: field("lensReference").value,
+        fittedView: field("fittedView").value,
+      });
+      await centreSession.save(centreWork, "FIT_LENS");
+    } else if (centreWork.status === CENTRE_STATES.READY) {
+      centreWork = centre.leave(centreWork, {
+        destination: field("destination").value,
+      }).work;
+      await centreSession.save(centreWork, "LEAVE_CENTRE");
+    } else if (centreWork.status === CENTRE_STATES.AWAY) {
+      const access = admitDestination(centreWork, {
+        destination: centreWork.handoff.destination,
+        capability: codeCapability,
+      });
+      centreWork = centre.return(
+        centreWork,
+        createReturnPacket(access, { status: "returned-by-operator" }),
+      );
+      await centreSession.save(centreWork, "RETURN_TO_CENTRE");
+    }
+    render();
+  } catch (error) {
+    centreError.textContent = error instanceof Error ? error.message : String(error);
+  }
+});
 
 render();
