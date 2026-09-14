@@ -79,3 +79,51 @@ test("GO Hub local storage port restores an identical task snapshot", async () =
   await persistence.commitState({ proposed: snapshot, command: { type: "SAVE_CODE_TASK" } });
   assert.deepEqual(await persistence.loadState(), snapshot);
 });
+
+test("Code task session restores and projects the exact six workbench truths", async () => {
+  const { createMemoryKeyValueStore, createStatePersistence } = await import(pathToFileURL(modulePath).href);
+  const { createCodeTask } = await import(pathToFileURL(path.join(root, "go-hub-code-task.js")).href);
+  const { createCodeTaskSession } = await import(pathToFileURL(path.join(root, "go-hub-code-module.js")).href);
+  const { createWorkbenchView } = await import(pathToFileURL(path.join(root, "go-hub-workbench-model.js")).href);
+  const persistence = createStatePersistence({ store: createMemoryKeyValueStore(), key: "active-task" });
+  const session = createCodeTaskSession({ persistence });
+  let task = createCodeTask({
+    id: "engine-1-resume",
+    intent: "assemble Engine 1",
+    repository: "pureekangraw-ops/standard-",
+  });
+  task = task.transition("BRANCH_READY", {
+    baseBranch: "main",
+    baseSha: "base-1",
+    workBranch: "go-hub-factory-engine-1-truth-workbench",
+    headSha: "head-1",
+  });
+  task = task.setWorkbenchTruth({
+    mission: { summary: "Build Engine 1", outcome: "GO resumes without chat" },
+    blueprint: {
+      title: "Factory Blueprint",
+      ref: "docs/superpowers/specs/2026-09-14-go-hub-code-station-engine-map-design.md",
+      status: "approved",
+    },
+    currentPiece: { id: "engine-1", title: "Truth & Workbench", purpose: "Expose resumable truth" },
+    evidence: [{ kind: "design", label: "Blueprint commit", value: "aa7d779" }],
+  });
+
+  await session.save(task);
+  const restored = await session.load();
+  const view = createWorkbenchView(restored.snapshot());
+
+  assert.deepEqual(view, {
+    mission: { summary: "Build Engine 1", outcome: "GO resumes without chat" },
+    blueprint: {
+      title: "Factory Blueprint",
+      ref: "docs/superpowers/specs/2026-09-14-go-hub-code-station-engine-map-design.md",
+      status: "approved",
+    },
+    currentPiece: { id: "engine-1", title: "Truth & Workbench", purpose: "Expose resumable truth" },
+    status: "BRANCH_READY",
+    evidence: [{ kind: "design", label: "Blueprint commit", value: "aa7d779" }],
+    next: "edit",
+    blocker: null,
+  });
+});
