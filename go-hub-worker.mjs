@@ -187,13 +187,18 @@ async function createBranch(fetchImpl, token, repository, name, fromSha) {
 async function mutateFile(fetchImpl, token, repository, filePath, branch, expectedSha, content, method) {
   const policy = await assertNonDefaultBranch(fetchImpl, token, repository, branch);
   if (policy.error) return policy.error;
-  const safeExpectedSha = assertRef(expectedSha, "sha");
+
+  const hasExpectedSha = expectedSha != null && String(expectedSha).trim() !== "";
+  if (method === "DELETE" && !hasExpectedSha) badRequest("invalid sha");
+  const safeExpectedSha = hasExpectedSha ? assertRef(expectedSha, "sha") : null;
+  const action = method === "DELETE" ? "delete" : safeExpectedSha ? "update" : "create";
   const body = {
-    message: `GO Hub: ${method === "DELETE" ? "delete" : "update"} ${filePath}`,
+    message: `GO Hub: ${action} ${filePath}`,
     branch,
-    sha: safeExpectedSha,
   };
+  if (safeExpectedSha) body.sha = safeExpectedSha;
   if (method === "PUT") body.content = encodeUtf8Base64(content);
+
   const result = await githubRequest(
     fetchImpl, token,
     `https://api.github.com/repos/${repository}/contents/${encodePath(filePath)}`,
