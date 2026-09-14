@@ -49,3 +49,25 @@ test("changing head invalidates reviewed diff evidence", async () => {
   assert.equal(snapshot.diffFingerprint, null);
   assert.equal(snapshot.nextAction, "review-diff");
 });
+
+
+test("a new head invalidates prior PR CI evidence", async () => {
+  const { createCodeTask } = await load();
+  let task = createCodeTask({ id: "task-ci", repository: "pureekangraw-ops/standard-" });
+  task = task.transition("BRANCH_READY", {
+    baseBranch: "main", baseSha: "base-1", workBranch: "feature-a", headSha: "head-1",
+  });
+  task = task.transition("PR_OPEN", {
+    headSha: "head-1", pullRequest: { number: 19, headSha: "head-1" },
+  });
+  task = task.transition("CI_GREEN", {
+    headSha: "head-1", ci: { headSha: "head-1", conclusion: "success" },
+  });
+  assert.equal(task.snapshot().ci.conclusion, "success");
+
+  task = task.transition("EDITING", { headSha: "head-2", touchedPaths: ["src/app.js"] });
+  const snapshot = task.snapshot();
+  assert.equal(snapshot.pullRequest, null);
+  assert.equal(snapshot.ci, null);
+  assert.equal(snapshot.nextAction, "review-diff");
+});
