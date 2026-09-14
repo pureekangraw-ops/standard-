@@ -1,3 +1,5 @@
+import { appendEvidence } from "./go-hub-evidence-ledger.js";
+
 const NEXT_ACTION = Object.freeze({
   INSPECTING: "inspect",
   BRANCH_READY: "edit",
@@ -52,6 +54,11 @@ function normalizeInitial(initial = {}) {
     blueprint: null,
     currentPiece: null,
     evidence: [],
+    factoryStage: null,
+    workPackage: null,
+    piece: null,
+    pieceQc: null,
+    gateHandoff: null,
     audit: [{ at: now(), event: "TASK_CREATED", state: "INSPECTING" }],
   };
 }
@@ -154,7 +161,124 @@ function normalizeSnapshot(value) {
   state.blueprint = state.blueprint == null ? null : clone(state.blueprint);
   state.currentPiece = state.currentPiece == null ? null : clone(state.currentPiece);
   state.evidence = Array.isArray(state.evidence) ? clone(state.evidence) : [];
+  state.factoryStage = state.factoryStage == null ? null : String(state.factoryStage);
+  state.workPackage = state.workPackage == null ? null : clone(state.workPackage);
+  state.piece = state.piece == null ? null : clone(state.piece);
+  state.pieceQc = state.pieceQc == null ? null : clone(state.pieceQc);
+  state.gateHandoff = state.gateHandoff == null ? null : clone(state.gateHandoff);
   return state;
+}
+
+function requiredString(value, label) {
+  const normalized = String(value || "").trim();
+  if (!normalized) throw new Error(`${label} is required`);
+  return normalized;
+}
+
+function setWorkPackageState(current, input = {}) {
+  const blueprintRef = requiredString(input.blueprintRef, "work package blueprintRef");
+  if (!current.blueprint?.ref || String(current.blueprint.ref) !== blueprintRef) {
+    throw new Error("work package must match the mounted blueprint reference");
+  }
+  const next = clone(current);
+  next.workPackage = {
+    id: requiredString(input.id, "work package id"),
+    title: requiredString(input.title, "work package title"),
+    purpose: requiredString(input.purpose, "work package purpose"),
+    blueprintRef,
+    inputs: Array.isArray(input.inputs) ? clone(input.inputs) : [],
+    expectedOutputs: Array.isArray(input.expectedOutputs) ? clone(input.expectedOutputs) : [],
+    dependencies: Array.isArray(input.dependencies) ? clone(input.dependencies) : [],
+    assemblyTarget: requiredString(input.assemblyTarget, "work package assemblyTarget"),
+  };
+  next.currentPiece = {
+    id: next.workPackage.id,
+    title: next.workPackage.title,
+    purpose: next.workPackage.purpose,
+  };
+  next.factoryStage = "PRODUCTION";
+  next.piece = null;
+  next.pieceQc = null;
+  next.gateHandoff = null;
+  next.audit.push({ at: now(), event: "WORK_PACKAGE_STARTED", workPackageId: next.workPackage.id });
+  return next;
+}
+
+function recordPieceState(current, input = {}) {
+  if (!current.workPackage) throw new Error("active work package is required");
+  const workPackageId = requiredString(input.workPackageId, "piece workPackageId");
+  if (workPackageId !== current.workPackage.id) throw new Error("piece must match the active work package");
+  const next = clone(current);
+  next.piece = {
+    id: requiredString(input.id, "piece id"),
+    workPackageId,
+    repository: requiredString(input.repository, "piece repository"),
+    branch: requiredString(input.branch, "piece branch"),
+    headSha: requiredString(input.headSha, "piece headSha"),
+    changedPaths: Array.isArray(input.changedPaths) ? clone(input.changedPaths) : [],
+    outputs: Array.isArray(input.outputs) ? clone(input.outputs) : [],
+  };
+  next.factoryStage = "PRODUCTION";
+  next.pieceQc = null;
+  next.gateHandoff = null;
+  next.audit.push({ at: now(), event: "PIECE_RECORDED", pieceId: next.piece.id, headSha: next.piece.headSha });
+  return next;
+}
+
+function recordPieceQcState(current, input = {}) {
+  if (!current.piece) throw new Error("active Piece is required before Piece QC");
+  const status = String(input.status || "");
+  if (status !== "pass" && status !== "fail") throw new Error("Piece QC status must be pass or fail");
+  if (String(input.checkedHeadSha || "") !== current.piece.headSha) {
+    throw new Error("Piece QC checked head must match the active Piece head");
+  }
+  const next = clone(current);
+  next.pieceQc = {
+    status,
+    checkedHeadSha: current.piece.headSha,
+    checks: input.checks && typeof input.checks === "object" ? clone(input.checks) : {},
+    evidenceIds: Array.isArray(input.evidenceIds) ? input.evidenceIds.map(String) : [],
+    checkedAt: requiredString(input.checkedAt, "Piece QC checkedAt"),
+  };
+  next.factoryStage = "PIECE_QC";
+  next.gateHandoff = null;
+  next.audit.push({ at: now(), event: "PIECE_QC_RECORDED", status: String(input.status || "") });
+  return next;
+}
+
+function recordGateHandoffState(current, input = {}) {
+  if (current.pieceQc?.status !== "pass") throw new Error("passed Piece QC is required before Ready Gate");
+  if (!current.piece || current.pieceQc.checkedHeadSha !== current.piece.headSha) {
+    throw new Error("Ready Gate requires Piece QC for the active Piece head");
+  }
+  const expected = current.pieceQc.evidenceIds;
+  const received = Array.isArray(input.evidenceIds) ? input.evidenceIds.map(String) : [];
+  const exactEvidence = expected.length > 0 && expected.length === received.length &&
+    expected.every((id, index) => id === received[index]) &&
+    expected.every((id) => current.evidence.some((item) =>
+      item?.id === id && item?.scope === "piece" && item?.headSha === current.piece.headSha));
+  if (!exactEvidence) throw new Error("Ready Gate requires exact Piece QC evidence");
+  if (input.status !== "READY_FOR_ASSEMBLY" || input.pieceId !== current.piece.id ||
+      input.workPackageId !== current.workPackage?.id || input.blueprintRef !== current.blueprint?.ref ||
+      input.headSha !== current.piece.headSha) {
+    throw new Error("Ready Gate handoff does not match current production truth");
+  }
+  const next = clone(current);
+  next.gateHandoff = clone(input);
+  next.factoryStage = "READY_GATE";
+  next.audit.push({ at: now(), event: "READY_GATE_RECORDED", status: String(input.status || "") });
+  return next;
+}
+
+function addEvidenceState(current, input = {}) {
+  const next = clone(current);
+  next.evidence = appendEvidence(next.evidence, input);
+  const entry = next.evidence.at(-1);
+  next.audit.push({
+    at: now(), event: "EVIDENCE_RECORDED", evidenceId: entry.id,
+    claim: entry.claim, headSha: entry.headSha,
+  });
+  return next;
 }
 
 function setWorkbenchTruthState(current, input = {}) {
@@ -188,6 +312,21 @@ function wrap(state) {
     },
     setWorkbenchTruth(input = {}) {
       return wrap(setWorkbenchTruthState(state, input));
+    },
+    setWorkPackage(input = {}) {
+      return wrap(setWorkPackageState(state, input));
+    },
+    recordPiece(input = {}) {
+      return wrap(recordPieceState(state, input));
+    },
+    recordPieceQc(input = {}) {
+      return wrap(recordPieceQcState(state, input));
+    },
+    recordGateHandoff(input = {}) {
+      return wrap(recordGateHandoffState(state, input));
+    },
+    addEvidence(input = {}) {
+      return wrap(addEvidenceState(state, input));
     },
   });
 }

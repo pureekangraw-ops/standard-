@@ -41,3 +41,14 @@ test("returns safe empty truth instead of inventing missing workbench state", as
   assert.equal(view.status, "INSPECTING");
   assert.equal(view.next, "inspect");
 });
+
+test("projects READY_GATE from the task factory stage without replacing lifecycle truth", async () => {
+  const { createWorkbenchView } = await load();
+  const view = createWorkbenchView({
+    state: "EDITING", factoryStage: "READY_GATE", nextAction: "review-diff",
+    workPackage: { id: "wp-1" }, piece: { id: "piece-1", headSha: "head-1" },
+    pieceQc: { status: "pass", evidenceIds: ["ev-1"] },
+    gateHandoff: { status: "READY_FOR_ASSEMBLY", headSha: "head-1" },
+  });
+  assert.equal(view.status, "READY_GATE");
+});
