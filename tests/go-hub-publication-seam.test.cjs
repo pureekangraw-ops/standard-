@@ -12,6 +12,7 @@ const requiredHubFiles = [
   "go-hub.html",
   "go-hub-shell.css",
   "go-hub-shell.js",
+  "go-hub-workbench-model.js",
   "go-hub-runtime.js",
   "go-hub-foundation.js",
   "go-hub-utils.js",
