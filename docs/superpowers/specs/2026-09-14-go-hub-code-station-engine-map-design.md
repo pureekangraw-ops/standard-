@@ -1,7 +1,7 @@
 # GO Hub Code Workstation — Factory Blueprint
 
 วันที่: 2026-09-14  
-สถานะ: Design — รอการทบทวนเอกสารฉบับเขียนครั้งสุดท้าย  
+สถานะ: Design — พร้อมให้ Owner ทบทวนเอกสารฉบับเขียน  
 Base repository truth ตอนเริ่มออกแบบใหม่: `main` ที่ `bbd43e1c5bfd0217efb335353a684e6a8581f854`
 
 ## 1. North Star
@@ -94,8 +94,10 @@ Production มีอิสระเลือกวิธีสร้าง แ�
 | Assembly | `ARCHITECT -> CARTOGRAPHER` | ประกอบโครงและทางไหลของหลายชิ้น |
 | Assembly QC | `ARCHITECT -> CARTOGRAPHER -> CRYSTALLIZE` | พิสูจน์ระบบรวมยังถูก |
 | Build | `ERGASTERION / HEPHAESTUS` | ผลิต Artifact จริง |
-| Product QC | `CRYSTALLIZE -> GHOSTBUSTERS -> REALITY` | ตรวจของจริง หาอาการผิด และพิสูจน์การใช้งาน |
+| Product QC | `CRYSTALLIZE -> GHOSTBUSTERS` + Reality Check | ตรวจของจริง หาอาการผิด และพิสูจน์การใช้งาน |
 | Close / Learn | `HOUSEKEEPER -> TEACHER` | เก็บโต๊ะและสกัดบทเรียน |
+
+`REALITY` ใน Product QC คือหลักการตรวจของจริง ไม่ได้ถูกนิยามเป็น Lens canonical ตัวใหม่
 
 `GHOSTBUSTERS` ยังทำหน้าที่เป็น Verification Scan ครอบทั้งโรงงานเมื่อปลายทางล้มเหลว
 
@@ -231,7 +233,9 @@ Product QC ตรวจ **ของจริงที่กำลังจะถ
 
 Lens:
 
-`CRYSTALLIZE -> GHOSTBUSTERS -> REALITY`
+`CRYSTALLIZE -> GHOSTBUSTERS`
+
+จากนั้นใช้ **Reality Check** กับ Artifact จริง
 
 สำหรับ Android ตัวอย่างเช่น:
 
