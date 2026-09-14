@@ -115,3 +115,69 @@ test("task rejects PR or CI evidence for a different head SHA", async () => {
     ci: { headSha: "head-stale", conclusion: "success" },
   }), /CI head SHA does not match current head/);
 });
+
+
+test("deploy success remains incomplete until successful verification evidence", async () => {
+  const { createCodeTask } = await load();
+  let task = createCodeTask({ id: "task-deploy", repository: "pureekangraw-ops/standard-" });
+  task = task.transition("BRANCH_READY", {
+    baseBranch: "main", baseSha: "base-d", workBranch: "feature-d", headSha: "head-d",
+  });
+  task = task.transition("CI_GREEN", {
+    headSha: "head-d", ci: { headSha: "head-d", conclusion: "success" },
+  });
+  task = task.transition("MERGED", {
+    headSha: "head-d", merge: { headSha: "head-d", mergeSha: "merge-d", pullRequestNumber: 19 },
+  });
+  task = task.transition("DEPLOYING", {
+    deployment: { sha: "merge-d", runId: 91, status: "in_progress" },
+  });
+  task = task.transition("DEPLOYED", {
+    deployment: { sha: "merge-d", runId: 91, status: "success" },
+  });
+  assert.equal(task.state, "DEPLOYED");
+  assert.equal(task.nextAction, "verify");
+  assert.throws(() => task.transition("VERIFIED"), /successful verification evidence is required/);
+  task = task.transition("VERIFIED", {
+    verification: {
+      kind: "http", target: "https://hub.example/health", status: "success",
+      evidence: { status: 200 }, timestamp: "2026-09-14T05:30:00.000Z",
+    },
+  });
+  assert.equal(task.state, "VERIFIED");
+  assert.equal(task.nextAction, "complete");
+  assert.equal(task.snapshot().verification.status, "success");
+});
+
+test("task exposes explicit rollback entries for edits, branch commits, and merged code", async () => {
+  const { createCodeTask } = await load();
+  const cases = [
+    { from: "EDITING", kind: "discard-pending-edits" },
+    { from: "COMMITTED", kind: "reset-work-branch" },
+    { from: "MERGED", kind: "revert-merge" },
+  ];
+  for (const item of cases) {
+    let task = createCodeTask({ id: "rollback-" + item.from, repository: "pureekangraw-ops/standard-" });
+    task = task.transition("BRANCH_READY", {
+      baseBranch: "main", baseSha: "base-d", workBranch: "feature-d", headSha: "head-d",
+    });
+    task = task.transition(item.from, { headSha: "head-d" });
+    task = task.transition("ROLLBACK_IN_PROGRESS", {
+      rollback: { kind: item.kind, reason: "operator requested", headSha: "head-d" },
+    });
+    assert.equal(task.nextAction, "continue-rollback");
+    assert.equal(task.snapshot().rollback.kind, item.kind);
+  }
+});
+
+test("task rejects a rollback kind that does not match the current lifecycle state", async () => {
+  const { createCodeTask } = await load();
+  let task = createCodeTask({ id: "rollback-invalid", repository: "pureekangraw-ops/standard-" });
+  task = task.transition("BRANCH_READY", {
+    baseBranch: "main", baseSha: "base-d", workBranch: "feature-d", headSha: "head-d",
+  });
+  task = task.transition("EDITING", { headSha: "head-d" });
+  assert.throws(() => task.transition("ROLLBACK_IN_PROGRESS", {
+    rollback: { kind: "revert-merge", headSha: "head-d" },
+  }), /rollback kind does not match current state/);
+});
