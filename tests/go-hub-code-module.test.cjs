@@ -73,3 +73,25 @@ test("Code task session restores and saves through the injected persistence port
   assert.equal((await session.save(task)).status, "COMMITTED");
   assert.equal(stored.audit[0].event, "SPECIALIST_RETURN");
 });
+
+
+test("Code capability projects deployment evidence from the task snapshot", async () => {
+  const { pathToFileURL } = require("node:url");
+  const { createCodeCapability } = await import(pathToFileURL(codeModule).href);
+  const workspace = {
+    listFiles() {}, readText() {}, writeText() {}, createBranch() {}, compare() {},
+  };
+  const deployment = { status: "success", runId: 34809615501 };
+  const task = {
+    snapshot() {
+      return {
+        id: "task-deploy", state: "DEPLOYED", nextAction: "verify", blocker: null,
+        repository: "pureekangraw-ops/standard-", baseBranch: "main", baseSha: "base-1",
+        workBranch: "feature-a", headSha: "head-2", pullRequest: { number: 19 },
+        ci: { headSha: "head-2", conclusion: "success" }, deployment,
+      };
+    },
+  };
+  const capability = createCodeCapability({ workspace, task });
+  assert.deepEqual(capability.deploy, deployment);
+});
