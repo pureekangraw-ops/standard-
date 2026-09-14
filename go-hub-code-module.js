@@ -16,17 +16,25 @@ export function createCodeCapability({ workspace = null, task = null } = {}) {
   const canWrite = canRead && hasMethod(workspace, "writeText");
   const canBranch = canWrite && hasMethod(workspace, "createBranch");
   const canDiff = canBranch && hasMethod(workspace, "compare");
+  const canPullRequest = canDiff && hasMethod(workspace, "openPullRequest") && hasMethod(workspace, "getPullRequest");
+  const canCI = canPullRequest && hasMethod(workspace, "getCI") && hasMethod(workspace, "rerunFailed");
+  const canMerge = canCI && hasMethod(workspace, "mergePullRequest");
+  const canObserveDeploy = canMerge && hasMethod(workspace, "getWorkflowRuns");
   const snapshot = taskSnapshot(task);
 
   return Object.freeze({
     id: "code",
     title: "Code",
     description: "Repository-backed coding workspace",
-    status: canDiff ? "ready" : canRead ? "read-only" : "needs-workspace",
+    status: canObserveDeploy ? "ready" : canDiff ? "partial-lifecycle" : canRead ? "read-only" : "needs-workspace",
     canRead,
     canWrite,
     canBranch,
     canDiff,
+    canPullRequest,
+    canCI,
+    canMerge,
+    canObserveDeploy,
     workspace,
     task: snapshot,
     nextAction: snapshot?.nextAction || null,
