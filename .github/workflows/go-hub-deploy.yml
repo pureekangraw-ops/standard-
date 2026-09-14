@@ -43,14 +43,14 @@ jobs:
           : > "${secrets_file}"
           chmod 600 "${secrets_file}"
           if [ -n "${GOHUB_GITHUB_TOKEN}" ]; then
-            printf 'GITHUB_TOKEN=%s\\n' "${GOHUB_GITHUB_TOKEN}" >> "${secrets_file}"
+            printf 'GITHUB_TOKEN=%s\n' "${GOHUB_GITHUB_TOKEN}" >> "${secrets_file}"
           fi
           if [ -n "${GOHUB_OAUTH_SIGNING_KEY}" ] && [ -n "${GOHUB_OWNER_PASSCODE_HASH}" ] && [ -n "${GOHUB_OAUTH_CLIENT_ID}" ] && [ -n "${GOHUB_OAUTH_CLIENT_SECRET}" ] && [ -n "${GOHUB_OAUTH_REDIRECT_URI}" ]; then
-            printf 'GOHUB_OAUTH_SIGNING_KEY=%s\\n' "${GOHUB_OAUTH_SIGNING_KEY}" >> "${secrets_file}"
-            printf 'GOHUB_OWNER_PASSCODE_HASH=%s\\n' "${GOHUB_OWNER_PASSCODE_HASH}" >> "${secrets_file}"
-            printf 'GOHUB_OAUTH_CLIENT_ID=%s\\n' "${GOHUB_OAUTH_CLIENT_ID}" >> "${secrets_file}"
-            printf 'GOHUB_OAUTH_CLIENT_SECRET=%s\\n' "${GOHUB_OAUTH_CLIENT_SECRET}" >> "${secrets_file}"
-            printf 'GOHUB_OAUTH_REDIRECT_URI=%s\\n' "${GOHUB_OAUTH_REDIRECT_URI}" >> "${secrets_file}"
+            printf 'GOHUB_OAUTH_SIGNING_KEY=%s\n' "${GOHUB_OAUTH_SIGNING_KEY}" >> "${secrets_file}"
+            printf 'GOHUB_OWNER_PASSCODE_HASH=%s\n' "${GOHUB_OWNER_PASSCODE_HASH}" >> "${secrets_file}"
+            printf 'GOHUB_OAUTH_CLIENT_ID=%s\n' "${GOHUB_OAUTH_CLIENT_ID}" >> "${secrets_file}"
+            printf 'GOHUB_OAUTH_CLIENT_SECRET=%s\n' "${GOHUB_OAUTH_CLIENT_SECRET}" >> "${secrets_file}"
+            printf 'GOHUB_OAUTH_REDIRECT_URI=%s\n' "${GOHUB_OAUTH_REDIRECT_URI}" >> "${secrets_file}"
           else
             echo "GO Hub OAuth secrets are incomplete; MCP will remain fail-closed."
           fi
