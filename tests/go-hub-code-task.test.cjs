@@ -191,7 +191,9 @@ test("task restores exact durable snapshot and appends specialist audit to one a
     workBranch: "feature-a", headSha: "head-1", touchedPaths: ["src/app.js"],
     diffFingerprint: "diff-1", blocker: null, pullRequest: { number: 19, headSha: "head-1" },
     ci: { headSha: "head-1", conclusion: null }, merge: null, deployment: null,
-    verification: null, rollback: null, audit: [{ at: "2026-09-14T00:00:00.000Z", event: "CI_STARTED" }],
+    verification: null, rollback: null, mission: null, blueprint: null,
+    currentPiece: null, evidence: [],
+    audit: [{ at: "2026-09-14T00:00:00.000Z", event: "CI_STARTED" }],
   };
   let task = createCodeTaskFromSnapshot(stored);
   assert.deepEqual(task.snapshot(), stored);
@@ -202,4 +204,43 @@ test("task restores exact durable snapshot and appends specialist audit to one a
   assert.equal(resumed.audit[1].event, "SPECIALIST_RETURN");
   assert.equal(resumed.audit[1].specialist, "slice-c");
   assert.equal(resumed.audit[1].result, "green");
+});
+
+test("task stores one workbench truth set and audits the update", async () => {
+  const { createCodeTask } = await load();
+  let task = createCodeTask({ id: "wb-1", intent: "build workstation", repository: "pureekangraw-ops/standard-" });
+  assert.equal(task.mission, null);
+  assert.equal(task.blueprint, null);
+  assert.equal(task.currentPiece, null);
+  assert.deepEqual(task.evidence, []);
+
+  task = task.setWorkbenchTruth({
+    mission: { summary: "Build Engine 1", outcome: "Resumable Workbench truth" },
+    blueprint: { title: "Factory Blueprint", ref: "docs/superpowers/specs/2026-09-14-go-hub-code-station-engine-map-design.md", status: "approved" },
+    currentPiece: { id: "engine-1", title: "Truth & Workbench", purpose: "Expose one resumable truth set" },
+    evidence: [{ kind: "design", label: "Approved blueprint", value: "aa7d779" }],
+  });
+
+  const snapshot = task.snapshot();
+  assert.equal(snapshot.mission.summary, "Build Engine 1");
+  assert.equal(snapshot.blueprint.status, "approved");
+  assert.equal(snapshot.currentPiece.id, "engine-1");
+  assert.deepEqual(snapshot.evidence, [{ kind: "design", label: "Approved blueprint", value: "aa7d779" }]);
+  assert.equal(snapshot.audit.at(-1).event, "WORKBENCH_TRUTH_UPDATED");
+});
+
+test("legacy snapshots restore with safe workbench defaults", async () => {
+  const { createCodeTaskFromSnapshot } = await load();
+  const legacy = {
+    id: "legacy", intent: "resume", repository: "pureekangraw-ops/standard-",
+    state: "INSPECTING", nextAction: "inspect", baseBranch: null, baseSha: null,
+    workBranch: null, headSha: null, touchedPaths: [], diffFingerprint: null,
+    blocker: null, pullRequest: null, ci: null, merge: null, deployment: null,
+    verification: null, rollback: null, audit: [],
+  };
+  const restored = createCodeTaskFromSnapshot(legacy).snapshot();
+  assert.equal(restored.mission, null);
+  assert.equal(restored.blueprint, null);
+  assert.equal(restored.currentPiece, null);
+  assert.deepEqual(restored.evidence, []);
 });
