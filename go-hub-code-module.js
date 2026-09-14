@@ -13,22 +13,27 @@ function taskSnapshot(task) {
 export function createCodeCapability({ workspace = null, task = null } = {}) {
   const canList = hasMethod(workspace, "listFiles");
   const canRead = canList && hasMethod(workspace, "readText");
+  const canInspect = canRead && hasMethod(workspace, "inspect") && hasMethod(workspace, "listTree");
   const canWrite = canRead && hasMethod(workspace, "writeText");
+  const canDelete = canWrite && hasMethod(workspace, "deletePath");
   const canBranch = canWrite && hasMethod(workspace, "createBranch");
   const canDiff = canBranch && hasMethod(workspace, "compare");
   const canPullRequest = canDiff && hasMethod(workspace, "openPullRequest") && hasMethod(workspace, "getPullRequest");
   const canCI = canPullRequest && hasMethod(workspace, "getCI") && hasMethod(workspace, "rerunFailed");
   const canMerge = canCI && hasMethod(workspace, "mergePullRequest");
   const canObserveDeploy = canMerge && hasMethod(workspace, "getWorkflowRuns");
+  const fullLifecycleReady = canInspect && canDelete && canObserveDeploy;
   const snapshot = taskSnapshot(task);
 
   return Object.freeze({
     id: "code",
     title: "Code",
     description: "Repository-backed coding workspace",
-    status: canObserveDeploy ? "ready" : canDiff ? "partial-lifecycle" : canRead ? "read-only" : "needs-workspace",
+    status: fullLifecycleReady ? "ready" : canDiff ? "partial-lifecycle" : canRead ? "read-only" : "needs-workspace",
     canRead,
+    canInspect,
     canWrite,
+    canDelete,
     canBranch,
     canDiff,
     canPullRequest,

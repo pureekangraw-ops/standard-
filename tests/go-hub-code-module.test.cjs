@@ -31,8 +31,8 @@ test("Code capability exposes machine-usable workstation lifecycle state", async
   const { pathToFileURL } = require("node:url");
   const { createCodeCapability } = await import(pathToFileURL(codeModule).href);
   const workspace = {
-    listFiles() {}, readText() {}, writeText() {}, createBranch() {}, compare() {},
-    openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
+    inspect() {}, listTree() {}, listFiles() {}, readText() {}, writeText() {}, deletePath() {},
+    createBranch() {}, compare() {}, openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
     mergePullRequest() {}, getWorkflowRuns() {},
   };
   const task = {
@@ -81,8 +81,8 @@ test("Code capability projects deployment evidence from the task snapshot", asyn
   const { pathToFileURL } = require("node:url");
   const { createCodeCapability } = await import(pathToFileURL(codeModule).href);
   const workspace = {
-    listFiles() {}, readText() {}, writeText() {}, createBranch() {}, compare() {},
-    openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
+    inspect() {}, listTree() {}, listFiles() {}, readText() {}, writeText() {}, deletePath() {},
+    createBranch() {}, compare() {}, openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
     mergePullRequest() {}, getWorkflowRuns() {},
   };
   const deployment = { status: "success", runId: 34809615501 };
@@ -104,7 +104,8 @@ test("Code capability does not claim full readiness when PR, CI, merge, or deplo
   const { pathToFileURL } = require("node:url");
   const { createCodeCapability } = await import(`${pathToFileURL(codeModule).href}?readiness=${Date.now()}`);
   const partialWorkspace = {
-    listFiles() {}, readText() {}, writeText() {}, createBranch() {}, compare() {},
+    inspect() {}, listTree() {}, listFiles() {}, readText() {}, writeText() {}, deletePath() {},
+    createBranch() {}, compare() {},
   };
   const partial = createCodeCapability({ workspace: partialWorkspace });
   assert.notEqual(partial.status, "ready");
