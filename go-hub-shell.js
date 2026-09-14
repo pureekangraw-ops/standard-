@@ -1,5 +1,6 @@
 import { createHubRuntime } from "./go-hub-runtime.js";
-import { createCodeCapability } from "./go-hub-code-module.js";
+import { createCodeCapability, createCodeTaskSession } from "./go-hub-code-module.js";
+import { createLocalStorageKeyValueStore, createStatePersistence } from "./go-hub-persistence.js";
 import { createGitHubWorkspace } from "./go-hub-github-workspace.js";
 
 const runtime = createHubRuntime();
@@ -7,7 +8,23 @@ const workspace = createGitHubWorkspace({
   gatewayBase: "/hub/api/github-workspace",
   repository: "pureekangraw-ops/standard-",
 });
-runtime.register("Code", createCodeCapability({ workspace }));
+const taskPersistence = createStatePersistence({
+  store: createLocalStorageKeyValueStore({
+    storage: globalThis.localStorage,
+    namespace: "go-hub-code",
+  }),
+  key: "active-task",
+});
+const session = createCodeTaskSession({
+  persistence: taskPersistence,
+  initial: {
+    id: "active-code-task",
+    intent: "GO Hub Code workstation",
+    repository: workspace.repository,
+  },
+});
+const task = await session.load();
+runtime.register("Code", createCodeCapability({ workspace, task }));
 
 const status = document.querySelector("[data-hub-status]");
 const list = document.querySelector("[data-hub-capabilities]");
