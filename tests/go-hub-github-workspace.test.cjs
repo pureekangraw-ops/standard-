@@ -131,9 +131,9 @@ test("workspace exposes PR and exact-head CI operations without Authorization", 
     if (value.endsWith("/ci/rerun-failed") && init.method === "POST") {
       return response({ ok: true, runId: 7 }, 202);
     }
-    throw new Error(\`unexpected request \${value}\`);
+    throw new Error(`unexpected request ${value}`);
   };
-  const { createGitHubWorkspace } = await import(\`\${moduleUrl}?prci=\${Date.now()}\`);
+  const { createGitHubWorkspace } = await import(`${moduleUrl}?prci=${Date.now()}`);
   const workspace = createGitHubWorkspace({
     gatewayBase: "/hub/api/github-workspace",
     repository: "pureekangraw-ops/standard-",
