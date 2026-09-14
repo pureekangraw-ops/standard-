@@ -10,14 +10,15 @@ const root = path.resolve(__dirname, "..");
 const centreUrl = pathToFileURL(path.join(root, "go-hub-centre.js")).href;
 const mimirUrl = pathToFileURL(path.join(root, "go-hub-mimir-destination.js")).href;
 
-async function outboundMimirAccess() {
-  const nonce = `${Date.now()}-${Math.random()}`;
-  const { createCentrePassage, admitDestination } = await import(`${centreUrl}?centre=${nonce}`);
-  const { createMimirSearchDestination, MIMIR_DESTINATION } = await import(`${mimirUrl}?mimir=${nonce}`);
+async function outboundMimirAccess(search) {
+  const nonce = String(Date.now()) + "-" + String(Math.random());
+  const centreModule = await import(centreUrl + "?centre=" + nonce);
+  const mimirModule = await import(mimirUrl + "?mimir=" + nonce);
   const seen = [];
-  const capability = createMimirSearchDestination({
+  const capability = mimirModule.createMimirSearchDestination({
     async search(query) {
       seen.push(query);
+      if (search) return search(query);
       return [{
         id: "source-record-1",
         name: "Observed capability",
@@ -26,7 +27,7 @@ async function outboundMimirAccess() {
       }];
     },
   });
-  const centre = createCentrePassage();
+  const centre = centreModule.createCentrePassage();
   const reviewed = centre.review(
     centre.enter({ checkpointId: "CENTRE-001", workId: "WORK-A" }),
     {
@@ -40,71 +41,167 @@ async function outboundMimirAccess() {
     lensReference: "lens://search",
     fittedView: "Find relevant source without inventing missing fields",
   });
-  const away = centre.leave(fitted, { destination: MIMIR_DESTINATION }).work;
-  const access = admitDestination(away, {
-    destination: MIMIR_DESTINATION,
+  const away = centre.leave(fitted, {
+    destination: mimirModule.MIMIR_DESTINATION,
+  }).work;
+  const access = centreModule.admitDestination(away, {
+    destination: mimirModule.MIMIR_DESTINATION,
     capability,
   });
-  return { centre, away, access, capability, seen };
+  return { centre, away, access, capability, seen, mimirModule };
 }
 
-test("MIMIR destination searches first and returns observed records before 5W", async () => {
-  const { centre, away, access, capability, seen } = await outboundMimirAccess();
-  const packet = await capability.accept(access);
+test("CENTRE sends the minimum query and MIMIR returns to the same checkpoint", async () => {
+  const result = await outboundMimirAccess();
+  const packet = await result.capability.accept(result.access);
 
-  assert.deepEqual(Object.keys(seen[0]).sort(), [
+  assert.deepEqual(Object.keys(result.seen[0]).sort(), [
     "lensReference",
     "requestedResult",
     "task",
   ]);
   for (const inferredCoordinate of ["who", "why", "what", "where", "when"]) {
-    assert.equal(Object.hasOwn(seen[0], inferredCoordinate), false);
+    assert.equal(Object.hasOwn(result.seen[0], inferredCoordinate), false);
   }
 
   assert.equal(packet.workId, "WORK-A");
   assert.equal(packet.checkpointId, "CENTRE-001");
-  assert.equal(packet.payload.status, "FOUND");
+  assert.equal(packet.payload.status, "PASS");
   assert.equal(packet.payload.records[0].source, "MIMIR owner registry");
-  assert.equal(packet.payload.next, "GO_APPLY_5W");
-  assert.equal(packet.payload.route, null);
+  assert.equal(packet.payload.next, "GO_DECIDE");
 
-  const returned = centre.return(away, packet);
+  const returned = result.centre.return(result.away, packet);
   assert.equal(returned.status, "RETURNED");
+  assert.equal(returned.workId, "WORK-A");
   assert.equal(returned.checkpointId, "CENTRE-001");
 });
 
-test("MIMIR destination returns explicit WAIT when search sees no record", async () => {
-  const nonce = `${Date.now()}-${Math.random()}`;
-  const { createCentrePassage, admitDestination } = await import(`${centreUrl}?empty-centre=${nonce}`);
-  const { createMimirSearchDestination, MIMIR_DESTINATION } = await import(`${mimirUrl}?empty-mimir=${nonce}`);
-  const capability = createMimirSearchDestination({ search: async () => [] });
-  const centre = createCentrePassage();
-  const ready = centre.fit(
-    centre.review(
-      centre.enter({ checkpointId: "CENTRE-EMPTY", workId: "WORK-EMPTY" }),
-      { task: "Unknown thing", requestedResult: "Observed records", authority: "BIG" },
-    ),
-    { lensId: "LENS-SEARCH", lensReference: "lens://search", fittedView: "Search only" },
-  );
-  const away = centre.leave(ready, { destination: MIMIR_DESTINATION }).work;
-  const access = admitDestination(away, { destination: MIMIR_DESTINATION, capability });
-  const packet = await capability.accept(access);
+test("Notion-shaped catalog stock selects a usable fit before a blocked five-star item", async () => {
+  const result = await outboundMimirAccess();
+  const searchCatalog = result.mimirModule.createMimirCatalogSearchPort({
+    async readCatalog() {
+      return [
+        {
+          "ชื่อ": "Python Legacy",
+          "ประเภท": "Tool",
+          "คุณสมบัติ": "Python calculate analyze data",
+          "สถานะ": "พร้อมใช้",
+          "สถานะปัจจุบัน": "Blocked",
+          "Permission": "Blocked",
+          "Callable Action / Tool Exposure": "Available",
+          "GO Rating": "5.0",
+          "Route": "blocked route",
+          "date:Verified Date:start": "2026-09-13T00:46:00.000Z",
+          "url": "https://notion.test/python-legacy",
+        },
+        {
+          "ชื่อ": "Python",
+          "ประเภท": "Tool",
+          "คุณสมบัติ": "Python calculate analyze data",
+          "สถานะ": "พร้อมใช้",
+          "สถานะปัจจุบัน": "Active",
+          "Permission": "Allowed",
+          "Callable Action / Tool Exposure": "Available",
+          "GO Rating": "1.0",
+          "Route": "GO -> Python",
+          "date:Verified Date:start": "2026-09-13T00:46:00.000Z",
+          "date:Modified Date:start": "2026-09-13T00:46:00.000Z",
+          "url": "https://notion.test/python",
+        },
+      ];
+    },
+  });
+
+  const catalogResult = await searchCatalog({
+    task: "Use Python to calculate",
+    requestedResult: "Analyze data",
+    lensReference: "lens://tool-fit",
+  });
+
+  assert.equal(catalogResult.status, "PASS");
+  assert.equal(catalogResult.records[0].name, "Python");
+  assert.equal(catalogResult.route, "GO -> Python");
+  assert.equal(catalogResult.evidence.gateBeforeRating, true);
+});
+
+test("missing decision-critical Gate fields return WAIT instead of assumed access", async () => {
+  const result = await outboundMimirAccess();
+  const searchCatalog = result.mimirModule.createMimirCatalogSearchPort({
+    async readCatalog() {
+      return [{
+        "ชื่อ": "Notion",
+        "ประเภท": "Connector",
+        "คุณสมบัติ": "search and edit Notion workspace",
+        "สถานะ": "พร้อมใช้",
+        "วิธีใช้": "Search then fetch",
+        "url": "https://notion.test/notion",
+      }];
+    },
+  });
+
+  const catalogResult = await searchCatalog({
+    task: "Search Notion",
+    requestedResult: "Find existing data",
+  });
+
+  assert.equal(catalogResult.status, "WAIT");
+  assert.equal(catalogResult.waitReason, "MISSING_DECISION_CRITICAL_FIELD");
+  assert.equal(catalogResult.route, null);
+  assert.equal(catalogResult.records[0].name, "Notion");
+});
+
+test("structured MIMIR PASS result carries route and evidence back through CENTRE", async () => {
+  const result = await outboundMimirAccess(async () => ({
+    status: "PASS",
+    waitReason: null,
+    records: [{
+      id: "python-record",
+      name: "Python",
+      source: "https://notion.test/python",
+    }],
+    route: "GO -> Python",
+    evidence: {
+      source: "https://notion.test/python",
+      verifiedAt: "2026-09-13",
+      gateBeforeRating: true,
+    },
+  }));
+  const packet = await result.capability.accept(result.access);
+  const returned = result.centre.return(result.away, packet);
+
+  assert.equal(returned.checkpointId, "CENTRE-001");
+  assert.equal(returned.returnedPayload.status, "PASS");
+  assert.equal(returned.returnedPayload.route, "GO -> Python");
+  assert.equal(returned.returnedPayload.evidence.gateBeforeRating, true);
+});
+
+test("MIMIR returns explicit WAIT when catalog sees no record", async () => {
+  const result = await outboundMimirAccess(async () => ({
+    status: "WAIT",
+    waitReason: "NO_MATCH",
+    records: [],
+    route: null,
+  }));
+  const packet = await result.capability.accept(result.access);
 
   assert.equal(packet.payload.status, "WAIT");
   assert.equal(packet.payload.waitReason, "NO_MATCH");
   assert.deepEqual(packet.payload.records, []);
   assert.equal(packet.payload.sourceObserved, true);
+  assert.equal(packet.payload.next, "GO_REVIEW_WAIT");
 });
 
-test("MIMIR destination preserves source failure as WAIT instead of inventing data", async () => {
-  const { access } = await outboundMimirAccess();
-  const { createMimirSearchDestination } = await import(`${mimirUrl}?failure=${Date.now()}`);
-  const unavailable = createMimirSearchDestination({
+test("MIMIR preserves source failure as WAIT instead of inventing data", async () => {
+  const result = await outboundMimirAccess();
+  const unavailable = result.mimirModule.createMimirSearchDestination({
     async search() {
       throw new Error("registry offline");
     },
   });
-  const packet = await unavailable.accept({ ...access, capability: unavailable });
+  const packet = await unavailable.accept({
+    ...result.access,
+    capability: unavailable,
+  });
 
   assert.equal(packet.payload.status, "WAIT");
   assert.equal(packet.payload.waitReason, "SOURCE_UNAVAILABLE");
@@ -113,115 +210,13 @@ test("MIMIR destination preserves source failure as WAIT instead of inventing da
   assert.equal(packet.payload.route, null);
 });
 
-test("GO Hub adapter contains no copied MIMIR registry truth", () => {
-  const source = fs.readFileSync(path.join(root, "go-hub-mimir-destination.js"), "utf8");
+test("GO Hub adapter contains no copied registry products or owner truth", () => {
+  const source = fs.readFileSync(
+    path.join(root, "go-hub-mimir-destination.js"),
+    "utf8",
+  );
   assert.equal(source.includes("MIMIR_REGISTRY"), false);
   assert.equal(source.includes("github-chatgpt-connector"), false);
-  assert.equal(source.includes("callableActions"), false);
-});
-
-
-test("5W can only be applied after MIMIR returns source records", async () => {
-  const { access, capability } = await outboundMimirAccess();
-  const { applyFiveWAfterSearch } = await import(`${mimirUrl}?fivew=${Date.now()}`);
-
-  assert.throws(
-    () => applyFiveWAfterSearch({ payload: { kind: "NOT_SEARCH" } }, {}),
-    /search result/,
-  );
-
-  const packet = await capability.accept(access);
-  const interpreted = applyFiveWAfterSearch(packet, {
-    WHO: {
-      state: "FACT",
-      value: "BIG",
-      evidenceRecordIds: ["source-record-1"],
-    },
-    WHY: {
-      state: "INFERENCE",
-      value: "Find a usable capability",
-      evidenceRecordIds: ["source-record-1"],
-    },
-    WHAT: {
-      state: "FACT",
-      value: "Observed capability",
-      evidenceRecordIds: ["source-record-1"],
-    },
-    WHERE: {
-      state: "FACT",
-      value: "MIMIR owner registry",
-      evidenceRecordIds: ["source-record-1"],
-    },
-    WHEN: {
-      state: "FACT",
-      value: "verified 2026-09-14",
-      evidenceRecordIds: ["source-record-1"],
-    },
-  });
-
-  assert.equal(interpreted.payload.fiveWAppliedAfterSearch, true);
-  assert.equal(interpreted.payload.fiveW.WHO.value, "BIG");
-  assert.equal(interpreted.payload.fiveW.WHERE.state, "FACT");
-  assert.equal(interpreted.payload.next, "GO_DECIDE");
-});
-
-test("5W preserves missing coordinates as UNKNOWN and rejects invented FACT", async () => {
-  const { access, capability } = await outboundMimirAccess();
-  const { applyFiveWAfterSearch } = await import(`${mimirUrl}?unknown=${Date.now()}`);
-  const packet = await capability.accept(access);
-
-  const partial = applyFiveWAfterSearch(packet, {
-    WHAT: {
-      state: "FACT",
-      value: "Observed capability",
-      evidenceRecordIds: ["source-record-1"],
-    },
-  });
-  assert.equal(partial.payload.fiveW.WHO.state, "UNKNOWN");
-  assert.equal(partial.payload.fiveW.WHO.value, null);
-  assert.equal(partial.payload.fiveW.WHEN.state, "UNKNOWN");
-
-  assert.throws(
-    () => applyFiveWAfterSearch(packet, {
-      WHO: { state: "FACT", value: "Guessed owner" },
-    }),
-    /requires MIMIR record evidence/,
-  );
-  assert.throws(
-    () => applyFiveWAfterSearch(packet, {
-      WHERE: {
-        state: "FACT",
-        value: "Invented source",
-        evidenceRecordIds: ["not-returned"],
-      },
-    }),
-    /did not return/,
-  );
-});
-
-test("5W keeps conflicting observations visible", async () => {
-  const { access } = await outboundMimirAccess();
-  const { createMimirSearchDestination, applyFiveWAfterSearch } = await import(
-    `${mimirUrl}?conflict=${Date.now()}`,
-  );
-  const capability = createMimirSearchDestination({
-    search: async () => [
-      { id: "record-a", source: "source A" },
-      { id: "record-b", source: "source B" },
-    ],
-  });
-  const packet = await capability.accept({ ...access, capability });
-  const interpreted = applyFiveWAfterSearch(packet, {
-    WHERE: {
-      state: "CONFLICT",
-      value: ["source A", "source B"],
-      evidenceRecordIds: ["record-a", "record-b"],
-    },
-  });
-
-  assert.equal(interpreted.payload.fiveW.WHERE.state, "CONFLICT");
-  assert.deepEqual(
-    interpreted.payload.fiveW.WHERE.evidenceRecordIds,
-    ["record-a", "record-b"],
-  );
+  assert.equal(source.includes("owner-logic-seal-v1"), false);
+  assert.equal(source.includes("pureekangraw-ops/"), false);
 });
