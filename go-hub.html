@@ -15,7 +15,31 @@
       <h1>GO Hub</h1>
       <p class="hub-status" data-hub-status>Starting neutral runtime…</p>
     </header>
-    <section class="go-workbench" aria-label="GO Workbench">
+    <section class="centre-panel" aria-labelledby="centre-title" data-centre>
+      <div class="centre-heading">
+        <div>
+          <p class="hub-kicker">FIRST CHECKPOINT</p>
+          <h2 id="centre-title">CENTRE</h2>
+        </div>
+        <strong class="centre-state" data-centre-state>ARRIVED</strong>
+      </div>
+      <dl class="centre-identity">
+        <div><dt>Checkpoint</dt><dd data-centre-checkpoint>—</dd></div>
+        <div><dt>Work</dt><dd data-centre-work>—</dd></div>
+      </dl>
+      <form class="centre-form" data-centre-form>
+        <label>Task<textarea name="task" rows="2" required></textarea></label>
+        <label>Requested Result<textarea name="requestedResult" rows="2" required></textarea></label>
+        <label>Authority<input name="authority" value="BIG" required></label>
+        <label>Lens Reference<input name="lensReference" placeholder="lens://…" required></label>
+        <label>Fitted View<textarea name="fittedView" rows="2" required></textarea></label>
+        <input type="hidden" name="destination" value="destination://factory">
+        <p class="centre-route">Destination: <strong>Factory</strong> · Return: <strong data-centre-return>this checkpoint</strong></p>
+        <p class="centre-error" data-centre-error role="alert"></p>
+        <button type="submit" data-centre-action>Review task</button>
+      </form>
+    </section>
+    <section class="go-workbench" aria-label="GO Workbench" data-workbench-shell hidden>
       <div class="go-workbench__item"><span>Mission</span><strong data-workbench-mission>—</strong></div>
       <div class="go-workbench__item"><span>Blueprint</span><strong data-workbench-blueprint>—</strong></div>
       <div class="go-workbench__item"><span>Current Piece</span><strong data-workbench-piece>—</strong></div>
