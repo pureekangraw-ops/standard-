@@ -7,7 +7,7 @@ export function createWorkbenchView(taskSnapshot = {}) {
     mission: taskSnapshot.mission == null ? null : clone(taskSnapshot.mission),
     blueprint: taskSnapshot.blueprint == null ? null : clone(taskSnapshot.blueprint),
     currentPiece: taskSnapshot.currentPiece == null ? null : clone(taskSnapshot.currentPiece),
-    status: String(taskSnapshot.state || "UNKNOWN"),
+    status: String(taskSnapshot.factoryStage || taskSnapshot.state || "UNKNOWN"),
     evidence: Array.isArray(taskSnapshot.evidence) ? clone(taskSnapshot.evidence) : [],
     next: String(taskSnapshot.nextAction || ""),
     blocker: taskSnapshot.blocker == null ? null : String(taskSnapshot.blocker),
