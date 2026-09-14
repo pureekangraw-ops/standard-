@@ -38,7 +38,7 @@ export function createCodeCapability({ workspace = null, task = null } = {}) {
     headSha: snapshot?.headSha || null,
     pullRequest: snapshot?.pullRequest || null,
     ci: snapshot?.ci || null,
-    deploy: snapshot?.deploy || null,
+    deploy: snapshot?.deployment || null,
     verification: snapshot?.verification || null,
   });
 }
