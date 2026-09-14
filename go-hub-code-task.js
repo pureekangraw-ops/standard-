@@ -63,6 +63,9 @@ function normalizeInitial(initial = {}) {
     assemblyQc: null,
     buildArtifact: null,
     productQc: null,
+    verificationScan: null,
+    closeout: null,
+    lessons: [],
     audit: [{ at: now(), event: "TASK_CREATED", state: "INSPECTING" }],
   };
 }
@@ -174,6 +177,9 @@ function normalizeSnapshot(value) {
   state.assemblyQc = state.assemblyQc == null ? null : clone(state.assemblyQc);
   state.buildArtifact = state.buildArtifact == null ? null : clone(state.buildArtifact);
   state.productQc = state.productQc == null ? null : clone(state.productQc);
+  state.verificationScan = state.verificationScan == null ? null : clone(state.verificationScan);
+  state.closeout = state.closeout == null ? null : clone(state.closeout);
+  state.lessons = Array.isArray(state.lessons) ? clone(state.lessons) : [];
   return state;
 }
 
@@ -309,6 +315,9 @@ function recordAssemblyState(current, input = {}) {
   next.assemblyQc = null;
   next.buildArtifact = null;
   next.productQc = null;
+  next.verificationScan = null;
+  next.closeout = null;
+  next.lessons = [];
   next.audit.push({ at: now(), event: "ASSEMBLY_RECORDED", assemblyId: next.assembly.id, headSha: next.assembly.integrationHeadSha });
   return next;
 }
@@ -328,6 +337,9 @@ function recordAssemblyQcState(current, input = {}) {
   next.factoryStage = "ASSEMBLY_QC";
   next.buildArtifact = null;
   next.productQc = null;
+  next.verificationScan = null;
+  next.closeout = null;
+  next.lessons = [];
   next.audit.push({ at: now(), event: "ASSEMBLY_QC_RECORDED", status: input.status, headSha: input.checkedHeadSha });
   return next;
 }
@@ -365,7 +377,53 @@ function recordProductQcState(current, input = {}) {
   const next = clone(current);
   next.productQc = clone(input);
   next.factoryStage = input.status === "pass" ? "PRODUCT_VERIFIED" : "PRODUCT_QC";
+  next.verificationScan = null;
+  next.closeout = null;
+  next.lessons = [];
   next.audit.push({ at: now(), event: "PRODUCT_QC_RECORDED", status: input.status, digest: input.artifactDigest });
+  return next;
+}
+
+function recordVerificationScanState(current, input = {}) {
+  if (!['VERIFIED_CHAIN', 'FIRST_BROKEN_TRUTH'].includes(input.status)) throw new Error("unsupported verification scan status");
+  if (input.status === "VERIFIED_CHAIN" && (current.factoryStage !== "PRODUCT_VERIFIED" ||
+      input.artifactId !== current.buildArtifact?.id || input.artifactDigest !== current.buildArtifact?.digest)) {
+    throw new Error("verified scan must match the current PRODUCT_VERIFIED Artifact");
+  }
+  const next = clone(current);
+  next.verificationScan = clone(input);
+  next.factoryStage = input.status === "VERIFIED_CHAIN" ? "VERIFIED_CHAIN" : "RECOVERY_REQUIRED";
+  next.closeout = null;
+  next.lessons = [];
+  next.audit.push({ at: now(), event: "VERIFICATION_SCAN_RECORDED", status: input.status, station: input.station || null });
+  return next;
+}
+
+function recordCloseoutState(current, input = {}) {
+  const artifact = current.buildArtifact;
+  if (current.verificationScan?.status !== "VERIFIED_CHAIN" || input.status !== "CLOSEOUT_READY" ||
+      input.taskId !== current.id || input.finalArtifact?.id !== artifact?.id || input.finalArtifact?.digest !== artifact?.digest) {
+    throw new Error("closeout must match the current verified chain and Artifact");
+  }
+  const next = clone(current);
+  next.closeout = clone(input);
+  next.factoryStage = "CLOSED";
+  next.lessons = [];
+  next.audit.push({ at: now(), event: "CLOSEOUT_RECORDED", artifactDigest: artifact.digest });
+  return next;
+}
+
+function recordLessonState(current, input = {}) {
+  if (current.closeout?.status !== "CLOSEOUT_READY" || input.status !== "RECORDED" ||
+      input.sourceTaskId !== current.id || input.sourceArtifactDigest !== current.buildArtifact?.digest) {
+    throw new Error("lesson must match the current Artifact and closed task");
+  }
+  const id = requiredString(input.id, "lesson id");
+  if (current.lessons.some(item => item.id === id)) throw new Error("duplicate lesson id");
+  const next = clone(current);
+  next.lessons.push(clone(input));
+  next.factoryStage = "LEARNED";
+  next.audit.push({ at: now(), event: "LESSON_RECORDED", lessonId: id });
   return next;
 }
 
@@ -427,6 +485,15 @@ function wrap(state) {
     },
     recordProductQc(input = {}) {
       return wrap(recordProductQcState(state, input));
+    },
+    recordVerificationScan(input = {}) {
+      return wrap(recordVerificationScanState(state, input));
+    },
+    recordCloseout(input = {}) {
+      return wrap(recordCloseoutState(state, input));
+    },
+    recordLesson(input = {}) {
+      return wrap(recordLessonState(state, input));
     },
   });
 }

@@ -120,6 +120,12 @@ test("Code capability projects Engine 3 truth from the same task snapshot", asyn
   const capability=createCodeCapability({task:{snapshot:()=>truth}}); for(const [key,value] of Object.entries(truth)) assert.deepEqual(capability[key],value);
 });
 
+test("Code capability projects Engine 4 recovery and learning truth", async () => {
+  const { pathToFileURL } = require("node:url"); const { createCodeCapability } = await import(`${pathToFileURL(codeModule).href}?e4=${Date.now()}`);
+  const truth={verificationScan:{status:"VERIFIED_CHAIN"},closeout:{status:"CLOSEOUT_READY"},lessons:[{id:"lesson-1"}]};
+  const capability=createCodeCapability({task:{snapshot:()=>truth}}); for(const [key,value] of Object.entries(truth)) assert.deepEqual(capability[key],value);
+});
+
 test("Code capability does not claim full readiness when PR, CI, merge, or deploy routes are missing", async () => {
   const { pathToFileURL } = require("node:url");
   const { createCodeCapability } = await import(`${pathToFileURL(codeModule).href}?readiness=${Date.now()}`);

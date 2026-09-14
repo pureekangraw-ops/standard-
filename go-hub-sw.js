@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "go-hub-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v4-engine-3-assembly-product`;
+const CACHE_NAME = `${CACHE_PREFIX}v5-engine-4-recovery-learning`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -19,6 +19,9 @@ const APP_SHELL = [
   "./go-hub-assembly-qc.js",
   "./go-hub-artifact.js",
   "./go-hub-product-qc.js",
+  "./go-hub-verification-scanner.js",
+  "./go-hub-housekeeper.js",
+  "./go-hub-learning-recorder.js",
   "./go-hub-workbench-model.js",
   "./go-hub-github-workspace.js",
   "./go-hub-persistence.js",
