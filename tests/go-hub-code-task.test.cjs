@@ -181,3 +181,25 @@ test("task rejects a rollback kind that does not match the current lifecycle sta
     rollback: { kind: "revert-merge", headSha: "head-d" },
   }), /rollback kind does not match current state/);
 });
+
+
+test("task restores exact durable snapshot and appends specialist audit to one authority record", async () => {
+  const { createCodeTaskFromSnapshot } = await load();
+  const stored = {
+    id: "task-resume", intent: "continue", repository: "pureekangraw-ops/standard-",
+    state: "CI_RUNNING", nextAction: "check-ci", baseBranch: "main", baseSha: "base-1",
+    workBranch: "feature-a", headSha: "head-1", touchedPaths: ["src/app.js"],
+    diffFingerprint: "diff-1", blocker: null, pullRequest: { number: 19, headSha: "head-1" },
+    ci: { headSha: "head-1", conclusion: null }, merge: null, deployment: null,
+    verification: null, rollback: null, audit: [{ at: "2026-09-14T00:00:00.000Z", event: "CI_STARTED" }],
+  };
+  let task = createCodeTaskFromSnapshot(stored);
+  assert.deepEqual(task.snapshot(), stored);
+  task = task.appendAudit("SPECIALIST_RETURN", { specialist: "slice-c", result: "green" });
+  const resumed = task.snapshot();
+  assert.equal(resumed.id, stored.id);
+  assert.equal(resumed.audit.length, 2);
+  assert.equal(resumed.audit[1].event, "SPECIALIST_RETURN");
+  assert.equal(resumed.audit[1].specialist, "slice-c");
+  assert.equal(resumed.audit[1].result, "green");
+});
