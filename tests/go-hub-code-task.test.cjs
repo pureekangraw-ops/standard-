@@ -71,3 +71,47 @@ test("a new head invalidates prior PR CI evidence", async () => {
   assert.equal(snapshot.ci, null);
   assert.equal(snapshot.nextAction, "review-diff");
 });
+
+
+test("task binds committed PR and CI transitions to the current head", async () => {
+  const { createCodeTask } = await load();
+  let task = createCodeTask({ id: "task-pr-ci", repository: "pureekangraw-ops/standard-" });
+  task = task.transition("BRANCH_READY", {
+    baseBranch: "main", baseSha: "base-1", workBranch: "feature-c", headSha: "head-c",
+  });
+  task = task.transition("COMMITTED", { headSha: "head-c" });
+  assert.equal(task.nextAction, "open-pr");
+  task = task.transition("PR_OPEN", {
+    headSha: "head-c",
+    pullRequest: { number: 19, headBranch: "feature-c", headSha: "head-c", baseBranch: "main" },
+  });
+  assert.equal(task.nextAction, "check-ci");
+  task = task.transition("CI_RUNNING", {
+    headSha: "head-c", ci: { headSha: "head-c", conclusion: null, runs: [{ id: 7, status: "in_progress" }] },
+  });
+  assert.equal(task.nextAction, "check-ci");
+  task = task.transition("CI_FAILED", {
+    headSha: "head-c", ci: { headSha: "head-c", conclusion: "failure", runs: [{ id: 7, conclusion: "failure" }] },
+  });
+  assert.equal(task.nextAction, "fix-ci");
+  task = task.transition("CI_GREEN", {
+    headSha: "head-c", ci: { headSha: "head-c", conclusion: "success", runs: [{ id: 8, conclusion: "success" }] },
+  });
+  assert.equal(task.nextAction, "merge");
+});
+
+test("task rejects PR or CI evidence for a different head SHA", async () => {
+  const { createCodeTask } = await load();
+  let task = createCodeTask({ id: "task-stale", repository: "pureekangraw-ops/standard-" });
+  task = task.transition("BRANCH_READY", {
+    baseBranch: "main", baseSha: "base-1", workBranch: "feature-c", headSha: "head-current",
+  });
+  assert.throws(() => task.transition("PR_OPEN", {
+    headSha: "head-current",
+    pullRequest: { number: 19, headSha: "head-stale" },
+  }), /pull request head SHA does not match current head/);
+  assert.throws(() => task.transition("CI_GREEN", {
+    headSha: "head-current",
+    ci: { headSha: "head-stale", conclusion: "success" },
+  }), /CI head SHA does not match current head/);
+});
