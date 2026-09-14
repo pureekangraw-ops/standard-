@@ -184,22 +184,22 @@ test("Worker opens or updates a pull request while preserving exact head/base", 
     const fetchImpl = async (url, init = {}) => {
       calls.push({ url: String(url), init });
       const value = String(url);
-      if (value === \`https://api.github.com/repos/\${repository}/pulls?state=open&head=pureekangraw-ops%3Afeature-c&base=main\`) {
+      if (value === `https://api.github.com/repos/${repository}/pulls?state=open&head=pureekangraw-ops%3Afeature-c&base=main`) {
         return jsonResponse(existing ? [existing] : []);
       }
-      if (!existing && value === \`https://api.github.com/repos/\${repository}/pulls\`) {
+      if (!existing && value === `https://api.github.com/repos/${repository}/pulls`) {
         assert.equal(init.method, "POST");
         assert.deepEqual(JSON.parse(init.body), { title: "Slice C", body: "details", head: "feature-c", base: "main" });
         return jsonResponse({ number: 24, html_url: "https://github.test/pr/24", state: "open", head: { ref: "feature-c", sha: "head-c" }, base: { ref: "main", sha: "base-c" } }, 201);
       }
-      if (existing && value === \`https://api.github.com/repos/\${repository}/pulls/23\`) {
+      if (existing && value === `https://api.github.com/repos/${repository}/pulls/23`) {
         assert.equal(init.method, "PATCH");
         assert.deepEqual(JSON.parse(init.body), { title: "Slice C", body: "details", base: "main" });
         return jsonResponse({ number: 23, html_url: "https://github.test/pr/23", state: "open", head: { ref: "feature-c", sha: "head-c" }, base: { ref: "main", sha: "base-c" } });
       }
-      throw new Error(\`unexpected upstream \${value}\`);
+      throw new Error(`unexpected upstream ${value}`);
     };
-    const { createWorkerHandler } = await import(\`\${workerUrl}?pr=\${Date.now()}-\${Boolean(existing)}\`);
+    const { createWorkerHandler } = await import(`${workerUrl}?pr=${Date.now()}-${Boolean(existing)}`);
     const handler = createWorkerHandler({ fetchImpl });
     const response = await handler.fetch(new Request("https://hub.example/hub/api/github-workspace/pull-request", {
       method: "POST", headers: { "content-type": "application/json" },
@@ -216,12 +216,12 @@ test("Worker opens or updates a pull request while preserving exact head/base", 
 
 test("Worker reads one pull request with exact head evidence", async () => {
   const fetchImpl = async url => {
-    assert.equal(String(url), \`https://api.github.com/repos/\${repository}/pulls/19\`);
+    assert.equal(String(url), `https://api.github.com/repos/${repository}/pulls/19`);
     return jsonResponse({ number: 19, html_url: "https://github.test/pr/19", state: "open", mergeable: true, head: { ref: "feature-c", sha: "head-c" }, base: { ref: "main", sha: "base-c" } });
   };
-  const { createWorkerHandler } = await import(\`\${workerUrl}?getpr=\${Date.now()}\`);
+  const { createWorkerHandler } = await import(`${workerUrl}?getpr=${Date.now()}`);
   const handler = createWorkerHandler({ fetchImpl });
-  const response = await handler.fetch(new Request(\`https://hub.example/hub/api/github-workspace/pull-request?repository=\${encodeURIComponent(repository)}&number=19\`), { GITHUB_TOKEN: "token" });
+  const response = await handler.fetch(new Request(`https://hub.example/hub/api/github-workspace/pull-request?repository=${encodeURIComponent(repository)}&number=19`), { GITHUB_TOKEN: "token" });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     number: 19, url: "https://github.test/pr/19", state: "open", mergeable: true,
@@ -232,23 +232,23 @@ test("Worker reads one pull request with exact head evidence", async () => {
 test("Worker returns workflow runs and checks only for the requested head SHA", async () => {
   const fetchImpl = async url => {
     const value = String(url);
-    if (value === \`https://api.github.com/repos/\${repository}/actions/runs?head_sha=head-c\`) {
+    if (value === `https://api.github.com/repos/${repository}/actions/runs?head_sha=head-c`) {
       return jsonResponse({ workflow_runs: [
         { id: 7, name: "Safety Gate", status: "completed", conclusion: "success", head_sha: "head-c", html_url: "https://github.test/run/7" },
         { id: 6, name: "Old", status: "completed", conclusion: "failure", head_sha: "old-head" },
       ] });
     }
-    if (value === \`https://api.github.com/repos/\${repository}/commits/head-c/check-runs\`) {
+    if (value === `https://api.github.com/repos/${repository}/commits/head-c/check-runs`) {
       return jsonResponse({ check_runs: [
         { id: 8, name: "test", status: "completed", conclusion: "success", head_sha: "head-c", html_url: "https://github.test/check/8" },
         { id: 5, name: "old", status: "completed", conclusion: "failure", head_sha: "old-head" },
       ] });
     }
-    throw new Error(\`unexpected upstream \${value}\`);
+    throw new Error(`unexpected upstream ${value}`);
   };
-  const { createWorkerHandler } = await import(\`\${workerUrl}?ci=\${Date.now()}\`);
+  const { createWorkerHandler } = await import(`${workerUrl}?ci=${Date.now()}`);
   const handler = createWorkerHandler({ fetchImpl });
-  const response = await handler.fetch(new Request(\`https://hub.example/hub/api/github-workspace/ci?repository=\${encodeURIComponent(repository)}&sha=head-c\`), { GITHUB_TOKEN: "token" });
+  const response = await handler.fetch(new Request(`https://hub.example/hub/api/github-workspace/ci?repository=${encodeURIComponent(repository)}&sha=head-c`), { GITHUB_TOKEN: "token" });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     headSha: "head-c",
@@ -259,11 +259,11 @@ test("Worker returns workflow runs and checks only for the requested head SHA", 
 
 test("Worker maps rerun failed to GitHub's failed-jobs endpoint", async () => {
   const fetchImpl = async (url, init = {}) => {
-    assert.equal(String(url), \`https://api.github.com/repos/\${repository}/actions/runs/77/rerun-failed-jobs\`);
+    assert.equal(String(url), `https://api.github.com/repos/${repository}/actions/runs/77/rerun-failed-jobs`);
     assert.equal(init.method, "POST");
     return new Response(null, { status: 201 });
   };
-  const { createWorkerHandler } = await import(\`\${workerUrl}?rerun=\${Date.now()}\`);
+  const { createWorkerHandler } = await import(`${workerUrl}?rerun=${Date.now()}`);
   const handler = createWorkerHandler({ fetchImpl });
   const response = await handler.fetch(new Request("https://hub.example/hub/api/github-workspace/ci/rerun-failed", {
     method: "POST", headers: { "content-type": "application/json" },
