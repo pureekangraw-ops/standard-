@@ -119,3 +119,109 @@ test("GO Hub adapter contains no copied MIMIR registry truth", () => {
   assert.equal(source.includes("github-chatgpt-connector"), false);
   assert.equal(source.includes("callableActions"), false);
 });
+
+
+test("5W can only be applied after MIMIR returns source records", async () => {
+  const { access, capability } = await outboundMimirAccess();
+  const { applyFiveWAfterSearch } = await import(`${mimirUrl}?fivew=${Date.now()}`);
+
+  assert.throws(
+    () => applyFiveWAfterSearch({ payload: { kind: "NOT_SEARCH" } }, {}),
+    /search result/,
+  );
+
+  const packet = await capability.accept(access);
+  const interpreted = applyFiveWAfterSearch(packet, {
+    WHO: {
+      state: "FACT",
+      value: "BIG",
+      evidenceRecordIds: ["source-record-1"],
+    },
+    WHY: {
+      state: "INFERENCE",
+      value: "Find a usable capability",
+      evidenceRecordIds: ["source-record-1"],
+    },
+    WHAT: {
+      state: "FACT",
+      value: "Observed capability",
+      evidenceRecordIds: ["source-record-1"],
+    },
+    WHERE: {
+      state: "FACT",
+      value: "MIMIR owner registry",
+      evidenceRecordIds: ["source-record-1"],
+    },
+    WHEN: {
+      state: "FACT",
+      value: "verified 2026-09-14",
+      evidenceRecordIds: ["source-record-1"],
+    },
+  });
+
+  assert.equal(interpreted.payload.fiveWAppliedAfterSearch, true);
+  assert.equal(interpreted.payload.fiveW.WHO.value, "BIG");
+  assert.equal(interpreted.payload.fiveW.WHERE.state, "FACT");
+  assert.equal(interpreted.payload.next, "GO_DECIDE");
+});
+
+test("5W preserves missing coordinates as UNKNOWN and rejects invented FACT", async () => {
+  const { access, capability } = await outboundMimirAccess();
+  const { applyFiveWAfterSearch } = await import(`${mimirUrl}?unknown=${Date.now()}`);
+  const packet = await capability.accept(access);
+
+  const partial = applyFiveWAfterSearch(packet, {
+    WHAT: {
+      state: "FACT",
+      value: "Observed capability",
+      evidenceRecordIds: ["source-record-1"],
+    },
+  });
+  assert.equal(partial.payload.fiveW.WHO.state, "UNKNOWN");
+  assert.equal(partial.payload.fiveW.WHO.value, null);
+  assert.equal(partial.payload.fiveW.WHEN.state, "UNKNOWN");
+
+  assert.throws(
+    () => applyFiveWAfterSearch(packet, {
+      WHO: { state: "FACT", value: "Guessed owner" },
+    }),
+    /requires MIMIR record evidence/,
+  );
+  assert.throws(
+    () => applyFiveWAfterSearch(packet, {
+      WHERE: {
+        state: "FACT",
+        value: "Invented source",
+        evidenceRecordIds: ["not-returned"],
+      },
+    }),
+    /did not return/,
+  );
+});
+
+test("5W keeps conflicting observations visible", async () => {
+  const { access } = await outboundMimirAccess();
+  const { createMimirSearchDestination, applyFiveWAfterSearch } = await import(
+    `${mimirUrl}?conflict=${Date.now()}`,
+  );
+  const capability = createMimirSearchDestination({
+    search: async () => [
+      { id: "record-a", source: "source A" },
+      { id: "record-b", source: "source B" },
+    ],
+  });
+  const packet = await capability.accept({ ...access, capability });
+  const interpreted = applyFiveWAfterSearch(packet, {
+    WHERE: {
+      state: "CONFLICT",
+      value: ["source A", "source B"],
+      evidenceRecordIds: ["record-a", "record-b"],
+    },
+  });
+
+  assert.equal(interpreted.payload.fiveW.WHERE.state, "CONFLICT");
+  assert.deepEqual(
+    interpreted.payload.fiveW.WHERE.evidenceRecordIds,
+    ["record-a", "record-b"],
+  );
+});
