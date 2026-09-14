@@ -48,6 +48,10 @@ function normalizeInitial(initial = {}) {
     deployment: null,
     verification: null,
     rollback: null,
+    mission: null,
+    blueprint: null,
+    currentPiece: null,
+    evidence: [],
     audit: [{ at: now(), event: "TASK_CREATED", state: "INSPECTING" }],
   };
 }
@@ -146,7 +150,21 @@ function normalizeSnapshot(value) {
     throw new Error("task snapshot state is invalid");
   }
   if (!Array.isArray(state.audit)) throw new Error("task snapshot audit is required");
+  state.mission = state.mission == null ? null : clone(state.mission);
+  state.blueprint = state.blueprint == null ? null : clone(state.blueprint);
+  state.currentPiece = state.currentPiece == null ? null : clone(state.currentPiece);
+  state.evidence = Array.isArray(state.evidence) ? clone(state.evidence) : [];
   return state;
+}
+
+function setWorkbenchTruthState(current, input = {}) {
+  const next = clone(current);
+  if (Object.hasOwn(input, "mission")) next.mission = input.mission == null ? null : clone(input.mission);
+  if (Object.hasOwn(input, "blueprint")) next.blueprint = input.blueprint == null ? null : clone(input.blueprint);
+  if (Object.hasOwn(input, "currentPiece")) next.currentPiece = input.currentPiece == null ? null : clone(input.currentPiece);
+  if (Object.hasOwn(input, "evidence")) next.evidence = Array.isArray(input.evidence) ? clone(input.evidence) : [];
+  next.audit.push({ at: now(), event: "WORKBENCH_TRUTH_UPDATED" });
+  return next;
 }
 
 function appendAuditState(current, event, details = {}) {
@@ -167,6 +185,9 @@ function wrap(state) {
     },
     appendAudit(event, details = {}) {
       return wrap(appendAuditState(state, event, details));
+    },
+    setWorkbenchTruth(input = {}) {
+      return wrap(setWorkbenchTruthState(state, input));
     },
   });
 }
