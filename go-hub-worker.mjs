@@ -387,6 +387,52 @@ async function getWorkflowRuns(fetchImpl, token, repository, sha) {
   return json({ headSha: sha, runs });
 }
 
+export function createGithubLifecycleService({ fetchImpl = fetch, token } = {}) {
+  return Object.freeze({
+    inspect(input = {}) {
+      return inspectRepository(fetchImpl, token, assertRepository(input.repository), input.branch ? assertRef(input.branch, "branch") : null);
+    },
+    tree(input = {}) {
+      return listTree(fetchImpl, token, assertRepository(input.repository), assertRef(input.ref));
+    },
+    readFile(input = {}) {
+      return readFile(fetchImpl, token, assertRepository(input.repository), assertSafePath(input.path), input.ref ? assertRef(input.ref) : null);
+    },
+    createBranch(input = {}) {
+      return createBranch(fetchImpl, token, assertRepository(input.repository), assertRef(input.name, "branch"), assertRef(input.fromSha, "sha"));
+    },
+    putFile(input = {}) {
+      return mutateFile(fetchImpl, token, assertRepository(input.repository), assertSafePath(input.path), assertRef(input.branch, "branch"), input.expectedSha, input.content, "PUT");
+    },
+    deleteFile(input = {}) {
+      return mutateFile(fetchImpl, token, assertRepository(input.repository), assertSafePath(input.path), assertRef(input.branch, "branch"), input.expectedSha, null, "DELETE");
+    },
+    compare(input = {}) {
+      return compareRefs(fetchImpl, token, assertRepository(input.repository), assertRef(input.base, "base"), assertRef(input.head, "head"));
+    },
+    openPullRequest(input = {}) {
+      return openPullRequest(fetchImpl, token, assertRepository(input.repository), assertRef(input.branch, "branch"), assertRef(input.base, "base"), String(input.title || "").trim() || badRequest("title is required"), String(input.body || ""));
+    },
+    getPullRequest(input = {}) {
+      return getPullRequest(fetchImpl, token, assertRepository(input.repository), assertPositiveInteger(input.number, "pull request number"));
+    },
+    getCI(input = {}) {
+      return getCI(fetchImpl, token, assertRepository(input.repository), assertRef(input.sha, "sha"));
+    },
+    rerunFailed(input = {}) {
+      return rerunFailed(fetchImpl, token, assertRepository(input.repository), assertPositiveInteger(input.runId, "run id"));
+    },
+    mergePullRequest(input = {}) {
+      const method = String(input.method || "squash");
+      if (!["merge", "squash", "rebase"].includes(method)) badRequest("invalid merge method");
+      return mergePullRequest(fetchImpl, token, assertRepository(input.repository), assertPositiveInteger(input.number, "pull request number"), assertRef(input.expectedHeadSha, "expected head sha"), method);
+    },
+    getWorkflowRuns(input = {}) {
+      return getWorkflowRuns(fetchImpl, token, assertRepository(input.repository), assertRef(input.sha, "sha"));
+    },
+  });
+}
+
 export function createWorkerHandler({ fetchImpl = fetch } = {}) {
   return {
     async fetch(request, env) {
