@@ -44,6 +44,10 @@ function normalizeInitial(initial = {}) {
     blocker: null,
     pullRequest: null,
     ci: null,
+    merge: null,
+    deployment: null,
+    verification: null,
+    rollback: null,
     audit: [{ at: now(), event: "TASK_CREATED", state: "INSPECTING" }],
   };
 }
@@ -69,6 +73,28 @@ function transitionState(current, nextState, evidence = {}) {
     }
   }
 
+  if (state === "DEPLOYED" && evidence.deployment?.status !== "success") {
+    throw new Error("successful deployment evidence is required");
+  }
+  if (state === "VERIFIED") {
+    const verification = evidence.verification;
+    if (!verification || verification.status !== "success" || !verification.kind ||
+        !verification.target || verification.evidence == null || !verification.timestamp) {
+      throw new Error("successful verification evidence is required");
+    }
+  }
+  if (state === "ROLLBACK_IN_PROGRESS") {
+    const rollbackKind = evidence.rollback?.kind;
+    const expectedKind = {
+      EDITING: "discard-pending-edits",
+      COMMITTED: "reset-work-branch",
+      MERGED: "revert-merge",
+    }[current.state];
+    if (!expectedKind || rollbackKind !== expectedKind) {
+      throw new Error("rollback kind does not match current state");
+    }
+  }
+
   next.state = state;
   next.nextAction = NEXT_ACTION[state];
 
@@ -79,6 +105,10 @@ function transitionState(current, nextState, evidence = {}) {
   if (Object.hasOwn(evidence, "touchedPaths")) next.touchedPaths = Array.isArray(evidence.touchedPaths) ? [...evidence.touchedPaths] : [];
   if (Object.hasOwn(evidence, "pullRequest")) next.pullRequest = evidence.pullRequest == null ? null : clone(evidence.pullRequest);
   if (Object.hasOwn(evidence, "ci")) next.ci = evidence.ci == null ? null : clone(evidence.ci);
+  if (Object.hasOwn(evidence, "merge")) next.merge = evidence.merge == null ? null : clone(evidence.merge);
+  if (Object.hasOwn(evidence, "deployment")) next.deployment = evidence.deployment == null ? null : clone(evidence.deployment);
+  if (Object.hasOwn(evidence, "verification")) next.verification = evidence.verification == null ? null : clone(evidence.verification);
+  if (Object.hasOwn(evidence, "rollback")) next.rollback = evidence.rollback == null ? null : clone(evidence.rollback);
   if (Object.hasOwn(evidence, "blocker")) next.blocker = evidence.blocker == null ? null : String(evidence.blocker);
   else if (state !== "BLOCKED" && state !== "CONFLICT") next.blocker = null;
 
@@ -86,6 +116,10 @@ function transitionState(current, nextState, evidence = {}) {
     next.diffFingerprint = null;
     next.pullRequest = null;
     next.ci = null;
+    next.merge = null;
+    next.deployment = null;
+    next.verification = null;
+    next.rollback = null;
   }
   if (state === "DIFF_REVIEWED") {
     if (!incomingHead) throw new Error("headSha is required for DIFF_REVIEWED");
