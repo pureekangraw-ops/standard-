@@ -99,3 +99,21 @@ test("MCP returns deterministic JSON-RPC errors", async () => {
   const unknown = await handler(rpc("unknown", {}));
   assert.equal((await unknown.json()).error.code, -32601);
 });
+
+
+test("MCP rejects untrusted browser origins before authentication", async () => {
+  const { createMcpHandler } = await import(mcpUrl + "?origin=" + Date.now());
+  let authenticated = false;
+  const handler = createMcpHandler({
+    registry: { listTools: () => [], callTool: async () => ({}) },
+    authenticate: async () => { authenticated = true; },
+    issuer: "https://hub.example",
+  });
+  const denied = await handler(new Request(endpoint, {
+    method: "POST",
+    headers: { origin: "https://evil.example", authorization: "Bearer valid", "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+  }));
+  assert.equal(denied.status, 403);
+  assert.equal(authenticated, false);
+});
