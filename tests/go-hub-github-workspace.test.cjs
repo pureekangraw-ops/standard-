@@ -66,3 +66,49 @@ test("workspace lists recursive tree and reads a selected branch", async () => {
     assert.equal("authorization" in (call.init.headers || {}), false);
   }
 });
+
+
+test("workspace creates a branch, mutates files with SHA guards, and compares refs", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    if (String(url).endsWith("/branch")) return response({ branch: "feature-b", headSha: "base-2" }, 201);
+    if (String(url).endsWith("/file") && init.method === "PUT") return response({ ok: true, commit: "commit-put", sha: "blob-new" });
+    if (String(url).endsWith("/file") && init.method === "DELETE") return response({ ok: true, commit: "commit-del" });
+    if (String(url).includes("/compare?")) return response({ status: "ahead", aheadBy: 1, behindBy: 0, files: [] });
+    throw new Error(`unexpected request ${url}`);
+  };
+  const { createGitHubWorkspace } = await import(`${moduleUrl}?mutate=${Date.now()}`);
+  const workspace = createGitHubWorkspace({
+    gatewayBase: "/hub/api/github-workspace",
+    repository: "pureekangraw-ops/standard-",
+    fetchImpl,
+  });
+
+  assert.deepEqual(await workspace.createBranch({ name: "feature-b", fromSha: "base-2" }), {
+    branch: "feature-b", headSha: "base-2",
+  });
+  assert.deepEqual(await workspace.writeText("src/app.js", "next", { branch: "feature-b", expectedSha: "blob-old" }), {
+    ok: true, commit: "commit-put", sha: "blob-new",
+  });
+  assert.deepEqual(await workspace.deletePath("src/app.js", { branch: "feature-b", expectedSha: "blob-new" }), {
+    ok: true, commit: "commit-del",
+  });
+  assert.equal((await workspace.compare({ base: "main", head: "feature-b" })).aheadBy, 1);
+
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    repository: "pureekangraw-ops/standard-", name: "feature-b", fromSha: "base-2",
+  });
+  assert.deepEqual(JSON.parse(calls[1].init.body), {
+    repository: "pureekangraw-ops/standard-", path: "src/app.js", content: "next",
+    branch: "feature-b", expectedSha: "blob-old",
+  });
+  assert.deepEqual(JSON.parse(calls[2].init.body), {
+    repository: "pureekangraw-ops/standard-", path: "src/app.js",
+    branch: "feature-b", expectedSha: "blob-new",
+  });
+  for (const call of calls) {
+    assert.equal("Authorization" in (call.init.headers || {}), false);
+    assert.equal("authorization" in (call.init.headers || {}), false);
+  }
+});
