@@ -141,15 +141,16 @@ export function createGitHubWorkspace({
     },
 
     async writeText(path, content, { branch, expectedSha } = {}) {
+      const body = {
+        repository: repo,
+        path: assertSafePath(path),
+        content: String(content ?? ""),
+        branch: assertRef(branch, "branch"),
+      };
+      if (expectedSha != null) body.expectedSha = assertRef(expectedSha, "sha");
       return request("/file", {
         method: "PUT",
-        body: JSON.stringify({
-          repository: repo,
-          path: assertSafePath(path),
-          content: String(content ?? ""),
-          branch: assertRef(branch, "branch"),
-          expectedSha: assertRef(expectedSha, "sha"),
-        }),
+        body: JSON.stringify(body),
       });
     },
 
