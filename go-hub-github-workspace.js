@@ -13,6 +13,12 @@ function assertRepository(value) {
   return repository;
 }
 
+function assertPositiveInteger(value, label) {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number <= 0) throw new Error(`invalid ${label}`);
+  return number;
+}
+
 function assertSafePath(value) {
   const filePath = String(value || "");
   if (
@@ -163,6 +169,43 @@ export function createGitHubWorkspace({
       return request(
         `/compare?repository=${encodeURIComponent(repo)}&base=${encodeURIComponent(assertRef(baseRef, "base"))}&head=${encodeURIComponent(assertRef(head, "head"))}`
       );
+    },
+
+    async openPullRequest({ branch, base: baseRef, title, body = "" } = {}) {
+      const safeTitle = String(title || "").trim();
+      if (!safeTitle) throw new Error("title is required");
+      return request("/pull-request", {
+        method: "POST",
+        body: JSON.stringify({
+          repository: repo,
+          branch: assertRef(branch, "branch"),
+          base: assertRef(baseRef, "base"),
+          title: safeTitle,
+          body: String(body),
+        }),
+      });
+    },
+
+    async getPullRequest({ number } = {}) {
+      return request(
+        `/pull-request?repository=${encodeURIComponent(repo)}&number=${assertPositiveInteger(number, "pull request number")}`
+      );
+    },
+
+    async getCI({ sha } = {}) {
+      return request(
+        `/ci?repository=${encodeURIComponent(repo)}&sha=${encodeURIComponent(assertRef(sha, "sha"))}`
+      );
+    },
+
+    async rerunFailed({ runId } = {}) {
+      return request("/ci/rerun-failed", {
+        method: "POST",
+        body: JSON.stringify({
+          repository: repo,
+          runId: assertPositiveInteger(runId, "run id"),
+        }),
+      });
     },
   });
 }
