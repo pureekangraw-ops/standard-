@@ -7,11 +7,8 @@ const { pathToFileURL } = require("node:url");
 const workerUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-worker.mjs")).href;
 const env = {
   GITHUB_TOKEN: "github-token",
-  GOHUB_OAUTH_SIGNING_KEY: "test-signing-key-with-enough-entropy",
-  GOHUB_OWNER_PASSCODE_HASH: "hash",
-  GOHUB_OAUTH_CLIENT_ID: "chatgpt-go-hub",
-  GOHUB_OAUTH_CLIENT_SECRET: "client-secret",
-  GOHUB_OAUTH_REDIRECT_URI: "https://chatgpt.com/aip/oauth/callback",
+  GOHUB_MASTER_KEY: "test-signing-key-with-enough-entropy",
+  GOHUB_OWNER_PASSCODE: "owner-passcode",
 };
 
 test("Worker owns OAuth discovery and protected MCP routes before assets", async () => {
