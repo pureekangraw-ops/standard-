@@ -31,7 +31,7 @@ const definitions = [
   ["go_hub_get_workflow_runs", "Observe workflow and deployment runs for one exact SHA.", "getWorkflowRuns",
     schema({ repository: string, sha: string }, ["repository", "sha"]), { readOnlyHint: true, destructiveHint: false }],
 ].map(([name, description, operation, inputSchema, annotations]) =>
-  Object.freeze({ name, description, operation, inputSchema, annotations: Object.freeze(annotations) })
+  Object.freeze({\n    name, description, operation, inputSchema,\n    securitySchemes: Object.freeze([{ type: "oauth2", scopes: Object.freeze(["go-hub"]) }]),\n    annotations: Object.freeze(annotations),\n  })
 );
 
 function assertArguments(definition, args) {
@@ -60,7 +60,7 @@ export function createMcpRegistry({ lifecycle } = {}) {
     listTools() {
       return definitions.map(({ operation, ...tool }) => ({
         ...tool,
-        annotations: { ...tool.annotations },
+        securitySchemes: tool.securitySchemes.map(scheme => ({ ...scheme, scopes: [...scheme.scopes] })),\n        annotations: { ...tool.annotations },
         inputSchema: structuredClone(tool.inputSchema),
       }));
     },
