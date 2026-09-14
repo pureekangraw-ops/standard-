@@ -116,7 +116,7 @@ export async function createTestAccessToken(config = {}) {
 }
 
 export async function verifyAccessToken(request, config = {}) {
-  if (!configured(config)) throw new Error("OAuth is not configured");
+  if (!config.issuer || !config.signingKey) throw new Error("OAuth is not configured");
   const authorization = String(request.headers.get("authorization") || "");
   if (!authorization.startsWith("Bearer ")) throw new Error("missing bearer token");
   const payload = await verifyEnvelope(authorization.slice(7), config.signingKey);
