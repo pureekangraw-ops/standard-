@@ -160,3 +160,36 @@ test("workspace exposes PR and exact-head CI operations without Authorization", 
     assert.equal("authorization" in (call.init.headers || {}), false);
   }
 });
+
+
+test("workspace exposes guarded merge and exact-SHA deploy observation", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    if (String(url).endsWith("/pull-request/merge")) {
+      return response({ merged: true, mergeSha: "merge-d", headSha: "head-d" });
+    }
+    if (String(url).includes("/workflow-runs?")) {
+      return response({ headSha: "merge-d", runs: [{ id: 91, conclusion: "success" }] });
+    }
+    throw new Error("unexpected request " + url);
+  };
+  const { createGitHubWorkspace } = await import(moduleUrl + "?merge-deploy=" + Date.now());
+  const workspace = createGitHubWorkspace({
+    gatewayBase: "/hub/api/github-workspace",
+    repository: "pureekangraw-ops/standard-",
+    fetchImpl,
+  });
+  assert.deepEqual(await workspace.mergePullRequest({
+    number: 19, expectedHeadSha: "head-d", method: "squash",
+  }), { merged: true, mergeSha: "merge-d", headSha: "head-d" });
+  assert.equal((await workspace.getWorkflowRuns({ sha: "merge-d" })).headSha, "merge-d");
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    repository: "pureekangraw-ops/standard-", number: 19, expectedHeadSha: "head-d", method: "squash",
+  });
+  assert.match(calls[1].url, /sha=merge-d/);
+  for (const call of calls) {
+    assert.equal("Authorization" in (call.init.headers || {}), false);
+    assert.equal("authorization" in (call.init.headers || {}), false);
+  }
+});
