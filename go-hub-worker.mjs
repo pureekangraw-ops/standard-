@@ -1,100 +1,303 @@
-const NEXT_ACTION = Object.freeze({
-  INSPECTING: "inspect",
-  BRANCH_READY: "edit",
-  EDITING: "review-diff",
-  DIFF_REVIEWED: "test",
-  TESTED_OR_TEST_DEFERRED: "commit",
-  COMMITTED: "open-pr",
-  PR_OPEN: "check-ci",
-  CI_RUNNING: "check-ci",
-  CI_GREEN: "merge",
-  CI_FAILED: "fix-ci",
-  MERGED: "track-deploy",
-  DEPLOYING: "track-deploy",
-  DEPLOYED: "verify",
-  VERIFIED: "complete",
-  BLOCKED: "resolve-blocker",
-  CONFLICT: "resolve-conflict",
-  DEPLOY_FAILED: "fix-deploy",
-  VERIFY_FAILED: "fix-verify",
-  ROLLBACK_IN_PROGRESS: "continue-rollback",
-});
+const API_ROOT = "/hub/api/github-workspace";
+const ALLOWED_OWNER = "pureekangraw-ops";
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
+function json(payload, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8" },
+  });
 }
 
-function now() {
-  return new Date().toISOString();
+function badRequest(message, status = 400) {
+  throw Object.assign(new Error(message), { status });
 }
 
-function normalizeInitial(initial = {}) {
+function assertRepository(value) {
+  const repository = String(value || "").trim();
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) badRequest("invalid repository");
+  if (repository.split("/")[0] !== ALLOWED_OWNER) badRequest("repository owner is not allowed", 403);
+  return repository;
+}
+
+function assertSafePath(value) {
+  const filePath = String(value || "");
+  if (!filePath || filePath.startsWith("/") || filePath.includes("\\") ||
+      filePath.split("/").some(part => part === ".." || part === "." || part === "")) {
+    badRequest("unsafe path");
+  }
+  return filePath;
+}
+
+function assertRef(value, label = "ref") {
+  const ref = String(value || "").trim();
+  if (!ref || ref.startsWith("/") || ref.endsWith("/") || ref.includes("\\") ||
+      ref.includes("..") || ref.includes("//") || /[\s~^:?*[\]]/.test(ref)) {
+    badRequest(`invalid ${label}`);
+  }
+  return ref;
+}
+
+function encodePath(filePath) {
+  return filePath.split("/").map(encodeURIComponent).join("/");
+}
+
+function githubHeaders(token) {
   return {
-    id: String(initial.id || ""),
-    intent: String(initial.intent || ""),
-    repository: String(initial.repository || ""),
-    state: "INSPECTING",
-    nextAction: "inspect",
-    baseBranch: null,
-    baseSha: null,
-    workBranch: null,
-    headSha: null,
-    touchedPaths: [],
-    diffFingerprint: null,
-    blocker: null,
-    audit: [{ at: now(), event: "TASK_CREATED", state: "INSPECTING" }],
+    accept: "application/vnd.github+json",
+    authorization: `Bearer ${token}`,
+    "x-github-api-version": "2022-11-28",
+    "user-agent": "go-hub-workspace-gateway",
   };
 }
 
-function transitionState(current, nextState, evidence = {}) {
-  const state = String(nextState || "");
-  if (!NEXT_ACTION[state]) throw new Error(`unsupported state: ${state}`);
+async function githubRequest(fetchImpl, token, url, init = {}) {
+  const response = await fetchImpl(url, {
+    ...init,
+    headers: { ...githubHeaders(token), ...(init.headers || {}) },
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
+}
 
-  const next = clone(current);
-  const priorHead = next.headSha;
-  const incomingHead = evidence.headSha == null ? priorHead : String(evidence.headSha);
+function encodeUtf8Base64(text) {
+  const bytes = new TextEncoder().encode(String(text ?? ""));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
 
-  next.state = state;
-  next.nextAction = NEXT_ACTION[state];
+function decodeUtf8Base64(value) {
+  const binary = atob(String(value || "").replace(/\n/g, ""));
+  return new TextDecoder().decode(Uint8Array.from(binary, ch => ch.charCodeAt(0)));
+}
 
-  if (Object.hasOwn(evidence, "baseBranch")) next.baseBranch = evidence.baseBranch == null ? null : String(evidence.baseBranch);
-  if (Object.hasOwn(evidence, "baseSha")) next.baseSha = evidence.baseSha == null ? null : String(evidence.baseSha);
-  if (Object.hasOwn(evidence, "workBranch")) next.workBranch = evidence.workBranch == null ? null : String(evidence.workBranch);
-  if (Object.hasOwn(evidence, "headSha")) next.headSha = incomingHead;
-  if (Object.hasOwn(evidence, "touchedPaths")) next.touchedPaths = Array.isArray(evidence.touchedPaths) ? [...evidence.touchedPaths] : [];
-  if (Object.hasOwn(evidence, "blocker")) next.blocker = evidence.blocker == null ? null : String(evidence.blocker);
-  else if (state !== "BLOCKED" && state !== "CONFLICT") next.blocker = null;
+function upstreamError(response) {
+  return json({ code: "GITHUB_UPSTREAM_ERROR", status: response.status }, 502);
+}
 
-  if (priorHead && incomingHead && priorHead !== incomingHead) next.diffFingerprint = null;
-  if (state === "DIFF_REVIEWED") {
-    if (!incomingHead) throw new Error("headSha is required for DIFF_REVIEWED");
-    next.headSha = incomingHead;
-    next.diffFingerprint = String(evidence.diffFingerprint || "");
-    if (!next.diffFingerprint) throw new Error("diffFingerprint is required for DIFF_REVIEWED");
+async function getRepository(fetchImpl, token, repository) {
+  const result = await githubRequest(fetchImpl, token, `https://api.github.com/repos/${repository}`);
+  if (!result.response.ok) return { error: upstreamError(result.response) };
+  const defaultBranch = String(result.payload.default_branch || "");
+  if (!defaultBranch) return { error: json({ code: "DEFAULT_BRANCH_MISSING" }, 502) };
+  return { defaultBranch };
+}
+
+async function getBranch(fetchImpl, token, repository, branch) {
+  const result = await githubRequest(
+    fetchImpl, token,
+    `https://api.github.com/repos/${repository}/branches/${encodeURIComponent(branch)}`,
+  );
+  if (result.response.status === 404) return { error: json({ code: "BRANCH_NOT_FOUND" }, 404) };
+  if (!result.response.ok) return { error: upstreamError(result.response) };
+  const sha = result.payload?.commit?.sha || null;
+  if (!sha) return { error: json({ code: "BRANCH_SHA_MISSING" }, 502) };
+  return { branch: result.payload?.name || branch, sha };
+}
+
+async function getTree(fetchImpl, token, repository, ref) {
+  const branch = await getBranch(fetchImpl, token, repository, ref);
+  if (branch.error) return branch;
+  const result = await githubRequest(
+    fetchImpl, token,
+    `https://api.github.com/repos/${repository}/git/trees/${encodeURIComponent(branch.sha)}?recursive=1`,
+  );
+  if (!result.response.ok) return { error: upstreamError(result.response) };
+  const tree = Array.isArray(result.payload.tree)
+    ? result.payload.tree
+        .filter(item => item && typeof item.path === "string" && typeof item.type === "string")
+        .map(item => ({ path: item.path, type: item.type, sha: item.sha || null }))
+    : [];
+  return { branch: branch.branch, sha: branch.sha, tree };
+}
+
+async function inspectRepository(fetchImpl, token, repository, selectedBranch) {
+  const repo = await getRepository(fetchImpl, token, repository);
+  if (repo.error) return repo.error;
+  const branch = selectedBranch || repo.defaultBranch;
+  const base = await getBranch(fetchImpl, token, repository, repo.defaultBranch);
+  if (base.error) return base.error;
+  const tree = await getTree(fetchImpl, token, repository, branch);
+  if (tree.error) return tree.error;
+  return json({
+    repository,
+    defaultBranch: repo.defaultBranch,
+    branch: tree.branch,
+    baseSha: base.sha,
+    headSha: tree.sha,
+    tree: tree.tree,
+  });
+}
+
+async function listTree(fetchImpl, token, repository, ref) {
+  const tree = await getTree(fetchImpl, token, repository, ref);
+  if (tree.error) return tree.error;
+  return json({ ref: tree.branch, sha: tree.sha, tree: tree.tree });
+}
+
+async function listFiles(fetchImpl, token, repository) {
+  const result = await githubRequest(fetchImpl, token, `https://api.github.com/repos/${repository}/contents/`);
+  if (!result.response.ok) return upstreamError(result.response);
+  const files = Array.isArray(result.payload)
+    ? result.payload.filter(item => item && item.type === "file").map(item => item.path)
+    : [];
+  return json({ files });
+}
+
+async function readFile(fetchImpl, token, repository, filePath, ref = null) {
+  const suffix = ref ? `?ref=${encodeURIComponent(ref)}` : "";
+  const result = await githubRequest(
+    fetchImpl, token,
+    `https://api.github.com/repos/${repository}/contents/${encodePath(filePath)}${suffix}`,
+  );
+  if (result.response.status === 404) return json({ code: "FILE_NOT_FOUND" }, 404);
+  if (!result.response.ok) return upstreamError(result.response);
+  if (result.payload.type !== "file" || result.payload.encoding !== "base64") {
+    return json({ code: "UNSUPPORTED_CONTENT" }, 422);
   }
-
-  next.audit.push({
-    at: now(),
-    event: "STATE_TRANSITION",
-    from: current.state,
-    to: state,
-    headSha: next.headSha,
-  });
-
-  return next;
+  return json({ content: decodeUtf8Base64(result.payload.content), sha: result.payload.sha || null });
 }
 
-function wrap(state) {
-  const snapshot = () => clone(state);
-  return Object.freeze({
-    ...snapshot(),
-    snapshot,
-    transition(nextState, evidence = {}) {
-      return wrap(transitionState(state, nextState, evidence));
+async function assertNonDefaultBranch(fetchImpl, token, repository, branch) {
+  const repo = await getRepository(fetchImpl, token, repository);
+  if (repo.error) return repo;
+  if (branch === repo.defaultBranch) return { error: json({ code: "DEFAULT_BRANCH_WRITE_BLOCKED" }, 409) };
+  return repo;
+}
+
+async function createBranch(fetchImpl, token, repository, name, fromSha) {
+  const result = await githubRequest(
+    fetchImpl, token, `https://api.github.com/repos/${repository}/git/refs`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ref: `refs/heads/${name}`, sha: fromSha }),
     },
+  );
+  if (!result.response.ok) return upstreamError(result.response);
+  return json({ branch: name, headSha: result.payload?.object?.sha || fromSha }, 201);
+}
+
+async function mutateFile(fetchImpl, token, repository, filePath, branch, expectedSha, content, method) {
+  const policy = await assertNonDefaultBranch(fetchImpl, token, repository, branch);
+  if (policy.error) return policy.error;
+  const body = {
+    message: `GO Hub: ${method === "DELETE" ? "delete" : "update"} ${filePath}`,
+    branch,
+    sha: expectedSha,
+  };
+  if (method === "PUT") body.content = encodeUtf8Base64(content);
+  const result = await githubRequest(
+    fetchImpl, token,
+    `https://api.github.com/repos/${repository}/contents/${encodePath(filePath)}`,
+    {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!result.response.ok) return upstreamError(result.response);
+  return json({
+    ok: true,
+    commit: result.payload?.commit?.sha || null,
+    ...(method === "PUT" ? { sha: result.payload?.content?.sha || null } : {}),
   });
 }
 
-export function createCodeTask(initial = {}) {
-  return wrap(normalizeInitial(initial));
+async function compareRefs(fetchImpl, token, repository, base, head) {
+  const result = await githubRequest(
+    fetchImpl, token,
+    `https://api.github.com/repos/${repository}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+  );
+  if (!result.response.ok) return upstreamError(result.response);
+  return json({
+    status: result.payload.status || null,
+    aheadBy: Number(result.payload.ahead_by || 0),
+    behindBy: Number(result.payload.behind_by || 0),
+    files: Array.isArray(result.payload.files)
+      ? result.payload.files.map(file => ({
+          path: file.filename,
+          status: file.status,
+          additions: file.additions,
+          deletions: file.deletions,
+          patch: file.patch,
+        }))
+      : [],
+  });
 }
+
+export function createWorkerHandler({ fetchImpl = fetch } = {}) {
+  return {
+    async fetch(request, env) {
+      const url = new URL(request.url);
+      if (!url.pathname.startsWith(API_ROOT)) {
+        if (env?.ASSETS && typeof env.ASSETS.fetch === "function") return env.ASSETS.fetch(request);
+        return new Response("GO Hub", { status: 200 });
+      }
+      if (!env?.GITHUB_TOKEN) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
+
+      try {
+        if (request.method === "GET" && url.pathname === `${API_ROOT}/inspect`) {
+          const repository = assertRepository(url.searchParams.get("repository"));
+          const value = url.searchParams.get("branch");
+          return inspectRepository(fetchImpl, env.GITHUB_TOKEN, repository, value ? assertRef(value, "branch") : null);
+        }
+        if (request.method === "GET" && url.pathname === `${API_ROOT}/tree`) {
+          return listTree(
+            fetchImpl, env.GITHUB_TOKEN,
+            assertRepository(url.searchParams.get("repository")),
+            assertRef(url.searchParams.get("ref")),
+          );
+        }
+        if (request.method === "GET" && url.pathname === `${API_ROOT}/files`) {
+          return listFiles(fetchImpl, env.GITHUB_TOKEN, assertRepository(url.searchParams.get("repository")));
+        }
+        if (request.method === "GET" && url.pathname === `${API_ROOT}/file`) {
+          const value = url.searchParams.get("ref");
+          return readFile(
+            fetchImpl, env.GITHUB_TOKEN,
+            assertRepository(url.searchParams.get("repository")),
+            assertSafePath(url.searchParams.get("path")),
+            value ? assertRef(value) : null,
+          );
+        }
+        if (request.method === "POST" && url.pathname === `${API_ROOT}/branch`) {
+          const body = await request.json().catch(() => null);
+          if (!body) return json({ code: "INVALID_JSON" }, 400);
+          return createBranch(
+            fetchImpl, env.GITHUB_TOKEN,
+            assertRepository(body.repository),
+            assertRef(body.name, "branch"),
+            assertRef(body.fromSha, "sha"),
+          );
+        }
+        if ((request.method === "PUT" || request.method === "DELETE") && url.pathname === `${API_ROOT}/file`) {
+          const body = await request.json().catch(() => null);
+          if (!body) return json({ code: "INVALID_JSON" }, 400);
+          return mutateFile(
+            fetchImpl, env.GITHUB_TOKEN,
+            assertRepository(body.repository),
+            assertSafePath(body.path),
+            assertRef(body.branch, "branch"),
+            assertRef(body.expectedSha, "sha"),
+            body.content,
+            request.method,
+          );
+        }
+        if (request.method === "GET" && url.pathname === `${API_ROOT}/compare`) {
+          return compareRefs(
+            fetchImpl, env.GITHUB_TOKEN,
+            assertRepository(url.searchParams.get("repository")),
+            assertRef(url.searchParams.get("base"), "base"),
+            assertRef(url.searchParams.get("head"), "head"),
+          );
+        }
+        return json({ code: "NOT_FOUND" }, 404);
+      } catch (error) {
+        return json({ code: error?.message || "BAD_REQUEST" }, error?.status || 400);
+      }
+    },
+  };
+}
+
+export default createWorkerHandler();
