@@ -1,0 +1,43 @@
+name: GO Hub Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GOHUB_GITHUB_TOKEN: ${{ secrets.GOHUB_GITHUB_TOKEN }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify GO Hub safety gate
+        run: npm run deploy:gate
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Deploy GO Hub Worker
+        shell: bash
+        run: |
+          if [ -n "${GOHUB_GITHUB_TOKEN}" ]; then
+            printf 'GITHUB_TOKEN=%s\n' "${GOHUB_GITHUB_TOKEN}" > "${RUNNER_TEMP}/go-hub.secrets"
+            npx wrangler deploy --config wrangler.go-hub.jsonc --secrets-file "${RUNNER_TEMP}/go-hub.secrets"
+          else
+            echo "GOHUB_GITHUB_TOKEN is not set; deploying fail-closed gateway."
+            npx wrangler deploy --config wrangler.go-hub.jsonc
+          fi
