@@ -1,19 +1,65 @@
+import { createCodeTask, createCodeTaskFromSnapshot } from "./go-hub-code-task.js";
+
 function hasMethod(target, name) {
   return Boolean(target && typeof target[name] === "function");
 }
 
-export function createCodeCapability({ workspace = null } = {}) {
+function taskSnapshot(task) {
+  if (!task) return null;
+  if (typeof task.snapshot === "function") return task.snapshot();
+  return structuredClone(task);
+}
+
+export function createCodeCapability({ workspace = null, task = null } = {}) {
   const canList = hasMethod(workspace, "listFiles");
   const canRead = canList && hasMethod(workspace, "readText");
   const canWrite = canRead && hasMethod(workspace, "writeText");
+  const canBranch = canWrite && hasMethod(workspace, "createBranch");
+  const canDiff = canBranch && hasMethod(workspace, "compare");
+  const snapshot = taskSnapshot(task);
 
   return Object.freeze({
     id: "code",
     title: "Code",
     description: "Repository-backed coding workspace",
-    status: canWrite ? "ready" : canRead ? "read-only" : "needs-workspace",
+    status: canDiff ? "ready" : canRead ? "read-only" : "needs-workspace",
     canRead,
     canWrite,
+    canBranch,
+    canDiff,
     workspace,
+    task: snapshot,
+    nextAction: snapshot?.nextAction || null,
+    blocker: snapshot?.blocker || null,
+    repository: snapshot?.repository || workspace?.repository || null,
+    baseBranch: snapshot?.baseBranch || null,
+    baseSha: snapshot?.baseSha || null,
+    workBranch: snapshot?.workBranch || null,
+    headSha: snapshot?.headSha || null,
+    pullRequest: snapshot?.pullRequest || null,
+    ci: snapshot?.ci || null,
+    deploy: snapshot?.deploy || null,
+    verification: snapshot?.verification || null,
+  });
+}
+
+
+export function createCodeTaskSession({ persistence, initial = {} } = {}) {
+  if (!persistence || typeof persistence.loadState !== "function" ||
+      typeof persistence.commitState !== "function") {
+    throw new TypeError("task persistence port is required");
+  }
+  return Object.freeze({
+    async load() {
+      const stored = await persistence.loadState();
+      return stored ? createCodeTaskFromSnapshot(stored) : createCodeTask(initial);
+    },
+    async save(task) {
+      const proposed = typeof task?.snapshot === "function" ? task.snapshot() : structuredClone(task);
+      return persistence.commitState({
+        proposed,
+        command: { type: "SAVE_CODE_TASK" },
+      });
+    },
   });
 }

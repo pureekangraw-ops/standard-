@@ -14,6 +14,29 @@ export function createMemoryKeyValueStore() {
   };
 }
 
+
+
+export function createLocalStorageKeyValueStore({
+  storage = globalThis.localStorage,
+  namespace = "go-hub",
+} = {}) {
+  if (!storage || typeof storage.getItem !== "function" || typeof storage.setItem !== "function") {
+    throw new TypeError("storage with getItem/setItem ports is required");
+  }
+  const prefix = `${String(namespace || "go-hub")}:`;
+
+  return {
+    async get(key) {
+      const raw = storage.getItem(`${prefix}${key}`);
+      return raw == null ? null : JSON.parse(raw);
+    },
+    async put(key, value) {
+      storage.setItem(`${prefix}${key}`, JSON.stringify(value));
+    },
+    async close() {},
+  };
+}
+
 export function createStatePersistence({
   store,
   key = "state",

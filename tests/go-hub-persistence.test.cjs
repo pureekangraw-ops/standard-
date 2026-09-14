@@ -58,3 +58,24 @@ test("GO Hub persistence rejects invalid proposed state before write", async () 
   );
   assert.equal(await persistence.loadState(), null);
 });
+
+
+test("GO Hub local storage port restores an identical task snapshot", async () => {
+  const { createLocalStorageKeyValueStore, createStatePersistence } = await import(pathToFileURL(modulePath).href);
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, String(value)); },
+  };
+  const store = createLocalStorageKeyValueStore({ storage, namespace: "go-hub-code" });
+  const persistence = createStatePersistence({ store, key: "active-task" });
+  const snapshot = {
+    id: "task-19", state: "CI_RUNNING", repository: "pureekangraw-ops/standard-",
+    baseBranch: "main", baseSha: "base-1", workBranch: "feature-a", headSha: "head-1",
+    pullRequest: { number: 19, headSha: "head-1" },
+    ci: { headSha: "head-1", conclusion: null },
+    nextAction: "check-ci", audit: [{ event: "CI_STARTED" }],
+  };
+  await persistence.commitState({ proposed: snapshot, command: { type: "SAVE_CODE_TASK" } });
+  assert.deepEqual(await persistence.loadState(), snapshot);
+});
