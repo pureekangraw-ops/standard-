@@ -214,6 +214,7 @@ export function admitDestination(work, { destination, capability } = {}) {
     checkpointId: work.checkpointId,
     returnAddress: work.handoff.returnAddress,
     destination: target,
+    envelope: snapshot(work.handoff),
     capability,
   });
 }
