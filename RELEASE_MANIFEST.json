@@ -7,7 +7,8 @@
     "GO Hub neutral root control surface",
     "dedicated GO Hub PWA identity",
     "dedicated GO Hub service worker",
-    "offline GO Hub root startup"
+    "offline GO Hub root startup",
+    "provider-neutral Code capability"
   ],
   "serviceWorker": {
     "file": "go-hub-sw.js",
@@ -21,13 +22,14 @@
     "scope": [
       "GO Hub hard-cutover contracts",
       "GO Hub runtime boundaries",
+      "GO Hub Code capability boundary",
       "active publication parity",
       "syntax",
       "utf8",
       "no executable ride references"
     ]
   },
-  "note": "GO Hub exclusively owns the active root, PWA identity, service worker, cache namespace, and offline startup. Legacy NormalPocket source may remain in repository history or as unpublished reference but is not a supported runtime surface.",
+  "note": "GO Hub exclusively owns the active root and exposes Code as a provider-neutral capability. Repository authorization remains outside the browser client and must be supplied through a workspace adapter or trusted gateway.",
   "productionFiles": [
     { "path": "index.html" },
     { "path": "go-hub.html" },
@@ -35,6 +37,7 @@
     { "path": "go-hub-shell.css" },
     { "path": "go-hub-shell.js" },
     { "path": "go-hub-runtime.js" },
+    { "path": "go-hub-code-module.js" },
     { "path": "go-hub-sw-bootstrap.js" },
     { "path": "go-hub-sw.js" }
   ]
