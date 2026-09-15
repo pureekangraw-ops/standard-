@@ -14,9 +14,20 @@ test("deployment publishes MCP and OAuth routes and checks every module", () => 
     "/oauth/*",
     "/.well-known/*",
   ]);
+  assert.equal(wrangler.durable_objects.bindings[0].name, "GO_HUB_FACTORY_STATE");
+  assert.equal(wrangler.durable_objects.bindings[0].class_name, "GoHubFactoryState");
+  assert.equal(wrangler.exports.GoHubFactoryState.type, "durable-object");
+  assert.equal(wrangler.exports.GoHubFactoryState.storage, "sqlite");
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  for (const file of ["go-hub-oauth.mjs", "go-hub-mcp-registry.mjs", "go-hub-mcp.mjs", "go-hub-worker.mjs"]) {
+  for (const file of [
+    "go-hub-oauth.mjs",
+    "go-hub-mcp-registry.mjs",
+    "go-hub-mcp.mjs",
+    "go-hub-factory-state-core.mjs",
+    "go-hub-factory-state.mjs",
+    "go-hub-worker.mjs",
+  ]) {
     assert.match(packageJson.scripts["check:syntax"], new RegExp(file.replaceAll(".", "\\.")));
   }
 
