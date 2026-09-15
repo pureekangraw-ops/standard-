@@ -129,12 +129,20 @@ function unwrapBrowserPayload(payload) {
   return { result: payload && typeof payload === "object" ? payload : {}, meta: {} };
 }
 
+function validateBrowserEnvelope(payload) {
+  if (payload && typeof payload === "object" && payload.success === false) {
+    return { error: json({ code: "BROWSER_UPSTREAM_ERROR" }, 502) };
+  }
+  return { payload };
+}
+
 async function readBrowserPayload(response) {
   if (response instanceof Response) {
     if (!response.ok) return { error: json({ code: "BROWSER_UPSTREAM_ERROR", status: response.status }, 502) };
-    return { payload: await response.json().catch(() => ({})) };
+    const payload = await response.json().catch(() => ({}));
+    return validateBrowserEnvelope(payload);
   }
-  if (response && typeof response === "object") return { payload: response };
+  if (response && typeof response === "object") return validateBrowserEnvelope(response);
   return { payload: {} };
 }
 
