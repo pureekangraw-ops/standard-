@@ -1,80 +1,45 @@
 # GO Browser Interface V0 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status:** Implementation complete on feature branch; final exact-head gate / merge / production verification remain.
 
 **Goal:** Add a cloud-first, read-only browser capability to GO Hub that returns a normalized Field Map from Cloudflare Browser Run without requiring a desktop computer.
 
-**Architecture:** A focused `go-hub-browser-interface.js` owns URL policy, Browser Run response normalization, field mapping, and risk classification. `go-hub-worker.mjs` exposes a separate `/hub/api/browser/read` route that delegates to this module through `env.BROWSER.quickAction`, while `wrangler.go-hub.jsonc` supplies the Browser Run binding and routes browser API traffic through the Worker.
+**Final architecture:** `go-hub-edge-worker.mjs` owns only the browser namespace and delegates every non-browser request to the pre-existing `go-hub-worker.mjs`. `go-hub-browser-interface.js` owns target validation, Browser Run response normalization, Field Map creation, and conservative risk classification. Host policy is server-owned via `env.BROWSER_POLICY`; V0 production policy is Gumroad only.
 
-**Tech Stack:** JavaScript ES modules, Node `node:test`, Cloudflare Workers, Cloudflare Browser Run Quick Actions.
+**Tech stack:** JavaScript ES modules, Node `node:test`, Cloudflare Workers, Cloudflare Browser Run Quick Actions.
 
 **Spec:** `docs/superpowers/specs/2026-09-15-go-browser-interface-v0-design.md`
 
-## Global Constraints
+## Locked constraints
 
 - V0 is read-only: no click, type, fill, submit, publish, payment, password, OTP, CAPTCHA, or autonomous multi-site navigation.
-- Target URL must be HTTP(S) and must satisfy an explicit non-empty hostname policy before Browser Run is called.
-- The browser route is independent from GitHub credentials and must work without `GITHUB_TOKEN`.
-- Missing Browser Run binding fails closed with `503 BROWSER_NOT_CONFIGURED`.
-- Unknown page evidence stays unknown; the mapper must not invent fields.
-- Browser API root is `/hub/api/browser`.
+- Browser execution does not inherit `GITHUB_TOKEN` authority.
+- Caller cannot supply or expand the hostname allowlist.
+- V0 initial target policy: `gumroad.com`, `*.gumroad.com`.
+- Embedded URL credentials are rejected.
+- Browser Run failures become explicit `502 BROWSER_UPSTREAM_ERROR` responses.
+- Unknown page evidence stays unknown.
+- Browser API root is exact; lookalike namespaces delegate to the existing Worker.
+- Quick Actions target policy is **not** represented as a Cloudflare Browser Session Guardrail. True network guardrails require a later Browser Session execution path.
 
 ---
 
-### Task 1: Browser Interface contract and Field Map
+## Task 1 — Browser Interface contract and Field Map
 
 **Files:**
-- Create: `go-hub-browser-interface.js`
-- Create: `tests/go-hub-browser-interface.test.cjs`
+- `go-hub-browser-interface.js`
+- `tests/go-hub-browser-interface.test.cjs`
 
-**Interfaces:**
-- Produces: `createBrowserInterface({ browser })`
-- Produces: `readPage({ url, allowedHostnames, waitUntil }) -> Promise<Response>`
-- Produces: `mapAccessibilityTree(tree) -> { fields, unknowns }`
+- [x] Wrote failing contract tests before implementation.
+- [x] Confirmed RED with the new module absent: existing tests passed; five new Browser Interface tests failed as expected.
+- [x] Implemented HTTP(S) validation, exact/wildcard hostname matching, and Browser Run `snapshot` call.
+- [x] Implemented Markdown + accessibility-tree response normalization.
+- [x] Implemented deterministic V0 Field Map with semantic role, required/disabled state, value kind, options, risk class, and tree path.
+- [x] Classified password/OTP/payment fields as `SENSITIVE`; insufficient evidence remains `UNKNOWN`.
+- [x] Added URL-credential blocking and explicit upstream exception handling.
+- [x] Confirmed focused and repository tests GREEN after implementation.
 
-- [ ] **Step 1: Write failing contract tests**
-
-Create tests that import the new module and assert:
-
-```js
-const service = createBrowserInterface({ browser });
-const response = await service.readPage({
-  url: "https://shop.example.com/product/new",
-  allowedHostnames: ["shop.example.com"],
-});
-```
-
-Expected behavior:
-
-```js
-assert.equal(response.status, 200);
-assert.deepEqual(browser.calls[0], {
-  action: "snapshot",
-  options: {
-    url: "https://shop.example.com/product/new",
-    formats: ["markdown", "accessibilityTree"],
-    gotoOptions: { waitUntil: "domcontentloaded", timeout: 30000 },
-  },
-});
-```
-
-Add field-map assertions for a tree containing textbox `Product name`, textbox `Description`, spinbutton `Price`, textbox `Password`, textbox `OTP code`, and combobox `Category`.
-
-- [ ] **Step 2: Run focused tests and confirm RED**
-
-Run:
-
-```bash
-node --test tests/go-hub-browser-interface.test.cjs
-```
-
-Expected: FAIL because `go-hub-browser-interface.js` does not exist.
-
-- [ ] **Step 3: Implement URL policy and Browser Run adapter call**
-
-Implement exact-host and wildcard-subdomain matching. Reject malformed URLs, non-HTTP(S), empty policies, and disallowed hosts before calling Browser Run.
-
-Call:
+Key Browser Run call:
 
 ```js
 await browser.quickAction("snapshot", {
@@ -84,145 +49,69 @@ await browser.quickAction("snapshot", {
 });
 ```
 
-Normalize both direct Worker-binding payloads and `{ success, result, meta }` JSON envelopes.
+---
 
-- [ ] **Step 4: Implement deterministic field mapping and conservative risk classification**
+## Task 2 — Edge browser route and authority separation
 
-Walk the accessibility tree recursively. Editable roles are:
+**Files:**
+- `go-hub-edge-worker.mjs`
+- `tests/go-hub-browser-worker.test.cjs`
 
-```js
-new Set(["textbox", "searchbox", "combobox", "checkbox", "radio", "spinbutton", "slider", "switch"])
-```
+Initial plan proposed editing `go-hub-worker.mjs` directly. Reality inspection showed that file is already the GitHub/workstation gateway, so implementation changed to a thin edge router rather than mixing authorities.
 
-Use the accessibility-tree child-index path as the V0 `fieldId` source. Infer semantic roles only from explicit accessible names and return `unknown` when evidence is insufficient.
-
-Sensitive keywords include password/passcode, otp/one-time/verification code, card/cvv/cvc/bank/account number. Action keywords include publish, submit, purchase, buy, pay, confirm, place order.
-
-- [ ] **Step 5: Run focused tests and confirm GREEN**
-
-Run:
-
-```bash
-node --test tests/go-hub-browser-interface.test.cjs
-```
-
-Expected: PASS.
+- [x] Wrote route tests before route implementation and confirmed RED.
+- [x] Added `POST /hub/api/browser/read` at the edge.
+- [x] Preserved `go-hub-worker.mjs` unchanged as the delegate for all non-browser traffic.
+- [x] Browser route works without `GITHUB_TOKEN`.
+- [x] Added fail-closed handling for invalid JSON, missing Browser binding, and missing server policy.
+- [x] Moved hostname authority from request body to server-owned `env.BROWSER_POLICY` after security review.
+- [x] Added regression coverage proving caller-supplied allowlists cannot expand authority.
+- [x] Added regression coverage for exact browser namespace ownership; `/hub/api/browserfoo` must delegate to the existing Worker.
 
 ---
 
-### Task 2: Worker browser route
+## Task 3 — Cloudflare binding, production policy, repository gates
 
 **Files:**
-- Modify: `go-hub-worker.mjs`
-- Create: `tests/go-hub-browser-worker.test.cjs`
+- `wrangler.go-hub.jsonc`
+- `package.json`
+- `tests/go-hub-cloudflare-routing.test.cjs`
+- `tests/go-hub-mcp-publication.test.cjs`
 
-**Interfaces:**
-- Consumes: `createBrowserInterface({ browser })`
-- Produces: `POST /hub/api/browser/read`
-
-- [ ] **Step 1: Write failing Worker tests**
-
-Create tests using `createWorkerHandler()` with a fake `env.BROWSER` and no `GITHUB_TOKEN`.
-
-Request:
-
-```js
-new Request("https://hub.example/hub/api/browser/read", {
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({
-    url: "https://shop.example.com/product/new",
-    allowedHostnames: ["shop.example.com"],
-  }),
-});
-```
-
-Assert `200`, normalized fields, and exactly one Browser Run call. Add tests for missing Browser binding (`503`) and invalid JSON (`400`).
-
-- [ ] **Step 2: Run focused tests and confirm RED**
-
-Run:
-
-```bash
-node --test tests/go-hub-browser-worker.test.cjs
-```
-
-Expected: FAIL because the route does not exist.
-
-- [ ] **Step 3: Integrate a separate browser API root before GitHub-token gating**
-
-Add:
-
-```js
-import { createBrowserInterface } from "./go-hub-browser-interface.js";
-const BROWSER_API_ROOT = "/hub/api/browser";
-```
-
-Handle `/hub/api/browser/read` before the existing `GITHUB_TOKEN` requirement. Browser capability must not inherit source-control authority.
-
-- [ ] **Step 4: Run browser Worker tests and existing workstation tests**
-
-Run:
-
-```bash
-node --test tests/go-hub-browser-worker.test.cjs tests/go-hub-worker-workstation.test.cjs
-```
-
-Expected: PASS.
+- [x] Wrote routing/binding assertions before configuration and confirmed RED.
+- [x] Set Worker entry to `go-hub-edge-worker.mjs`.
+- [x] Added Browser Run binding `BROWSER`.
+- [x] Added `/hub/api/browser/*` to worker-first routing while preserving all previous worker-first routes.
+- [x] Added server-owned Gumroad V0 `BROWSER_POLICY`.
+- [x] Added Browser Interface and edge Worker to syntax gate.
+- [x] Updated existing publication contract after it correctly exposed a stale four-route expectation.
+- [x] Full repository Safety Gate reached GREEN before the final namespace review (`754a23c1b3afc180647e42005b3a44252d99471f`, run `34964678655`).
+- [ ] Obtain fresh exact-head GREEN after final namespace + documentation commits.
 
 ---
 
-### Task 3: Cloudflare Browser Run binding and repository gates
+## TDD / review evidence
 
-**Files:**
-- Modify: `wrangler.go-hub.jsonc`
-- Modify: `package.json`
-- Test: `tests/go-hub-cloudflare-routing.test.cjs`
+Observed RED → GREEN checkpoints:
 
-**Interfaces:**
-- Produces: Cloudflare binding `env.BROWSER`
-- Produces: worker-first routing for `/hub/api/browser/*`
+- Browser module missing: old suite passed; five new tests failed as intended.
+- Browser module implemented: Safety Gate run `34963687063` GREEN.
+- Browser route absent: route tests failed as intended.
+- Edge router implemented: Safety Gate run `34963953412` GREEN.
+- Cloudflare binding/routing absent: infrastructure test failed as intended.
+- Config added: one stale existing publication expectation was exposed and corrected rather than bypassed.
+- Security review: new server-policy / URL-credential / upstream-error tests produced only the intended failures; fixes followed.
+- Gumroad policy requirement: 252/253 tests passed; sole failure was missing `vars.BROWSER_POLICY`; config fix followed.
+- Exact-head `754a23c1b3afc180647e42005b3a44252d99471f`: Safety Gate run `34964678655` GREEN.
+- Namespace review found `/hub/api/browserfoo` interception; a regression test was added and confirmed RED before the boundary fix.
 
-- [ ] **Step 1: Extend the Cloudflare routing test to fail until browser routing/binding exists**
+## Remaining finish line
 
-Assert the config contains:
-
-```json
-"browser": { "binding": "BROWSER" }
-```
-
-and `assets.run_worker_first` contains `/hub/api/browser/*`.
-
-- [ ] **Step 2: Run the focused routing test and confirm RED**
-
-Run:
-
-```bash
-node --test tests/go-hub-cloudflare-routing.test.cjs
-```
-
-Expected: FAIL on missing Browser binding/route.
-
-- [ ] **Step 3: Update Wrangler and syntax coverage**
-
-Add the Browser binding and route. Add `go-hub-browser-interface.js` to the `check:syntax` script using:
-
-```bash
-node --input-type=module --check < go-hub-browser-interface.js
-```
-
-Do not add a Browser Run API token or client-side secret.
-
-- [ ] **Step 4: Run full repository gate**
-
-Run:
-
-```bash
-npm run deploy:gate
-```
-
-Expected: all tests, syntax, UTF-8, and no-ride gates pass.
-
-- [ ] **Step 5: Open PR with exact-head evidence**
-
-Open a PR from `feat/go-browser-interface-v0` to `main`. Merge only after exact-head CI is green. Deployment success is not product verification; production Browser Run read remains a separate Reality smoke because it depends on the account Browser Run binding being available.
+- [ ] Fresh exact-head full repository Safety Gate GREEN.
+- [ ] Review current PR diff for Critical / Important issues.
+- [ ] Refresh `main` and PR mergeability.
+- [ ] Mark PR #47 ready and merge only with current-head evidence.
+- [ ] Verify main Safety Gate and GO Hub Deploy on the merge SHA.
+- [ ] Attempt non-destructive production Browser Run read against an allowed Gumroad URL.
+- [ ] If production read cannot be exercised from the available runtime, record that explicitly rather than treating deployment as product verification.
+- [ ] Update Notion GO Hub handoff with final SHA/run/deploy/reality status.
