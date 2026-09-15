@@ -1,5 +1,7 @@
 import githubWorker from "./go-hub-worker.mjs";
 import { createBrowserInterface } from "./go-hub-browser-interface.js";
+import { createFactoryMcpWorker } from "./go-hub-factory-mcp-worker.mjs";
+export { HephaestusForeman } from "./go-hub-factory-controller.mjs";
 
 const BROWSER_API_ROOT = "/hub/api/browser";
 const encoder = new TextEncoder();
@@ -46,14 +48,20 @@ function isBrowserApiPath(pathname) {
   return pathname === BROWSER_API_ROOT || pathname.startsWith(`${BROWSER_API_ROOT}/`);
 }
 
-export function createEdgeWorkerHandler({ delegate = githubWorker } = {}) {
+export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = createFactoryMcpWorker() } = {}) {
   if (!delegate || typeof delegate.fetch !== "function") {
     throw new Error("edge delegate fetch is required");
+  }
+  if (!factoryMcp || typeof factoryMcp.fetch !== "function") {
+    throw new Error("Factory MCP handler is required");
   }
 
   return Object.freeze({
     async fetch(request, env) {
       const url = new URL(request.url);
+      if (url.pathname === "/mcp") {
+        return factoryMcp.fetch(request, env);
+      }
       if (!isBrowserApiPath(url.pathname)) {
         return delegate.fetch(request, env);
       }
