@@ -18,6 +18,7 @@ test("Code module defines a provider-neutral workspace capability", () => {
   assert.match(source, /listFiles/);
   assert.match(source, /readText/);
   assert.match(source, /writeText/);
+  assert.match(source, /factoryAction/);
 });
 
 test("GO Hub shell registers the Code capability", () => {
@@ -26,14 +27,13 @@ test("GO Hub shell registers the Code capability", () => {
   assert.match(shell, /runtime\.register\(["']Code["']/);
 });
 
-
 test("Code capability exposes machine-usable workstation lifecycle state", async () => {
   const { pathToFileURL } = require("node:url");
   const { createCodeCapability } = await import(pathToFileURL(codeModule).href);
   const workspace = {
     inspect() {}, listTree() {}, listFiles() {}, readText() {}, writeText() {}, deletePath() {},
     createBranch() {}, compare() {}, openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
-    mergePullRequest() {}, getWorkflowRuns() {},
+    mergePullRequest() {}, getWorkflowRuns() {}, factoryAction() {},
   };
   const task = {
     snapshot() {
@@ -44,14 +44,14 @@ test("Code capability exposes machine-usable workstation lifecycle state", async
       };
     },
   };
-  const capability = createCodeCapability({ workspace, task });
+  const capability = createCodeCapability({ workspace, task, controllerReady: true });
   assert.equal(capability.status, "ready");
+  assert.equal(capability.controllerReady, true);
   assert.equal(capability.task.state, "CI_RUNNING");
   assert.equal(capability.nextAction, "check-ci");
   assert.equal(capability.headSha, "head-1");
   assert.equal(capability.pullRequest.number, 19);
 });
-
 
 test("Code task session restores and saves through the injected persistence port", async () => {
   const { pathToFileURL } = require("node:url");
@@ -76,14 +76,13 @@ test("Code task session restores and saves through the injected persistence port
   assert.equal(stored.audit[0].event, "SPECIALIST_RETURN");
 });
 
-
 test("Code capability projects deployment evidence from the task snapshot", async () => {
   const { pathToFileURL } = require("node:url");
   const { createCodeCapability } = await import(pathToFileURL(codeModule).href);
   const workspace = {
     inspect() {}, listTree() {}, listFiles() {}, readText() {}, writeText() {}, deletePath() {},
     createBranch() {}, compare() {}, openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
-    mergePullRequest() {}, getWorkflowRuns() {},
+    mergePullRequest() {}, getWorkflowRuns() {}, factoryAction() {},
   };
   const deployment = { status: "success", runId: 34809615501 };
   const task = {
@@ -96,7 +95,7 @@ test("Code capability projects deployment evidence from the task snapshot", asyn
       };
     },
   };
-  const capability = createCodeCapability({ workspace, task });
+  const capability = createCodeCapability({ workspace, task, controllerReady: true });
   assert.deepEqual(capability.deploy, deployment);
 });
 
@@ -126,7 +125,7 @@ test("Code capability projects Engine 4 recovery and learning truth", async () =
   const capability=createCodeCapability({task:{snapshot:()=>truth}}); for(const [key,value] of Object.entries(truth)) assert.deepEqual(capability[key],value);
 });
 
-test("Code capability does not claim full readiness when PR, CI, merge, or deploy routes are missing", async () => {
+test("Code capability does not claim full readiness when PR CI merge deploy or controller routes are missing", async () => {
   const { pathToFileURL } = require("node:url");
   const { createCodeCapability } = await import(`${pathToFileURL(codeModule).href}?readiness=${Date.now()}`);
   const partialWorkspace = {
@@ -141,15 +140,23 @@ test("Code capability does not claim full readiness when PR, CI, merge, or deplo
   assert.equal(partial.canMerge, false);
   assert.equal(partial.canObserveDeploy, false);
 
-  const fullWorkspace = {
+  const rawWorkspace = {
     ...partialWorkspace,
     openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
     mergePullRequest() {}, getWorkflowRuns() {},
   };
-  const full = createCodeCapability({ workspace: fullWorkspace });
+  const raw = createCodeCapability({ workspace: rawWorkspace });
+  assert.equal(raw.status, "raw-lifecycle");
+  assert.equal(raw.canFactoryAction, false);
+
+  const fullWorkspace = { ...rawWorkspace, factoryAction() {} };
+  const unsynced = createCodeCapability({ workspace: fullWorkspace });
+  assert.equal(unsynced.status, "sync-required");
+  const full = createCodeCapability({ workspace: fullWorkspace, controllerReady: true });
   assert.equal(full.status, "ready");
   assert.equal(full.canPullRequest, true);
   assert.equal(full.canCI, true);
   assert.equal(full.canMerge, true);
   assert.equal(full.canObserveDeploy, true);
+  assert.equal(full.canFactoryAction, true);
 });

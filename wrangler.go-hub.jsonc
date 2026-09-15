@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "go-hub",
-  "main": "go-hub-worker.mjs",
+  "main": "go-hub-entry.mjs",
   "compatibility_date": "2026-09-14",
   "assets": {
     "directory": ".",
@@ -13,5 +13,19 @@
       "/oauth/*",
       "/.well-known/*"
     ]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GO_HUB_FACTORY_STATE",
+        "class_name": "GoHubFactoryState"
+      }
+    ]
+  },
+  "exports": {
+    "GoHubFactoryState": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
   }
 }

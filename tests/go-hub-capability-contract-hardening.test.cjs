@@ -28,7 +28,7 @@ function lifecycleWorkspace(overrides = {}) {
   };
 }
 
-test("Code full readiness requires recursive inspect and delete contracts", async () => {
+test("Code full readiness requires recursive inspect delete and controller authority", async () => {
   const { createCodeCapability } = await load();
 
   const missingInspectAndDelete = createCodeCapability({ workspace: lifecycleWorkspace() });
@@ -36,10 +36,25 @@ test("Code full readiness requires recursive inspect and delete contracts", asyn
   assert.equal(missingInspectAndDelete.canInspect, false);
   assert.equal(missingInspectAndDelete.canDelete, false);
 
-  const full = createCodeCapability({
+  const rawLifecycle = createCodeCapability({
     workspace: lifecycleWorkspace({ inspect() {}, listTree() {}, deletePath() {} }),
   });
-  assert.equal(full.canInspect, true);
-  assert.equal(full.canDelete, true);
+  assert.equal(rawLifecycle.canInspect, true);
+  assert.equal(rawLifecycle.canDelete, true);
+  assert.equal(rawLifecycle.canFactoryAction, false);
+  assert.notEqual(rawLifecycle.status, "ready");
+
+  const unsynced = createCodeCapability({
+    workspace: lifecycleWorkspace({ inspect() {}, listTree() {}, deletePath() {}, factoryAction() {} }),
+    controllerReady: false,
+  });
+  assert.equal(unsynced.canFactoryAction, true);
+  assert.equal(unsynced.status, "sync-required");
+
+  const full = createCodeCapability({
+    workspace: lifecycleWorkspace({ inspect() {}, listTree() {}, deletePath() {}, factoryAction() {} }),
+    controllerReady: true,
+  });
   assert.equal(full.status, "ready");
+  assert.equal(full.controllerReady, true);
 });
