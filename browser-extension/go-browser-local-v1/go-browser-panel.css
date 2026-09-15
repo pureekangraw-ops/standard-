@@ -1,0 +1,114 @@
+#go-browser-v1-root {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2147483647;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: CanvasText;
+}
+
+#go-browser-v1-root,
+#go-browser-v1-root * {
+  box-sizing: border-box;
+}
+
+#go-browser-v1-toggle {
+  width: 52px;
+  min-width: 52px;
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+#go-browser-v1-panel {
+  width: min(360px, calc(100vw - 24px));
+  max-height: 70vh;
+  margin-bottom: 8px;
+  padding: 14px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 16px;
+  background: Canvas;
+  box-shadow: 0 12px 36px rgb(0 0 0 / 24%);
+}
+
+#go-browser-v1-panel[hidden] {
+  display: none;
+}
+
+.go-browser-v1-title,
+.go-browser-v1-section-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.go-browser-v1-subtitle,
+.go-browser-v1-evidence,
+.go-browser-v1-note,
+.go-browser-v1-error {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.go-browser-v1-error {
+  font-weight: 700;
+}
+
+.go-browser-v1-fields {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 12px;
+}
+
+.go-browser-v1-field {
+  display: grid;
+  gap: 5px;
+}
+
+.go-browser-v1-field-label {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.go-browser-v1-input,
+.go-browser-v1-button {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, CanvasText 24%, transparent);
+  border-radius: 10px;
+  background: Canvas;
+  color: CanvasText;
+  font: inherit;
+}
+
+.go-browser-v1-button {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.go-browser-v1-primary {
+  border-width: 2px;
+}
+
+.go-browser-v1-list {
+  margin: 6px 0 12px;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 420px) {
+  #go-browser-v1-root {
+    right: 8px;
+    bottom: 8px;
+  }
+
+  #go-browser-v1-panel {
+    width: calc(100vw - 16px);
+    max-height: 72vh;
+    padding: 12px;
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "GO Browser Local Safe Fill",
+  "version": "0.1.0",
+  "description": "Local, explicit, fail-closed Safe Fill adapter for GO Browser V1.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "go-browser-local-v1@pureekangraw.local",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    },
+    "gecko_android": {}
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://gumroad.com/*",
+        "*://*.gumroad.com/*"
+      ],
+      "js": [
+        "content-script.js"
+      ],
+      "css": [
+        "go-browser-panel.css"
+      ],
+      "all_frames": false,
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "go-browser-panel.js",
+        "runtime/go-browser-field-contract.js",
+        "runtime/go-browser-site-profiles.js",
+        "runtime/go-browser-local-reader.js",
+        "runtime/go-browser-safe-fill.js"
+      ],
+      "matches": [
+        "*://gumroad.com/*",
+        "*://*.gumroad.com/*"
+      ]
+    }
+  ]
+}
