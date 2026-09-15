@@ -21,6 +21,14 @@ function auditEvent({ action, receipt, before, after, at }) {
   };
 }
 
+function classifyCi(payload = {}) {
+  const signals = [...(payload.runs || []), ...(payload.checks || [])];
+  if (signals.length === 0) return "CI_RUNNING";
+  if (signals.some(item => item.status === "completed" && item.conclusion && item.conclusion !== "success")) return "CI_FAILED";
+  if (signals.every(item => item.status === "completed" && item.conclusion === "success")) return "CI_GREEN";
+  return "CI_RUNNING";
+}
+
 export function createFactoryController({ lifecycle, state, now = () => new Date().toISOString(), createId = () => crypto.randomUUID() } = {}) {
   if (!lifecycle || !state) throw new Error("lifecycle and state are required");
 
@@ -169,6 +177,75 @@ export function createFactoryController({ lifecycle, state, now = () => new Date
         if (!parsed.ok) return save({ revision: current.revision, task, receipt, action, before });
         const next = task.transition("DIFF_REVIEWED", { headSha: before.headSha, diffFingerprint });
         return save({ revision: current.revision, task: next, receipt, action, before });
+      }
+
+      if (action === "open_pr") {
+        const response = await lifecycle.openPullRequest({
+          repository: before.repository,
+          branch: before.workBranch,
+          base: before.baseBranch,
+          title: String(input.title || "").trim(),
+          body: String(input.body || ""),
+        });
+        const parsed = await parseResponse(response);
+        const receipt = createRealityReceipt({
+          id: createId(), action, status: parsed.ok ? "success" : "failure", repository: before.repository,
+          observedAt: now(), source: "github",
+          identity: {
+            baseBranch: parsed.payload.baseBranch || before.baseBranch,
+            baseSha: parsed.payload.baseSha || before.baseSha,
+            workBranch: parsed.payload.headBranch || before.workBranch,
+            headSha: parsed.payload.headSha || before.headSha,
+            pullRequestNumber: parsed.payload.number || null,
+          },
+          result: parsed.payload,
+          evidence: parsed.ok ? { mergeable: parsed.payload.mergeable ?? null, state: parsed.payload.state || null } : { upstreamStatus: parsed.status },
+        });
+        if (!parsed.ok) return save({ revision: current.revision, task, receipt, action, before });
+        if (parsed.payload.headSha !== before.headSha || parsed.payload.headBranch !== before.workBranch || parsed.payload.baseBranch !== before.baseBranch) {
+          throw new Error("IDENTITY_MISMATCH");
+        }
+        const next = task.transition("PR_OPEN", { headSha: before.headSha, pullRequest: parsed.payload });
+        return save({ revision: current.revision, task: next, receipt, action, before });
+      }
+
+      if (action === "check_ci") {
+        const response = await lifecycle.getCI({ repository: before.repository, sha: before.headSha });
+        const parsed = await parseResponse(response);
+        const receipt = createRealityReceipt({
+          id: createId(), action, status: parsed.ok ? "success" : "failure", repository: before.repository,
+          observedAt: now(), source: "github",
+          identity: { baseBranch: before.baseBranch, baseSha: before.baseSha, workBranch: before.workBranch, headSha: parsed.payload.headSha || before.headSha, pullRequestNumber: before.pullRequest?.number || null },
+          result: parsed.payload,
+          evidence: parsed.ok ? { runs: parsed.payload.runs || [], checks: parsed.payload.checks || [] } : { upstreamStatus: parsed.status },
+        });
+        if (!parsed.ok) return save({ revision: current.revision, task, receipt, action, before });
+        if (parsed.payload.headSha !== before.headSha) throw new Error("IDENTITY_MISMATCH");
+        const nextState = classifyCi(parsed.payload);
+        const conclusion = nextState === "CI_GREEN" ? "success" : nextState === "CI_FAILED" ? "failure" : null;
+        const next = task.transition(nextState, {
+          headSha: before.headSha,
+          ci: { headSha: before.headSha, conclusion, runs: parsed.payload.runs || [], checks: parsed.payload.checks || [] },
+        });
+        return save({ revision: current.revision, task: next, receipt, action, before });
+      }
+
+      if (action === "diagnose_failure") {
+        const runId = Number(input.runId);
+        const failedRun = (before.ci?.runs || []).find(run => Number(run.id) === runId && run.conclusion === "failure");
+        if (!failedRun) throw new Error("IDENTITY_MISMATCH");
+        const response = await lifecycle.getFailureEvidence({ repository: before.repository, runId });
+        const parsed = await parseResponse(response);
+        const receipt = createRealityReceipt({
+          id: createId(), action, status: parsed.ok ? "success" : "failure", repository: before.repository,
+          observedAt: now(), source: "github",
+          identity: { baseBranch: before.baseBranch, baseSha: before.baseSha, workBranch: before.workBranch, headSha: before.headSha, pullRequestNumber: before.pullRequest?.number || null, runId },
+          result: parsed.payload,
+          evidence: parsed.ok ? { failedJobs: parsed.payload.failedJobs || [] } : { upstreamStatus: parsed.status },
+        });
+        if (!parsed.ok) return save({ revision: current.revision, task, receipt, action, before });
+        if (Number(parsed.payload.runId) !== runId) throw new Error("IDENTITY_MISMATCH");
+        return save({ revision: current.revision, task, receipt, action, before });
       }
 
       throw new Error(`unsupported Factory action: ${action}`);
