@@ -29,7 +29,7 @@ async function seeded(extra = {}) {
   const state = memoryState();
   let writeCalls = 0;
   const lifecycle = {
-    inspect: async ({ branch }) => jsonResponse({ repository, defaultBranch: "main", branch: branch || "main", baseSha: "base-1", headSha: branch ? "base-1" : "base-1", tree: [] }),
+    inspect: async ({ branch }) => jsonResponse({ repository, defaultBranch: "main", branch: branch || "main", baseSha: "base-1", headSha: "base-1", tree: [] }),
     createBranch: async () => jsonResponse({ branch: "feature-a", headSha: "base-1" }, 201),
     putFile: async () => { writeCalls += 1; return jsonResponse({ ok: true, commit: "commit-2", sha: "blob-2" }); },
     ...extra,
@@ -42,7 +42,7 @@ async function seeded(extra = {}) {
 
 test("external branch advancement invalidates stale task before mutation", async () => {
   const { controller, getWriteCalls } = await seeded({
-    inspect: async ({ branch }) => jsonResponse({ repository, defaultBranch: "main", branch: branch || "main", baseSha: "base-1", headSha: branch ? "head-2" : "base-1", tree: [] }),
+    inspect: async ({ branch }) => jsonResponse({ repository, defaultBranch: "main", branch: branch || "main", baseSha: "base-1", headSha: branch === "feature-a" ? "head-2" : "base-1", tree: [] }),
   });
   const result = await controller.execute({ taskId: "task-1", action: "write", expectedRevision: 2, input: { path: "x.js", content: "x", expectedSha: "blob-1" } });
   assert.equal(result.status, "STALE_TASK");
@@ -54,9 +54,9 @@ test("external branch advancement invalidates stale task before mutation", async
 
 test("missing work branch fails closed before mutation", async () => {
   const { controller, getWriteCalls } = await seeded({
-    inspect: async ({ branch }) => branch
+    inspect: async ({ branch }) => branch === "feature-a"
       ? jsonResponse({ code: "BRANCH_NOT_FOUND" }, 404)
-      : jsonResponse({ repository, defaultBranch: "main", branch: "main", baseSha: "base-1", headSha: "base-1", tree: [] }),
+      : jsonResponse({ repository, defaultBranch: "main", branch: branch || "main", baseSha: "base-1", headSha: "base-1", tree: [] }),
   });
   const result = await controller.execute({ taskId: "task-1", action: "write", expectedRevision: 2, input: { path: "x.js", content: "x", expectedSha: "blob-1" } });
   assert.equal(result.status, "MISSING");
@@ -69,7 +69,7 @@ test("contradictory PR and live branch identity becomes conflict", async () => {
   const { createFactoryController } = await import(controllerUrl + "?prdrift=" + Date.now());
   const state = memoryState();
   const lifecycle = {
-    inspect: async ({ branch }) => jsonResponse({ repository, defaultBranch: "main", branch: branch || "main", baseSha: "base-1", headSha: branch ? "head-2" : "base-1", tree: [] }),
+    inspect: async ({ branch }) => jsonResponse({ repository, defaultBranch: "main", branch: branch || "main", baseSha: "base-1", headSha: branch === "feature-a" ? "head-2" : "base-1", tree: [] }),
     createBranch: async () => jsonResponse({ branch: "feature-a", headSha: "base-1" }, 201),
     openPullRequest: async () => jsonResponse({ number: 41, state: "open", headBranch: "feature-a", headSha: "base-1", baseBranch: "main", baseSha: "base-1", mergeable: true }),
     getPullRequest: async () => jsonResponse({ number: 41, state: "open", headBranch: "feature-a", headSha: "other-head", baseBranch: "main", baseSha: "base-1", mergeable: true }),
