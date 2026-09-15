@@ -30,6 +30,7 @@ test("registry publishes exact lifecycle tools with safe annotations", async () 
     "go_hub_open_pull_request",
     "go_hub_get_pull_request",
     "go_hub_get_ci",
+    "go_hub_get_failure_evidence",
     "go_hub_rerun_failed_jobs",
     "go_hub_merge_pull_request",
     "go_hub_get_workflow_runs",
@@ -39,6 +40,7 @@ test("registry publishes exact lifecycle tools with safe annotations", async () 
   assert.equal(tools.find(tool => tool.name === "go_hub_list_repositories").annotations.readOnlyHint, true);
   assert.deepEqual(tools[0].securitySchemes, [{ type: "oauth2", scopes: ["go-hub"] }]);
   assert.ok(tools.every(tool => Array.isArray(tool.securitySchemes)));
+  assert.equal(tools.find(tool => tool.name === "go_hub_get_failure_evidence").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_put_file").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_delete_file").annotations.destructiveHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_merge_pull_request").annotations.destructiveHint, true);
