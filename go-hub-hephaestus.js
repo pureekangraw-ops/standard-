@@ -148,7 +148,14 @@ export function requestFactorySlot(current, request = {}) {
     });
   }
 
-  const job = { repository, slot, goId, jobId, status: target.active ? "QUEUED" : "ACTIVE" };
+  const job = {
+    repository,
+    slot,
+    goId,
+    jobId,
+    status: target.active ? "QUEUED" : "ACTIVE",
+    risk: request.risk ? clone(request.risk) : null,
+  };
   if (!target.active) {
     target.active = job;
     return Object.freeze({ state: Object.freeze(state), outcome: Object.freeze({ status: "ACTIVE" }) });
@@ -158,5 +165,30 @@ export function requestFactorySlot(current, request = {}) {
   return Object.freeze({
     state: Object.freeze(state),
     outcome: Object.freeze({ status: "QUEUED", position: target.queue.length }),
+  });
+}
+
+export function createQueueReport(current, input = {}) {
+  const repository = required(input.repository, "repository");
+  const slot = assertSlot(input.slot);
+  const jobId = required(input.jobId, "jobId");
+  const target = current?.repositories?.[repository]?.[slot];
+  if (!target) throw new Error("queue lane not found");
+  const index = target.queue.findIndex(item => item.jobId === jobId);
+  if (index < 0) throw new Error("queued job not found");
+  const job = target.queue[index];
+  const riskStatus = String(job.risk?.status || "UNKNOWN");
+  const reason = Array.isArray(job.risk?.reasons) && job.risk.reasons.length
+    ? String(job.risk.reasons[0])
+    : "WAITING_FOR_SLOT";
+  return Object.freeze({
+    action: "RETURN_TO_CHAT",
+    repository,
+    slot,
+    jobId,
+    position: index + 1,
+    activeJobId: target.active?.jobId || null,
+    riskStatus,
+    reason,
   });
 }
