@@ -199,6 +199,12 @@ export function createGitHubWorkspace({
       );
     },
 
+    async getFailureEvidence({ runId } = {}) {
+      return request(
+        `/failure-evidence?repository=${encodeURIComponent(repo)}&runId=${assertPositiveInteger(runId, "run id")}`
+      );
+    },
+
     async rerunFailed({ runId } = {}) {
       return request("/ci/rerun-failed", {
         method: "POST",

@@ -25,7 +25,7 @@ test("shared lifecycle service exposes the guarded workstation contract", async 
   assert.deepEqual(
     Object.keys(lifecycle).sort(),
     [
-      "compare", "createBranch", "deleteFile", "getCI", "getPullRequest",
+      "compare", "createBranch", "deleteFile", "getCI", "getFailureEvidence", "getPullRequest",
       "getWorkflowRuns", "inspect", "listRepositories", "mergePullRequest", "openPullRequest",
       "putFile", "readFile", "rerunFailed", "tree",
     ],

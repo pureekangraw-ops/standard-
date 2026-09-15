@@ -86,6 +86,26 @@ function upstreamError(response) {
   return json({ code: "GITHUB_UPSTREAM_ERROR", status: response.status }, 502);
 }
 
+function stripLogPrefix(line) {
+  return String(line || "")
+    .replace(/^\d{4}-\d{2}-\d{2}T\S+\s+/, "")
+    .trim();
+}
+
+function failureLogExcerpt(text, limit = 40) {
+  const signal = /(not ok\b|assertionerror|\berror\b|\bfailed\b|\bfailure\b|exception|^at\s+.+:\d+(?::\d+)?)/i;
+  const seen = new Set();
+  const lines = [];
+  for (const raw of String(text || "").split(/\r?\n/)) {
+    const line = stripLogPrefix(raw);
+    if (!line || !signal.test(line) || seen.has(line)) continue;
+    seen.add(line);
+    lines.push(line.slice(0, 800));
+    if (lines.length >= limit) break;
+  }
+  return lines;
+}
+
 async function listRepositories(fetchImpl, token) {
   const repositories = [];
   let page = 1;
@@ -351,6 +371,48 @@ async function getCI(fetchImpl, token, repository, sha) {
   return json({ headSha: sha, runs, checks });
 }
 
+async function getFailureEvidence(fetchImpl, token, repository, runId) {
+  const jobsResult = await githubRequest(
+    fetchImpl, token,
+    `https://api.github.com/repos/${repository}/actions/runs/${runId}/jobs?per_page=100`,
+  );
+  if (!jobsResult.response.ok) return upstreamError(jobsResult.response);
+
+  const failedJobs = [];
+  const jobs = Array.isArray(jobsResult.payload.jobs) ? jobsResult.payload.jobs : [];
+  for (const job of jobs.filter(item => item?.conclusion && !["success", "skipped", "neutral"].includes(item.conclusion))) {
+    const failedSteps = Array.isArray(job.steps)
+      ? job.steps
+          .filter(step => step?.conclusion && !["success", "skipped", "neutral"].includes(step.conclusion))
+          .map(step => ({
+            number: Number(step.number),
+            name: String(step.name || ""),
+            conclusion: String(step.conclusion || ""),
+          }))
+      : [];
+
+    const logResponse = await fetchImpl(
+      `https://api.github.com/repos/${repository}/actions/jobs/${job.id}/logs`,
+      { headers: githubHeaders(token) },
+    );
+    const logExcerpt = logResponse.ok
+      ? failureLogExcerpt(await logResponse.text())
+      : [];
+
+    failedJobs.push({
+      id: job.id,
+      name: String(job.name || ""),
+      status: String(job.status || ""),
+      conclusion: String(job.conclusion || ""),
+      url: job.html_url || null,
+      failedSteps,
+      logExcerpt,
+    });
+  }
+
+  return json({ runId, failedJobs });
+}
+
 async function rerunFailed(fetchImpl, token, repository, runId) {
   const result = await githubRequest(
     fetchImpl, token,
@@ -410,7 +472,8 @@ async function mergePullRequest(fetchImpl, token, repository, number, expectedHe
 
 async function getWorkflowRuns(fetchImpl, token, repository, sha) {
   const result = await githubRequest(
-    fetchImpl, token, `https://api.github.com/repos/${repository}/actions/runs?head_sha=${encodeURIComponent(sha)}`,
+    fetchImpl, token,
+    `https://api.github.com/repos/${repository}/actions/runs?head_sha=${encodeURIComponent(sha)}`,
   );
   if (!result.response.ok) return upstreamError(result.response);
   const runs = Array.isArray(result.payload.workflow_runs)
@@ -458,6 +521,9 @@ export function createGithubLifecycleService({ fetchImpl = fetch, token } = {}) 
     },
     getCI(input = {}) {
       return getCI(fetchImpl, token, assertRepository(input.repository), assertRef(input.sha, "sha"));
+    },
+    getFailureEvidence(input = {}) {
+      return getFailureEvidence(fetchImpl, token, assertRepository(input.repository), assertPositiveInteger(input.runId, "run id"));
     },
     rerunFailed(input = {}) {
       return rerunFailed(fetchImpl, token, assertRepository(input.repository), assertPositiveInteger(input.runId, "run id"));
@@ -592,6 +658,13 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
             fetchImpl, env.GITHUB_TOKEN,
             assertRepository(url.searchParams.get("repository")),
             assertRef(url.searchParams.get("sha"), "sha"),
+          );
+        }
+        if (request.method === "GET" && url.pathname === `${API_ROOT}/failure-evidence`) {
+          return getFailureEvidence(
+            fetchImpl, env.GITHUB_TOKEN,
+            assertRepository(url.searchParams.get("repository")),
+            assertPositiveInteger(url.searchParams.get("runId"), "run id"),
           );
         }
         if (request.method === "POST" && url.pathname === `${API_ROOT}/ci/rerun-failed`) {
