@@ -114,3 +114,76 @@ test("Merge admission requires exact Assembly QC PR CI heads and SAFE risk", asy
   const blocked = evaluateFactoryAdmission({ ...base, risk: { status: "BLOCKED", reasons: ["CONFLICT"] } });
   assert.deepEqual(blocked, { decision: "BLOCK", reasons: ["CONFLICT"] });
 });
+
+test("queued GO gets a return-to-chat report with queue and risk context", async () => {
+  const { createHephaestusState, requestFactorySlot, createQueueReport } = await load();
+  const first = requestFactorySlot(createHephaestusState(), request());
+  const second = requestFactorySlot(first.state, request({
+    goId: "go-b",
+    jobId: "job-b",
+    risk: { status: "RECHECK", reasons: ["PATH_OVERLAP"] },
+  }));
+  assert.deepEqual(createQueueReport(second.state, {
+    repository: "pureekangraw-ops/standard-",
+    slot: "assembly",
+    jobId: "job-b",
+  }), {
+    action: "RETURN_TO_CHAT",
+    repository: "pureekangraw-ops/standard-",
+    slot: "assembly",
+    jobId: "job-b",
+    position: 1,
+    activeJobId: "job-a",
+    riskStatus: "RECHECK",
+    reason: "PATH_OVERLAP",
+  });
+});
+
+test("slot release moves the next FIFO job to NEEDS_RECHECK without making it active", async () => {
+  const { createHephaestusState, requestFactorySlot, releaseFactorySlot } = await load();
+  let state = requestFactorySlot(createHephaestusState(), request()).state;
+  state = requestFactorySlot(state, request({ goId: "go-b", jobId: "job-b" })).state;
+  const released = releaseFactorySlot(state, {
+    repository: "pureekangraw-ops/standard-",
+    slot: "assembly",
+    goId: "go-a",
+    jobId: "job-a",
+  });
+  assert.equal(released.outcome.promotedJobId, "job-b");
+  assert.equal(released.state.repositories["pureekangraw-ops/standard-"].assembly.active, null);
+  assert.equal(released.state.repositories["pureekangraw-ops/standard-"].assembly.queue[0].status, "NEEDS_RECHECK");
+  const rechecked = requestFactorySlot(released.state, request({ goId: "go-b", jobId: "job-b" }));
+  assert.equal(rechecked.outcome.status, "ACTIVE");
+  assert.equal(rechecked.state.repositories["pureekangraw-ops/standard-"].assembly.active.status, "ACTIVE");
+});
+
+test("Merge completion requires post-merge verification before returning to Optician", async () => {
+  const { createHephaestusState, requestFactorySlot, completeMergeAndReturn } = await load();
+  const active = requestFactorySlot(createHephaestusState(), request({ slot: "merge" }));
+  assert.throws(() => completeMergeAndReturn(active.state, {
+    repository: "pureekangraw-ops/standard-",
+    goId: "go-a",
+    jobId: "job-a",
+    postMergeVerification: { status: "fail" },
+  }), /post-merge verification/i);
+
+  const completed = completeMergeAndReturn(active.state, {
+    repository: "pureekangraw-ops/standard-",
+    goId: "go-a",
+    jobId: "job-a",
+    postMergeVerification: {
+      status: "pass",
+      mainSha: "main-after-merge",
+      checkedAt: "2026-09-15T23:30:00+07:00",
+    },
+  });
+  assert.deepEqual(completed.returnPacket, {
+    destination: "optician",
+    reason: "FACTORY_REALITY_CHANGED",
+    repository: "pureekangraw-ops/standard-",
+    goId: "go-a",
+    jobId: "job-a",
+    mainSha: "main-after-merge",
+  });
+  assert.equal(completed.state.repositories["pureekangraw-ops/standard-"].merge.active, null);
+});
