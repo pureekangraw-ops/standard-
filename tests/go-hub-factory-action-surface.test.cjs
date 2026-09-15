@@ -5,7 +5,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
-const workerUrl = pathToFileURL(path.join(root, "go-hub-worker.mjs")).href;
+const serviceUrl = pathToFileURL(path.join(root, "go-hub-factory-service.mjs")).href;
 const workspaceUrl = pathToFileURL(path.join(root, "go-hub-github-workspace.js")).href;
 const registryUrl = pathToFileURL(path.join(root, "go-hub-mcp-registry.mjs")).href;
 const repository = "pureekangraw-ops/standard-";
@@ -15,7 +15,7 @@ function jsonResponse(payload, status = 200) {
 }
 
 test("Factory action service binds one owner-scoped task to one Durable Object stub", async () => {
-  const { createFactoryActionService } = await import(workerUrl + "?factory-service=" + Date.now());
+  const { createFactoryActionService } = await import(serviceUrl + "?factory-service=" + Date.now());
   const names = [];
   let stored = null;
   const binding = {
