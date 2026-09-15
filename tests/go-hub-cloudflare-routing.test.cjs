@@ -16,12 +16,13 @@ test("GO Hub API routes run the edge Worker before SPA asset fallback", () => {
   assert.deepEqual(config.browser, { binding: "BROWSER" });
   assert.deepEqual(config.vars?.BROWSER_POLICY, {
     allowedHostnames: ["gumroad.com", "*.gumroad.com"],
+    requireOwnerPasscode: true,
   });
   assert.deepEqual(config.assets?.run_worker_first, [
     "/hub/api/browser/*",
     "/hub/api/github-workspace/*",
     "/mcp",
     "/oauth/*",
-    "/.well-known/*",
+    "/.well-known/*"
   ]);
 });
