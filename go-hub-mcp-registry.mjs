@@ -26,6 +26,8 @@ const definitions = [
     schema({ repository: string, number: integer }, ["repository", "number"]), { readOnlyHint: true, destructiveHint: false }],
   ["go_hub_get_ci", "Read workflow and check evidence bound to an exact head SHA.", "getCI",
     schema({ repository: string, sha: string }, ["repository", "sha"]), { readOnlyHint: true, destructiveHint: false }],
+  ["go_hub_get_failure_evidence", "Read failed jobs, failed steps, and concise failure log evidence for one workflow run.", "getFailureEvidence",
+    schema({ repository: string, runId: integer }, ["repository", "runId"]), { readOnlyHint: true, destructiveHint: false }],
   ["go_hub_rerun_failed_jobs", "Rerun failed jobs for one workflow run.", "rerunFailed",
     schema({ repository: string, runId: integer }, ["repository", "runId"]), { readOnlyHint: false, destructiveHint: false }],
   ["go_hub_merge_pull_request", "Merge only when the expected head is current and exact-head CI is green.", "mergePullRequest",
