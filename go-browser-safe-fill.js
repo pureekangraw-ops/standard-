@@ -2,7 +2,8 @@ import { scanLocalDocument } from "./go-browser-local-reader.js";
 
 const CANDIDATE_SELECTOR = 'input, textarea, select, [contenteditable="true"]';
 const FILL_ASSIGNMENT_KEYS = new Set(["fieldId", "value", "valueKind"]);
-const MIN_RESOLUTION_SCORE = 60;
+const MIN_RESOLUTION_SCORE = 7;
+const MIN_RESOLUTION_MARGIN = 2;
 
 function frozen(value) {
   if (Array.isArray(value)) return Object.freeze(value.map(frozen));
@@ -67,6 +68,9 @@ export function guardAssignment(field, profile) {
   if (field.hidden === true || field.disabled === true || field.readOnly === true) {
     return { allowed: false, code: "FIELD_READONLY_BLOCKED" };
   }
+  if (field.signature?.contenteditable === true) {
+    return { allowed: false, code: "UNSUPPORTED_FIELD_KIND" };
+  }
   const actionEvidence = [field.name, field.semanticRole, field.signature?.accessibleName]
     .filter(Boolean)
     .join(" ");
@@ -83,19 +87,22 @@ export function guardAssignment(field, profile) {
 }
 
 export function scoreCandidate(expected, candidate) {
-  if (!expected || !candidate) return 0;
-  if (expected.semanticRole !== candidate.semanticRole) return 0;
-
-  let score = 40;
-  if (expected.role === candidate.role) score += 20;
+  if (!expected || !candidate || expected.semanticRole !== candidate.semanticRole) return 0;
 
   const expectedSignature = expected.signature || {};
   const candidateSignature = candidate.signature || {};
-  if (expectedSignature.accessibleName && sameText(expectedSignature.accessibleName, candidateSignature.accessibleName)) score += 20;
-  if (expectedSignature.name && sameText(expectedSignature.name, candidateSignature.name)) score += 15;
-  if (expectedSignature.autocomplete && sameText(expectedSignature.autocomplete, candidateSignature.autocomplete)) score += 10;
-  if (expectedSignature.inputType && sameText(expectedSignature.inputType, candidateSignature.inputType)) score += 5;
-  if (sameArray(expectedSignature.options, candidateSignature.options)) score += 5;
+  let score = 0;
+
+  const accessibleNameMatch = Boolean(expectedSignature.accessibleName) &&
+    sameText(expectedSignature.accessibleName, candidateSignature.accessibleName);
+  if (accessibleNameMatch) score += 5;
+  if (expectedSignature.name && sameText(expectedSignature.name, candidateSignature.name)) score += 4;
+  if (expected.role === candidate.role) score += 3;
+  if (expectedSignature.inputType && sameText(expectedSignature.inputType, candidateSignature.inputType)) score += 2;
+  if (expectedSignature.autocomplete && sameText(expectedSignature.autocomplete, candidateSignature.autocomplete)) score += 2;
+  if (sameArray(expectedSignature.options, candidateSignature.options)) score += 2;
+  if (!accessibleNameMatch && expectedSignature.placeholder && sameText(expectedSignature.placeholder, candidateSignature.placeholder)) score += 1;
+
   return score;
 }
 
@@ -107,7 +114,7 @@ export function resolveField(currentScan, expectedField) {
     .sort((a, b) => b.score - a.score);
 
   if (ranked.length === 0) return { error: "FIELD_NOT_FOUND" };
-  if (ranked.length > 1 && ranked[0].score === ranked[1].score) {
+  if (ranked.length > 1 && ranked[0].score - ranked[1].score < MIN_RESOLUTION_MARGIN) {
     return { error: "FIELD_RESOLUTION_AMBIGUOUS" };
   }
   return { field: ranked[0].field, index: ranked[0].index };
@@ -115,14 +122,20 @@ export function resolveField(currentScan, expectedField) {
 
 function normalizeValue(valueKind, value) {
   if (valueKind === "boolean") return Boolean(value);
-  if (valueKind === "number") return String(value == null ? "" : value);
   return String(value == null ? "" : value);
 }
 
 function readElementValue(element, field) {
   if (field.valueKind === "boolean") return Boolean(element?.checked);
-  if (field.signature?.contenteditable === true) return String(element?.textContent || "");
   return String(element?.value == null ? "" : element.value);
+}
+
+function setSimpleValue(element, value) {
+  const normalized = String(value == null ? "" : value);
+  const proto = Object.getPrototypeOf(element);
+  const descriptor = proto ? Object.getOwnPropertyDescriptor(proto, "value") : null;
+  if (descriptor?.set) descriptor.set.call(element, normalized);
+  else element.value = normalized;
 }
 
 function writeElementValue(element, field, value) {
@@ -130,11 +143,7 @@ function writeElementValue(element, field, value) {
     element.checked = Boolean(value);
     return;
   }
-  if (field.signature?.contenteditable === true) {
-    element.textContent = String(value == null ? "" : value);
-    return;
-  }
-  element.value = String(value == null ? "" : value);
+  setSimpleValue(element, value);
 }
 
 function dispatchNormalEvents(element, windowObject) {
@@ -157,6 +166,13 @@ function blockedReceipt(assignment, field, code) {
 
 function currentElements(document) {
   return Array.from(document.querySelectorAll(CANDIDATE_SELECTOR));
+}
+
+function choiceAllowed(element, proposedValue) {
+  const proposed = String(proposedValue == null ? "" : proposedValue);
+  return Array.from(element?.options || []).some(option =>
+    String(option?.value ?? "") === proposed || String(option?.textContent ?? "").trim() === proposed
+  );
 }
 
 export function executeFillPlan({ document, location, title = "", profile, plan, window } = {}) {
@@ -208,6 +224,10 @@ export function executeFillPlan({ document, location, title = "", profile, plan,
       receipts.push(blockedReceipt(assignment, resolved.field, "FIELD_NOT_FOUND"));
       continue;
     }
+    if (resolved.field.valueKind === "choice" && !choiceAllowed(element, assignment.value)) {
+      receipts.push(blockedReceipt(assignment, resolved.field, "UNSUPPORTED_FIELD_KIND"));
+      continue;
+    }
 
     const expectedValue = normalizeValue(assignment.valueKind, assignment.value);
     try {
@@ -226,13 +246,14 @@ export function executeFillPlan({ document, location, title = "", profile, plan,
     }
 
     const actualValue = normalizeValue(assignment.valueKind, readElementValue(element, resolved.field));
+    const verified = Object.is(actualValue, expectedValue);
     receipts.push(frozen({
       fieldId: resolved.field.fieldId,
       semanticRole: assignment.semanticRole,
       expectedValue,
       actualValue,
-      state: Object.is(actualValue, expectedValue) ? "VERIFIED" : "FAILED",
-      ...(Object.is(actualValue, expectedValue) ? {} : { code: "FIELD_VERIFY_MISMATCH" }),
+      state: verified ? "VERIFIED" : "FAILED",
+      ...(verified ? {} : { code: "FIELD_VERIFY_MISMATCH" }),
     }));
   }
 
