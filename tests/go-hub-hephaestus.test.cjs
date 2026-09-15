@@ -6,8 +6,10 @@ const { pathToFileURL } = require("node:url");
 
 const moduleUrl = pathToFileURL(path.resolve(__dirname, "../go-hub-hephaestus.js")).href;
 const load = () => import(`${moduleUrl}?${Date.now()}-${Math.random()}`);
-const handoffUrl = pathToFileURL(path.resolve(__dirname, "../go-hub-hephaestus-handoff.js")).href;
-const loadHandoff = () => import(`${handoffUrl}?${Date.now()}-${Math.random()}`);
+const queueUrl = pathToFileURL(path.resolve(__dirname, "../go-hub-hephaestus-queue.js")).href;
+const loadQueue = () => import(`${queueUrl}?${Date.now()}-${Math.random()}`);
+const returnUrl = pathToFileURL(path.resolve(__dirname, "../go-hub-hephaestus-return.js")).href;
+const loadReturn = () => import(`${returnUrl}?${Date.now()}-${Math.random()}`);
 const admit = Object.freeze({ decision: "ADMIT", reasons: [] });
 
 function request(overrides = {}) {
@@ -143,7 +145,7 @@ test("queued GO gets a return-to-chat report with queue and risk context", async
 
 test("slot release promotes the next FIFO job as NEEDS_RECHECK before it can work", async () => {
   const { createHephaestusState, requestFactorySlot } = await load();
-  const { releaseFactorySlot, admitQueuedFactorySlot } = await loadHandoff();
+  const { releaseFactorySlot, admitQueuedFactorySlot } = await loadQueue();
   let state = requestFactorySlot(createHephaestusState(), request()).state;
   state = requestFactorySlot(state, request({ goId: "go-b", jobId: "job-b" })).state;
   const released = releaseFactorySlot(state, {
@@ -168,7 +170,7 @@ test("slot release promotes the next FIFO job as NEEDS_RECHECK before it can wor
 
 test("Merge completion requires post-merge verification before returning to Optician", async () => {
   const { createHephaestusState, requestFactorySlot } = await load();
-  const { completeMergeAndReturn } = await loadHandoff();
+  const { completeMergeAndReturn } = await loadReturn();
   const active = requestFactorySlot(createHephaestusState(), request({ slot: "merge" }));
   assert.throws(() => completeMergeAndReturn(active.state, {
     repository: "pureekangraw-ops/standard-",
