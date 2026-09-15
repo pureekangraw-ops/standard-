@@ -6,7 +6,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 
-test("deployment publishes Browser, MCP, and OAuth routes and checks every module", () => {
+test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus", () => {
   const wrangler = JSON.parse(fs.readFileSync(path.join(root, "wrangler.go-hub.jsonc"), "utf8"));
   assert.deepEqual(wrangler.assets.run_worker_first, [
     "/hub/api/browser/*",
@@ -15,11 +15,21 @@ test("deployment publishes Browser, MCP, and OAuth routes and checks every modul
     "/oauth/*",
     "/.well-known/*",
   ]);
+  assert.deepEqual(wrangler.durable_objects?.bindings, [
+    { name: "HEPHAESTUS", class_name: "HephaestusForeman" },
+  ]);
+  assert.ok(wrangler.migrations?.some(item =>
+    Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("HephaestusForeman")));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   for (const file of [
     "go-hub-browser-interface.js",
     "go-hub-edge-worker.mjs",
+    "go-hub-factory-controller.mjs",
+    "go-hub-factory-mcp-worker.mjs",
+    "go-hub-hephaestus.js",
+    "go-hub-hephaestus-queue.js",
+    "go-hub-hephaestus-return.js",
     "go-hub-oauth.mjs",
     "go-hub-mcp-registry.mjs",
     "go-hub-mcp.mjs",
