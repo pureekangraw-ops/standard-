@@ -2,9 +2,25 @@
 
 ## Purpose
 
-Move Hephaestus from a tested policy module beside the Factory into the live `@GO Hub Factory` MCP execution path. The MCP server must no longer be able to perform a repository merge while bypassing Hephaestus merge-slot ownership.
+Move Hephaestus from a tested policy module beside the Factory into the live `@GO Hub Factory` execution path. Hephaestus is the Factory foreman and the Factory boundary: every Assembly/Merge production route enters through Hephaestus and successful work exits through Hephaestus back to Optician.
 
-This design extends the existing `2026-09-15-hephaestus-factory-foreman-design.md`; it does not replace Hephaestus policy, Ready Gate, Assembly QC, GitHub exact-head CI checks, or Optician authority.
+This extends the existing `2026-09-15-hephaestus-factory-foreman-design.md`. It does not replace Ready Gate, Assembly QC, GitHub CI, verification, or Optician authority.
+
+## Canonical Factory flow
+
+```text
+Enter Factory
+  -> Hephaestus
+  -> Assembly slot: exactly 1 active job per repository
+  -> existing Assembly QC
+  -> Merge slot: exactly 1 active job per repository
+  -> merge
+  -> post-merge Verify
+  -> Hephaestus releases the Factory job
+  -> Optician
+```
+
+Hephaestus controls Factory rhythm and slot ownership. QC proves correctness. Verify proves post-merge Reality. Optician refits the route after Reality changed.
 
 ## Current gap
 
@@ -12,13 +28,13 @@ The live plugin path is currently:
 
 `/mcp -> go-hub-mcp-registry.mjs -> createGithubLifecycleService() -> GitHub`
 
-`go-hub-hephaestus.js` is not in that route. Hephaestus queue state is also not server-authoritative or durable, so an in-memory Worker object would not be sufficient for slot ownership.
+That path can reach GitHub lifecycle operations without passing through Hephaestus. Existing Hephaestus state is pure module state only; it is not durable server authority for live MCP calls.
 
 ## Architecture
 
 Use one Cloudflare Durable Object instance per repository as the server-authoritative Hephaestus state holder. The Durable Object reuses the existing pure Hephaestus functions for admission, FIFO queueing, release, recheck, and post-merge return.
 
-A small `go-hub-factory-controller.mjs` adapter exposes the Durable Object to the MCP Worker. The MCP registry gains explicit Factory tools to request/release slots and inspect current foreman state. Existing GitHub lifecycle operations remain authoritative for GitHub truth.
+A focused `go-hub-factory-controller.mjs` adapter exposes the Foreman to the MCP Worker. The MCP registry exposes explicit Factory slot operations. GitHub lifecycle remains authoritative for repository/PR/CI/merge truth.
 
 ## Durable state
 
@@ -26,77 +42,92 @@ Binding: `HEPHAESTUS`
 
 Class: `HephaestusForeman`
 
-Object key: exact repository name, e.g. `pureekangraw-ops/standard-`.
+Object key: exact repository name, for example `pureekangraw-ops/standard-`.
 
-Stored record: the existing `createHephaestusState()` shape under one durable storage key. Durable Object request serialization plus persistent storage provides one authoritative queue/slot state per repository.
+Stored record: the existing `createHephaestusState()` shape under one durable storage key. Durable Object request serialization plus persistent storage provides one queue/slot authority per repository.
 
-New Durable Object namespaces use SQLite-backed storage.
+## Factory admission and slots
 
-## MCP surface
+### Assembly
 
-Add three tools:
-
-1. `go_hub_factory_request_slot`
-   - Inputs: `repository`, `slot`, `goId`, `jobId`, plus supplied current admission evidence.
-   - Server computes admission with `evaluateFactoryAdmission()`; caller cannot submit a precomputed `ADMIT` decision.
-   - Returns ACTIVE, QUEUED, WAIT, or BLOCKED plus queue evidence.
-
-2. `go_hub_factory_release_slot`
-   - Inputs: `repository`, `slot`, `goId`, `jobId`.
-   - Assembly release uses `releaseFactorySlot()`.
-   - Merge release additionally requires passed `postMergeVerification` and uses `completeMergeAndReturn()`.
-
-3. `go_hub_factory_get_state`
-   - Read-only current repository Foreman state for operator/GO inspection.
-
-The existing `go_hub_merge_pull_request` tool additionally requires `goId` and `jobId`. Before any GitHub merge request is sent, the MCP Worker must verify that the same GO/job currently owns the repository Merge slot. This is a hard gate.
-
-## Admission evidence
-
-Assembly admission consumes the existing Hephaestus contract:
+Assembly admission is computed server-side from existing Ready Gate evidence:
 
 - `readyGate.status === READY_FOR_ASSEMBLY`
 - `readyGate.headSha === piece.headSha`
 
-Merge admission consumes:
+Only one Assembly job may be ACTIVE per repository. Additional jobs queue FIFO and return to Chat instead of occupying an active GO.
 
-- current assembled integration head,
-- Assembly QC pass for that integration head,
+### QC
+
+Assembly QC stays the existing QC system. Hephaestus does not duplicate or weaken it.
+
+### Merge
+
+Only one Merge job may be ACTIVE per repository. Admission requires:
+
+- current `ASSEMBLED` integration head,
+- Assembly QC pass for that exact integration head,
 - current PR number/head,
 - exact-head CI success,
-- `SAFE` queue-risk result.
+- SAFE queue-risk result.
 
-The server re-evaluates this evidence using the existing pure Hephaestus evaluator. Missing or stale evidence fails closed.
+The live `go_hub_merge_pull_request` operation must verify matching active Merge-slot ownership before sending any GitHub merge mutation.
+
+### Verify and exit
+
+A merged job remains owned by Hephaestus until post-merge verification passes. Successful Merge release requires:
+
+- `postMergeVerification.status === "pass"`
+- exact resulting `mainSha`
+- verification timestamp
+
+Only then does Hephaestus release the slot and return the deterministic packet:
+
+`Hephaestus -> Optician`
+
+## MCP surface
+
+Add three Factory tools:
+
+1. `go_hub_factory_request_slot`
+   - Inputs include repository, `assembly|merge`, GO/job identity, and current evidence.
+   - Server computes admission. Caller cannot supply a precomputed ADMIT decision.
+
+2. `go_hub_factory_release_slot`
+   - Assembly release uses normal slot release.
+   - Merge release requires passed post-merge verification and produces the Optician return packet.
+
+3. `go_hub_factory_get_state`
+   - Read-only current Foreman state for the repository.
+
+Existing `go_hub_merge_pull_request` gains `goId` and `jobId`; the controller must prove that identity owns the active repository Merge slot before GitHub mutation.
 
 ## Authority boundaries
 
-- GitHub remains source of truth for repository, branch, PR, CI, merge SHA, and workflow state.
-- Existing QC/Ready Gate modules remain source of truth for correctness evidence.
-- Hephaestus owns only Factory admission, queue/slot ownership, release, and return packet.
-- MCP Registry remains tool schema/routing only; it must not duplicate Hephaestus rules.
-- The browser-local Code task is not treated as server authority.
-- Read/inspect/edit/branch/PR operations are not globally locked by Hephaestus. The existing design only serializes Assembly and Merge slots.
+- GitHub: repository, branch, PR, CI, merge SHA, workflows.
+- Ready Gate / QC / verification systems: correctness evidence.
+- Hephaestus: Factory entry, Assembly slot, Merge slot, queues, release, Factory exit.
+- Optician: route/refit authority after Factory Reality changes.
+- MCP registry: schema/routing only; no duplicated admission policy.
+- Browser-local Code task: not server authority.
+
+Read/inspect/edit/branch/PR operations are not globally locked by Hephaestus. The Factory foreman serializes the cost-bearing Assembly and Merge stations defined by the Factory design.
 
 ## Failure behavior
 
-- Missing `HEPHAESTUS` binding: Factory slot tools and merge fail closed with `FACTORY_FOREMAN_NOT_CONFIGURED`.
-- Merge without active matching Merge slot: reject before GitHub mutation with `FACTORY_MERGE_SLOT_REQUIRED`.
-- Stale/unsafe evidence: WAIT/BLOCK from Hephaestus; no slot ownership is granted.
-- Merge release without passed post-merge verification: reject and keep slot active.
-- Durable state write failure: fail closed; never continue to merge.
-
-## Publication/deployment
-
-`wrangler.go-hub.jsonc` declares the `HEPHAESTUS` Durable Object binding and SQLite-backed `HephaestusForeman` export. `go-hub-edge-worker.mjs` re-exports the Durable Object class from the controller module so Wrangler can provision it.
-
-The new controller and existing Hephaestus modules must be included in syntax/publication gates required by the active Worker bundle.
+- Missing `HEPHAESTUS` binding: Factory slot operations and merge fail closed with `FACTORY_FOREMAN_NOT_CONFIGURED`.
+- Merge without matching active Merge slot: reject before GitHub mutation with `FACTORY_MERGE_SLOT_REQUIRED`.
+- Stale or unsafe admission evidence: WAIT/BLOCK; no slot ownership.
+- Merge release without successful post-merge verification: reject and retain slot ownership.
+- Durable state write failure: fail closed.
 
 ## Success criteria
 
-- Live MCP merge cannot call GitHub unless matching GO/job owns active repository Merge slot.
-- Foreman slot/queue state survives separate Worker requests.
+- Live Factory route is `Hephaestus -> Assembly(1/repo) -> QC -> Merge(1/repo) -> Verify -> Hephaestus -> Optician`.
+- Two jobs cannot simultaneously own one repository Assembly slot.
 - Two jobs cannot simultaneously own one repository Merge slot.
-- Admission decisions are computed server-side from evidence, not trusted from the caller.
+- MCP merge cannot call GitHub unless matching GO/job owns the active Merge slot.
+- Foreman state survives separate Worker requests.
+- Admission decisions are server-computed from current evidence.
 - Merge release cannot succeed without post-merge verification.
-- Missing controller binding fails closed rather than silently bypassing Hephaestus.
-- Existing non-Factory MCP tools retain their current behavior.
+- Missing Foreman configuration never silently bypasses Hephaestus.
