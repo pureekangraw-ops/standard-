@@ -1,0 +1,51 @@
+name: GO Browser Extension Sign
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require signing secrets
+        env:
+          AMO_SIGN_KEY: ${{ secrets.AMO_SIGN_KEY }}
+          AMO_SIGN_SECRET: ${{ secrets.AMO_SIGN_SECRET }}
+        run: |
+          test -n "$AMO_SIGN_KEY" && test -n "$AMO_SIGN_SECRET" || { echo "AMO_SIGNING_NOT_CONFIGURED"; exit 1; }
+      - name: Verify repository
+        run: npm run deploy:gate
+      - name: Build extension source
+        run: npm run build:go-browser-extension
+      - name: Build unsigned XPI
+        id: build
+        uses: kewisch/action-web-ext@84a13bb9e1b6108c43788ba091c41ca1dba6ad45
+        with:
+          cmd: build
+          source: dist/go-browser-local-v1
+          filename: go-browser-local-v1-unsigned.xpi
+      - name: Sign XPI with Mozilla AMO
+        id: sign
+        uses: kewisch/action-web-ext@84a13bb9e1b6108c43788ba091c41ca1dba6ad45
+        with:
+          cmd: sign
+          source: ${{ steps.build.outputs.target }}
+          channel: unlisted
+          apiKey: ${{ secrets.AMO_SIGN_KEY }}
+          apiSecret: ${{ secrets.AMO_SIGN_SECRET }}
+      - name: Upload signed XPI
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-browser-local-v1-signed-${{ github.sha }}
+          path: ${{ steps.sign.outputs.target }}
+          if-no-files-found: error
+          retention-days: 7
