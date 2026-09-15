@@ -5,8 +5,14 @@
   "description": "Local, explicit, fail-closed Safe Fill adapter for GO Browser V1.",
   "browser_specific_settings": {
     "gecko": {
-      "id": "go-browser-local-v1@pureekangraw.local"
-    }
+      "id": "go-browser-local-v1@pureekangraw.local",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    },
+    "gecko_android": {}
   },
   "content_scripts": [
     {
