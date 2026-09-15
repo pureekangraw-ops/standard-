@@ -8,6 +8,7 @@ const { pathToFileURL } = require("node:url");
 const root = path.resolve(__dirname, "..");
 const workerUrl = pathToFileURL(path.join(root, "go-hub-worker.mjs")).href;
 const registryUrl = pathToFileURL(path.join(root, "go-hub-mcp-registry.mjs")).href;
+const workspaceUrl = pathToFileURL(path.join(root, "go-hub-github-workspace.js")).href;
 const repository = "pureekangraw-ops/standard-";
 
 function jsonResponse(payload, status = 200) {
@@ -76,6 +77,24 @@ test("Worker returns concise failure evidence for one workflow run", async () =>
       ],
     }],
   });
+});
+
+test("browser workspace exposes read-only failure evidence without auth headers", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return jsonResponse({ runId: 77, failedJobs: [] });
+  };
+  const { createGitHubWorkspace } = await import(`${workspaceUrl}?failure-evidence=${Date.now()}`);
+  const workspace = createGitHubWorkspace({
+    gatewayBase: "/hub/api/github-workspace",
+    repository,
+    fetchImpl,
+  });
+  const result = await workspace.getFailureEvidence({ runId: 77 });
+  assert.deepEqual(result, { runId: 77, failedJobs: [] });
+  assert.equal(calls[0].url, `/hub/api/github-workspace/failure-evidence?repository=${encodeURIComponent(repository)}&runId=77`);
+  assert.equal(Object.hasOwn(calls[0].init.headers || {}, "authorization"), false);
 });
 
 test("MCP registry exposes failure evidence as a read-only lifecycle tool", async () => {
