@@ -32,7 +32,7 @@
 - Consumes: `createFactoryWorkContext(access, taskSnapshot)`, `createFactoryRealityReturn(access, taskSnapshot)`, `createCodeCapability({ workspace, task, workContext })`.
 - Produces: a static active-shell contract proving the real Factory return helpers are imported and the placeholder `returned-by-operator` is absent.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 "use strict";
