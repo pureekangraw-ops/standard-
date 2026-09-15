@@ -65,3 +65,36 @@ test("Optician round gate reuses an unchanged fit and requests refit when Realit
     reality: { head: "def", status: "working" },
   }).decision, "REFIT");
 });
+
+test("Optician can consume a MIMIR information result as route evidence without owning MIMIR", async () => {
+  const { fitFromInformation } = await load();
+  const fitted = fitFromInformation({
+    context: completeContext,
+    reality: { head: "abc" },
+    lens: { id: "crystallize", reference: "lens://crystallize" },
+    information: {
+      status: "PASS",
+      route: "GO → Factory",
+      records: [{ id: "factory", name: "Factory" }],
+      evidence: { source: "notion", verifiedAt: "2026-09-15T12:00:00+07:00" },
+    },
+  });
+
+  assert.equal(fitted.gate, "PASS");
+  assert.equal(fitted.route, "GO → Factory");
+  assert.equal(fitted.informationSource, "mimir");
+  assert.deepEqual(fitted.evidence, { source: "notion", verifiedAt: "2026-09-15T12:00:00+07:00" });
+});
+
+test("Optician waits when MIMIR has no usable information route", async () => {
+  const { fitFromInformation } = await load();
+  const fitted = fitFromInformation({
+    context: completeContext,
+    lens: { id: "crystallize", reference: "lens://crystallize" },
+    information: { status: "WAIT", waitReason: "NO_MATCH", records: [], route: null },
+  });
+
+  assert.equal(fitted.gate, "WAIT");
+  assert.equal(fitted.reason, "NO_MATCH");
+  assert.equal(fitted.route, null);
+});
