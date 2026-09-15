@@ -4,6 +4,7 @@ import { createFactoryMcpWorker } from "./go-hub-factory-mcp-worker.mjs";
 export { HephaestusForeman } from "./go-hub-factory-controller.mjs";
 
 const BROWSER_API_ROOT = "/hub/api/browser";
+const VERSION_API = "/hub/api/version";
 const encoder = new TextEncoder();
 
 function json(payload, status = 200) {
@@ -59,6 +60,12 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
   return Object.freeze({
     async fetch(request, env) {
       const url = new URL(request.url);
+      if (url.pathname === VERSION_API) {
+        const deploymentSha = String(env?.GOHUB_DEPLOY_SHA || "").trim();
+        return deploymentSha
+          ? json({ product: "GO Hub", deploymentSha })
+          : json({ code: "DEPLOY_SHA_NOT_CONFIGURED" }, 503);
+      }
       if (url.pathname === "/mcp") {
         return factoryMcp.fetch(request, env);
       }
