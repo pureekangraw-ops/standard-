@@ -26,6 +26,9 @@ function parseTargetUrl(value) {
   if (target.protocol !== "http:" && target.protocol !== "https:") {
     return { error: json({ code: "INVALID_BROWSER_PROTOCOL" }, 400) };
   }
+  if (target.username || target.password) {
+    return { error: json({ code: "BROWSER_URL_CREDENTIALS_BLOCKED" }, 400) };
+  }
   return { target };
 }
 
@@ -153,11 +156,16 @@ export function createBrowserInterface({ browser } = {}) {
       }
 
       const waitUntil = String(input.waitUntil || "domcontentloaded");
-      const upstream = await browser.quickAction("snapshot", {
-        url: target.toString(),
-        formats: ["markdown", "accessibilityTree"],
-        gotoOptions: { waitUntil, timeout: 30000 },
-      });
+      let upstream;
+      try {
+        upstream = await browser.quickAction("snapshot", {
+          url: target.toString(),
+          formats: ["markdown", "accessibilityTree"],
+          gotoOptions: { waitUntil, timeout: 30000 },
+        });
+      } catch {
+        return json({ code: "BROWSER_UPSTREAM_ERROR" }, 502);
+      }
       const decoded = await readBrowserPayload(upstream);
       if (decoded.error) return decoded.error;
 
