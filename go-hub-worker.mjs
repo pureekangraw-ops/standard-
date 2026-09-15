@@ -86,6 +86,38 @@ function upstreamError(response) {
   return json({ code: "GITHUB_UPSTREAM_ERROR", status: response.status }, 502);
 }
 
+async function listRepositories(fetchImpl, token) {
+  const repositories = [];
+  let page = 1;
+
+  while (true) {
+    const result = await githubRequest(
+      fetchImpl,
+      token,
+      `https://api.github.com/user/repos?affiliation=owner&per_page=100&page=${page}&sort=updated`,
+    );
+    if (!result.response.ok) return upstreamError(result.response);
+
+    const items = Array.isArray(result.payload) ? result.payload : [];
+    repositories.push(...items
+      .filter(item => item?.owner?.login === ALLOWED_OWNER)
+      .map(item => ({
+        name: String(item.name || ""),
+        fullName: String(item.full_name || ""),
+        visibility: String(item.visibility || (item.private ? "private" : "public")),
+        defaultBranch: String(item.default_branch || ""),
+        updatedAt: item.updated_at || null,
+        archived: item.archived === true,
+        url: item.html_url || null,
+      })));
+
+    if (items.length < 100) break;
+    page += 1;
+  }
+
+  return json({ owner: ALLOWED_OWNER, count: repositories.length, repositories });
+}
+
 async function getRepository(fetchImpl, token, repository) {
   const result = await githubRequest(fetchImpl, token, `https://api.github.com/repos/${repository}`);
   if (!result.response.ok) return { error: upstreamError(result.response) };
@@ -394,6 +426,9 @@ async function getWorkflowRuns(fetchImpl, token, repository, sha) {
 
 export function createGithubLifecycleService({ fetchImpl = fetch, token } = {}) {
   return Object.freeze({
+    listRepositories() {
+      return listRepositories(fetchImpl, token);
+    },
     inspect(input = {}) {
       return inspectRepository(fetchImpl, token, assertRepository(input.repository), input.branch ? assertRef(input.branch, "branch") : null);
     },
