@@ -8,20 +8,19 @@ const { pathToFileURL } = require("node:url");
 const moduleUrl = pathToFileURL(path.resolve(__dirname, "../go-hub-optician.js")).href;
 const load = () => import(`${moduleUrl}?${Date.now()}-${Math.random()}`);
 
-const completeContext = Object.freeze({
-  who: "BIG",
-  what: "Build one bounded piece",
-  where: "standard-",
-  when: "now",
-  why: "advance the approved GO City work",
+const canonicalContext = Object.freeze({
+  purpose: "Build one bounded GO City piece",
+  target: "pureekangraw-ops/standard-",
+  action: "route to Factory",
+  successCondition: "Return verified evidence to the same work checkpoint",
 });
 
-test("Optician fits complete 5W context to a lens and route without executing destination work", async () => {
+test("Optician fits relevant intake without forcing irrelevant 5W fields", async () => {
   const { fitWork } = await load();
   let executions = 0;
   const factory = { id: "factory", route: "destination://factory", run() { executions += 1; } };
   const fitted = fitWork({
-    context: completeContext,
+    context: canonicalContext,
     lens: { id: "crystallize", reference: "lens://crystallize" },
     destination: factory,
   });
@@ -33,63 +32,75 @@ test("Optician fits complete 5W context to a lens and route without executing de
   assert.equal("capability" in fitted, false);
 });
 
-test("Optician fails closed when required 5W context is incomplete", async () => {
+test("Optician waits only for materially blocking canonical intake fields", async () => {
   const { fitWork } = await load();
-  const fitted = fitWork({
-    context: { ...completeContext, why: "" },
+  const noPurpose = fitWork({
+    context: { ...canonicalContext, purpose: "" },
+    lens: { id: "crystallize", reference: "lens://crystallize" },
+    destination: { id: "factory", route: "destination://factory" },
+  });
+  const noSuccess = fitWork({
+    context: { ...canonicalContext, successCondition: "" },
     lens: { id: "crystallize", reference: "lens://crystallize" },
     destination: { id: "factory", route: "destination://factory" },
   });
 
-  assert.equal(fitted.gate, "WAIT");
-  assert.deepEqual(fitted.missing, ["why"]);
-  assert.equal(fitted.route, null);
+  assert.equal(noPurpose.gate, "WAIT");
+  assert.deepEqual(noPurpose.missing, ["purpose"]);
+  assert.equal(noSuccess.gate, "WAIT");
+  assert.deepEqual(noSuccess.missing, ["successCondition"]);
 });
 
 test("Optician round gate reuses an unchanged fit and requests refit when Reality changes", async () => {
   const { fitWork, checkRound } = await load();
   const fitted = fitWork({
-    context: completeContext,
+    context: canonicalContext,
     reality: { head: "abc", status: "working" },
     lens: { id: "crystallize", reference: "lens://crystallize" },
     destination: { id: "factory", route: "destination://factory" },
   });
 
   assert.equal(checkRound(fitted, {
-    context: completeContext,
+    context: canonicalContext,
     reality: { head: "abc", status: "working" },
   }).decision, "REUSE_FIT");
 
   assert.equal(checkRound(fitted, {
-    context: completeContext,
+    context: canonicalContext,
     reality: { head: "def", status: "working" },
   }).decision, "REFIT");
 });
 
-test("Optician can consume a MIMIR information result as route evidence without owning MIMIR", async () => {
-  const { fitFromInformation } = await load();
+test("Optician consumes MIMIR information then rechecks the fitted view before continuing", async () => {
+  const { fitFromInformation, checkRound } = await load();
+  const reality = { head: "abc" };
   const fitted = fitFromInformation({
-    context: completeContext,
-    reality: { head: "abc" },
+    context: canonicalContext,
+    reality,
     lens: { id: "crystallize", reference: "lens://crystallize" },
     information: {
       status: "PASS",
-      route: "GO → Factory",
+      route: "destination://factory",
       records: [{ id: "factory", name: "Factory" }],
       evidence: { source: "notion", verifiedAt: "2026-09-15T12:00:00+07:00" },
     },
   });
 
   assert.equal(fitted.gate, "PASS");
-  assert.equal(fitted.route, "GO → Factory");
+  assert.equal(fitted.route, "destination://factory");
   assert.equal(fitted.informationSource, "mimir");
   assert.deepEqual(fitted.evidence, { source: "notion", verifiedAt: "2026-09-15T12:00:00+07:00" });
+  assert.equal(checkRound(fitted, { context: canonicalContext, reality }).decision, "REUSE_FIT");
+  assert.equal(checkRound(fitted, {
+    context: canonicalContext,
+    reality: { head: "def" },
+  }).decision, "REFIT");
 });
 
 test("Optician waits when MIMIR has no usable information route", async () => {
   const { fitFromInformation } = await load();
   const fitted = fitFromInformation({
-    context: completeContext,
+    context: canonicalContext,
     lens: { id: "crystallize", reference: "lens://crystallize" },
     information: { status: "WAIT", waitReason: "NO_MATCH", records: [], route: null },
   });
