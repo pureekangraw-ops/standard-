@@ -1,14 +1,14 @@
 # GO Hub Factory Controller Bridge Design
 
 Date: 2026-09-15  
-Status: Owner-approved design draft  
+Status: Design draft — awaiting owner written-spec review  
 Owner: BIG  
 Primary operator: GO  
 Base revision: `f69a342b04e224a055c2dafc72eb2aadf32c39b3`
 
 ## 1. Purpose
 
-Connect the existing GO Hub Factory truth model to the existing GitHub/MCP machinery so one real action produces one reality receipt, one authoritative task transition, and one evidence update.
+Connect the existing GO Hub Factory truth model to the existing GitHub/MCP machinery so one real action produces one Reality Receipt, one authoritative task transition, and one evidence update.
 
 The problem is not that GO Hub lacks a factory model or GitHub tools. Both exist. The defect is that they currently operate as parallel lines:
 
@@ -48,20 +48,17 @@ GO Action Request
       v
 Factory Controller
       |
-      +--> validate current task / authority / expected identity
-      |
+      +--> load/reconcile authoritative task
+      +--> validate authority / state / expected identity
       +--> call existing workspace/lifecycle operation
       |
       v
 Reality Receipt
       |
       +--> validate repository / branch / SHA / run / PR identity
-      |
       +--> derive allowed CodeTask transition
-      |
       +--> append trusted evidence when applicable
-      |
-      +--> persist updated task
+      +--> persist updated task + receipt
       |
       v
 Factory Result
@@ -70,20 +67,61 @@ Factory Result
 
 The controller owns coordination, not domain truth. GitHub remains authoritative for repository/branch/commit/PR/Actions state. CodeTask remains the compact Factory task truth. Existing QC evaluators remain responsible for QC decisions.
 
-## 4. Responsibility Boundaries
+## 4. Placement and One Durable Authority
 
-### 4.1 Factory Controller
+The production Factory Controller runs **server-side in the GO Hub Worker boundary**, so browser Code and MCP/ChatGPT can use the same Factory task authority.
+
+The current browser `localStorage` task snapshot cannot be that authority because MCP cannot access it and two operators could diverge silently.
+
+Current deployment configuration has no server-side durable state binding. Therefore correctness requires one small new infrastructure seam:
+
+**Cloudflare Durable Object: `GO_HUB_FACTORY_STATE`**
+
+Use one Durable Object instance per Factory task ID. It stores only compact operational truth:
+
+- CodeTask snapshot,
+- monotonically increasing revision,
+- recent/required Reality Receipts,
+- audit events needed for recovery/reconciliation.
+
+It must not store:
+
+- GitHub credentials,
+- OAuth secrets,
+- full CI log archives,
+- repository source files,
+- a second copy of GitHub branch/PR truth.
+
+Why Durable Object rather than KV: the task controller needs serialized updates and a single strongly ordered task authority; eventual-consistency storage is not appropriate for transitions such as write -> head update -> CI evidence invalidation.
+
+### Browser localStorage after cutover
+
+Browser localStorage becomes a **cache/projection only**, never authoritative Factory truth.
+
+An existing legacy local task may be imported only when all of these match server-observed Reality:
+
+- task/repository identity,
+- work branch identity,
+- current head SHA,
+- PR identity when present.
+
+Otherwise the legacy snapshot is ignored and the controller rebuilds operational truth from GitHub plus explicit task intent. No local snapshot may overwrite server/GitHub reality.
+
+## 5. Responsibility Boundaries
+
+### 5.1 Factory Controller
 
 Responsible for:
 
 - accepting one explicit Factory action request,
-- verifying that the action is compatible with the current task state,
+- loading and reconciling the current authoritative task,
+- verifying that the action is compatible with task state and authority,
 - invoking the existing operational capability,
 - normalizing the response into a Reality Receipt,
 - validating receipt identity against current task context,
 - applying the corresponding CodeTask transition,
 - adding trusted evidence only from verified receipts,
-- persisting the resulting task snapshot,
+- persisting the resulting task snapshot and receipt,
 - returning the updated next action.
 
 Not responsible for:
@@ -93,10 +131,9 @@ Not responsible for:
 - performing Piece/Assembly/Product QC itself,
 - replacing GitHub policy,
 - replacing MCP,
-- replacing persistence mechanics,
 - becoming Heimdall.
 
-### 4.2 Existing Workspace / Lifecycle
+### 5.2 Existing Workspace / Lifecycle
 
 Remains responsible for real side effects and readback:
 
@@ -112,7 +149,7 @@ Remains responsible for real side effects and readback:
 
 Operational methods return raw external truth. They do not directly mutate CodeTask.
 
-### 4.3 CodeTask
+### 5.3 CodeTask
 
 Remains responsible for:
 
@@ -125,7 +162,7 @@ Remains responsible for:
 
 CodeTask may only advance from controller-validated receipts for operational states covered by the bridge.
 
-### 4.4 Evidence Ledger
+### 5.4 Evidence Ledger
 
 Evidence created through the bridge must carry provenance sufficient to answer:
 
@@ -134,9 +171,9 @@ Evidence created through the bridge must carry provenance sufficient to answer:
 - when it was observed,
 - what claim it can support.
 
-Caller-supplied free-form evidence remains allowed only for explicitly manual evidence classes and must be marked as manual rather than tool-verified.
+Manual evidence is a separate explicit evidence class. It is never labeled as a tool-produced Reality Receipt.
 
-## 5. Reality Receipt Contract
+## 6. Reality Receipt Contract
 
 A Reality Receipt is immutable normalized evidence from one operational action.
 
@@ -149,7 +186,7 @@ Minimum shape:
   status,          // success | failure | blocked
   repository,
   observedAt,
-  source,          // github | go-hub-gateway | manual
+  source,          // github | go-hub-gateway
   identity: {
     baseBranch?,
     baseSha?,
@@ -173,58 +210,86 @@ Rules:
 3. A newer head invalidates prior diff/CI/merge-sensitive receipts according to existing CodeTask stale-head rules.
 4. Failure receipts are first-class truth and must be persistable without pretending the action succeeded.
 5. Large logs are not embedded wholesale. Failure Evidence stores concise excerpts plus run/job identity.
+6. Receipt IDs must be unique within a task and durable enough to deduplicate retry/replay.
 
-## 6. Initial Controller Action Set
+## 7. Operator Surface
 
-The first implementation slice covers the path that already exists and is required to unblock current work:
+The bridge introduces one explicit high-level Factory operation surface for GO rather than silently changing the meaning of every low-level GitHub tool.
 
-### 6.1 Inspect
+Initial MCP/operator contract:
+
+`go_hub_factory_action({ taskId, action, input, expectedRevision? })`
+
+`action` is a strict allowlisted enum for implemented Factory actions. `input` is validated per action; this is not an arbitrary GitHub proxy.
+
+The controller result returns:
+
+```js
+{
+  status,
+  receipt,
+  task,
+  revision,
+  nextAction,
+  reconciliation?
+}
+```
+
+Existing low-level lifecycle tools remain available as infrastructure/diagnostic tools. Using them directly may change GitHub reality, but **cannot claim Factory progress**. The next controller call must reconcile any external change before mutation.
+
+Browser Code uses the same controller endpoint/service contract rather than independently owning task transitions.
+
+## 8. Initial Controller Action Set
+
+The first implementation slices cover the path that already exists and is required to unblock current work.
+
+### 8.1 Inspect
 
 Input: repository + optional branch  
 Reality: existing inspect operation  
 Receipt binds: default branch, base SHA, selected branch, head SHA  
-Task effect: establish/reconcile inspect truth and branch context.
+Task effect: update inspect truth and branch context while remaining in an inspect/branch-selection state until an isolated work branch is selected.
 
-### 6.2 Create / Resume Branch
+### 8.2 Create / Resume Branch
 
 Input: branch + exact base SHA  
 Reality: existing create-branch or inspect/compare for resume  
 Receipt binds: branch + resulting head SHA  
 Task effect: `BRANCH_READY` only when identity matches.
 
-### 6.3 Write / Delete
+### 8.3 Write / Delete
 
 Input: path/content/expected blob SHA/work branch  
 Reality: existing branch-safe mutation  
 Receipt binds: operation commit SHA and resulting file blob SHA where applicable  
-Task effect: record current head/commit truth and invalidate stale downstream evidence.
+Task effect: set current head to the returned commit SHA and invalidate stale downstream evidence.
 
 Important current semantic: GitHub Contents API commits each successful mutation. The bridge must represent that truth honestly. It must not call the change merely "staged".
 
-### 6.4 Compare
+### 8.4 Compare
 
 Input: base + head  
 Reality: existing compare operation  
-Receipt binds: exact compared refs and changed-file evidence  
+Receipt binds: requested exact base/head identity plus changed-file evidence returned by GitHub  
 Task effect: create a deterministic diff fingerprint from normalized compare evidence and mark reviewed diff only from that receipt.
 
-### 6.5 Pull Request
+### 8.5 Pull Request
 
 Input: branch/base/title/body  
 Reality: existing open/update PR operation  
 Receipt binds: PR number, current head SHA, base SHA, mergeability where known  
 Task effect: `PR_OPEN` only when PR head matches active head.
 
-### 6.6 CI / Failure Evidence
+### 8.6 CI / Failure Evidence
 
 Input: exact head SHA; optional run ID for diagnosis  
-Reality: existing get-CI and newly deployed failure-evidence capability  
+Reality: existing get-CI and deployed failure-evidence capability  
 Receipt binds: head SHA, workflow/check IDs, failed jobs/steps/log excerpt  
 Task effect: `CI_RUNNING`, `CI_GREEN`, or `CI_FAILED`; diagnostic evidence is attached to the same task/run identity.
 
 This same Failure Evidence capability is reused later for deploy failures.
 
-## 7. Trusted Transition Rule
+## 9. Trusted Transition Rule
 
 For operational states covered by the bridge, the controller is the only path allowed to claim a successful operational transition.
 
@@ -237,27 +302,31 @@ Examples:
 
 The controller may call existing CodeTask transition functions, but it must derive the transition payload from the receipt rather than accept caller-supplied status objects.
 
-## 8. Persistence and Atomicity
+## 10. Persistence and Atomicity
 
 The controller must treat "external action succeeded, task persistence failed" as a real split-brain condition.
 
-Because GitHub side effects cannot be rolled back transactionally with local persistence, the bridge uses recovery-by-reconciliation rather than false atomicity.
+Because GitHub side effects cannot be rolled back transactionally with Durable Object storage, the bridge uses recovery-by-reconciliation rather than false atomicity.
 
 Required behavior:
 
-1. Perform the external action.
-2. Create the Reality Receipt.
-3. Apply task transition in memory.
-4. Persist task + latest receipt.
-5. Read back persisted task.
-6. If persistence/readback fails, return `RECONCILIATION_REQUIRED` with the receipt; do not report the Factory transition as complete.
-7. On resume, reconcile the stored snapshot with GitHub before the next mutating action.
+1. Load task at revision N.
+2. Reconcile relevant external truth.
+3. Perform the external action.
+4. Create the Reality Receipt.
+5. Apply task transition in memory.
+6. Persist task + receipt as revision N+1 in the task Durable Object.
+7. Read back/confirm revision N+1.
+8. If persistence/confirmation fails, return `RECONCILIATION_REQUIRED` with the receipt; do not report the Factory transition as complete.
+9. On resume, reconcile stored state with GitHub before the next mutating action.
 
-The receipt is therefore the recovery anchor when a side effect succeeds but local task persistence does not.
+`expectedRevision`, when provided, protects callers from acting on a stale task projection. Durable Object serialization protects concurrent writes inside one task authority.
 
-## 9. Reconciliation Contract
+The receipt is the recovery anchor when a side effect succeeds but local task persistence does not.
 
-Before resuming a persisted task that is beyond simple inspection, the controller must refresh relevant GitHub truth.
+## 11. Reconciliation Contract
+
+Before resuming a persisted task that is beyond simple inspection, the controller refreshes relevant GitHub truth.
 
 Minimum checks by stage:
 
@@ -271,33 +340,33 @@ Outcomes:
 - `MATCH` — continue.
 - `ADVANCED_EXTERNALLY` — update task from observed Reality and invalidate stale evidence.
 - `CONFLICT` — record blocker and require explicit resolution.
-- `MISSING` — fail closed with exact missing resource evidence.
+- `MISSING` — fail closed with exact missing-resource evidence.
 
 Local cache or chat memory must never override GitHub reality.
 
-## 10. QC Trust Boundary
+## 12. QC Trust Boundary
 
 This design does not yet redesign all QC modules, but the bridge establishes the rule required for the following hardening slice:
 
 > Operational evidence used by Piece QC, Assembly QC, Product QC, or Verification Scanner must come from a trusted receipt or an explicitly marked manual evidence source.
 
-The future QC hardening step will remove caller-controlled PASS verdicts by making the evaluator output canonical at transition boundaries.
+The future QC hardening step will remove caller-controlled PASS verdicts by making evaluator output canonical at transition boundaries.
 
-That is intentionally a separate slice so this bridge does not become a giant rewrite.
+That remains a separate slice so this bridge does not become a giant rewrite.
 
-## 11. Failure Semantics
+## 13. Failure Semantics
 
 The bridge must distinguish:
 
 - `ACTION_FAILED` — external operation returned failure.
 - `IDENTITY_MISMATCH` — returned reality does not match the active task identity.
-- `STALE_TASK` — task snapshot is behind observed GitHub truth.
+- `STALE_TASK` — caller/task projection is behind observed GitHub or server revision truth.
 - `RECONCILIATION_REQUIRED` — external side effect happened but task persistence/transition did not complete safely.
 - `BLOCKED` — permission/policy/authority prevented the action.
 
 No failure mode may be converted to success merely because a side effect partially occurred.
 
-## 12. Audit Contract
+## 14. Audit Contract
 
 Every controller action appends one compact audit event containing:
 
@@ -305,13 +374,14 @@ Every controller action appends one compact audit event containing:
 - receipt ID,
 - prior task state,
 - resulting task state,
+- prior/resulting revision,
 - relevant SHA/run/PR identity,
 - success/failure classification,
 - timestamp.
 
 Audit events summarize identity and outcome; they do not duplicate full logs.
 
-## 13. Integration with GO City
+## 15. Integration with GO City
 
 The Factory Controller is internal to the Factory destination.
 
@@ -335,16 +405,17 @@ Heimdall only evaluates exit readiness later.
 
 MIMIR may provide routing/information evidence but does not own controller transitions.
 
-## 14. Security and Authority
+## 16. Security and Authority
 
 - Existing owner/repository allowlist remains in force.
 - Browser never receives GitHub credentials.
 - Default-branch routine mutation remains blocked.
 - Controller does not widen permissions beyond the underlying lifecycle method.
 - Destructive actions remain governed by existing explicit policy/tool annotations.
-- Secrets are never persisted in receipts or task snapshots.
+- Secrets are never persisted in receipts, Durable Objects, or task snapshots.
+- Factory task IDs are owner-scoped and must not allow cross-owner lookup.
 
-## 15. Testing Strategy
+## 17. Testing Strategy
 
 TDD is required.
 
@@ -355,50 +426,64 @@ Required layers:
    - stale/mismatched receipt fails closed,
    - failure receipt does not advance success state.
 
-2. **Persistence/reconciliation tests**
+2. **Durable authority tests**
+   - revisions serialize correctly,
+   - stale expected revision is rejected,
+   - no secret-bearing fields are persisted.
+
+3. **Persistence/reconciliation tests**
    - successful side effect + failed save returns `RECONCILIATION_REQUIRED`,
    - resume detects external head advancement,
-   - stale CI/diff evidence is invalidated.
+   - stale CI/diff evidence is invalidated,
+   - legacy local snapshot cannot overwrite server/GitHub truth.
 
-3. **Workspace adapter contract tests**
+4. **Workspace adapter contract tests**
    - controller uses existing methods; no duplicate GitHub implementation.
 
-4. **Integration test**
-   - `inspect -> branch -> write -> compare -> PR -> CI` advances one CodeTask through receipts while preserving exact repository/head identity.
+5. **MCP/controller contract tests**
+   - strict action allowlist,
+   - task ID and revision binding,
+   - low-level tool activity is reconciled before the next controller mutation.
 
-5. **Regression gate**
+6. **Integration test**
+   - `inspect -> branch -> write -> compare -> PR -> CI` advances one server-authoritative CodeTask through receipts while preserving exact repository/head identity.
+
+7. **Regression gate**
    - full `npm run deploy:gate` on exact PR head.
 
-## 16. Delivery Slices
+## 18. Delivery Slices
 
-### Slice A — Controller + Receipt Core
+### Slice A — Durable Task Authority + Receipt Core
 
+- add the one-task-per-Durable-Object storage seam,
 - introduce Factory Controller module,
 - normalize receipts,
-- bind inspect/create-branch/write/compare,
-- persist updated CodeTask,
-- prove reconciliation-required behavior.
+- bind inspect/create-branch,
+- prove revision and reconciliation-required behavior.
 
-### Slice B — PR + CI + Failure Evidence
+### Slice B — Mutation + Compare
+
+- bind write/delete receipts,
+- treat returned commit SHA as new task head,
+- bind compare evidence and deterministic diff fingerprint,
+- prove stale downstream evidence invalidation.
+
+### Slice C — PR + CI + Failure Evidence
 
 - bind PR receipts,
 - bind exact-head CI receipts,
 - attach failure evidence to the same run/task identity,
 - prove stale-head invalidation.
 
-### Slice C — Reconciliation
+### Slice D — Reconciliation + Operator Wiring
 
 - refresh branch/PR/CI truth on resume,
 - detect external advancement/conflict/missing resources,
-- fail closed before mutation when snapshot is stale.
+- expose strict `go_hub_factory_action`,
+- wire browser Code to the same controller authority,
+- Workbench reads the resulting authoritative task snapshot.
 
-### Slice D — Operator Wiring
-
-- wire the Code capability/operator path to the controller rather than exposing raw lifecycle mutation as the primary Factory path,
-- Workbench reads the resulting authoritative task snapshot,
-- raw low-level tools may remain available as infrastructure but cannot silently claim Factory progress.
-
-## 17. Non-Goals
+## 19. Non-Goals
 
 This design does not yet:
 
@@ -411,26 +496,29 @@ This design does not yet:
 - implement operational rollback,
 - implement backup/restore/migration drills,
 - create Heimdall,
-- redesign the Factory menu/UI.
+- redesign the Factory menu/UI,
+- create a generic distributed workflow framework.
 
 Those remain explicit later slices from the completed end-to-end audit.
 
-## 18. Success Criteria
+## 20. Success Criteria
 
 The Factory Controller Bridge is complete when all are true:
 
-1. A real operational action produces a normalized immutable receipt.
-2. The receipt is identity-bound to repository/branch/SHA/run/PR as applicable.
-3. CodeTask advances from controller-derived reality rather than caller-declared operational success.
-4. Trusted evidence is traceable to the receipt that produced it.
-5. A head change invalidates stale downstream evidence automatically.
-6. Persistence failure after a successful external side effect returns `RECONCILIATION_REQUIRED` with enough evidence to recover.
-7. Resume reconciles persisted state against GitHub before the next mutation.
-8. The integration path `inspect -> branch -> write -> compare -> PR -> CI` operates through one task truth set.
-9. Existing GitHub workspace/lifecycle and QC modules are reused rather than replaced.
-10. Full exact-head Safety Gate is green before merge.
+1. Browser and MCP Factory operations use one server-side task authority.
+2. A real operational action produces a normalized immutable receipt.
+3. The receipt is identity-bound to repository/branch/SHA/run/PR as applicable.
+4. CodeTask advances from controller-derived reality rather than caller-declared operational success.
+5. Trusted evidence is traceable to the receipt that produced it.
+6. A head change invalidates stale downstream evidence automatically.
+7. Persistence failure after a successful external side effect returns `RECONCILIATION_REQUIRED` with enough evidence to recover.
+8. Resume reconciles persisted state against GitHub before the next mutation.
+9. The integration path `inspect -> branch -> write -> compare -> PR -> CI` operates through one task truth set.
+10. Existing GitHub workspace/lifecycle and QC modules are reused rather than replaced.
+11. Raw low-level tool actions cannot silently advance Factory truth.
+12. Full exact-head Safety Gate is green before merge.
 
-## 19. Next Step After Spec Approval
+## 21. Next Step After Spec Approval
 
 After owner review of this written specification, create an implementation plan using the existing Factory sequence and TDD:
 
