@@ -32,6 +32,20 @@ function memoryState() {
   };
 }
 
+async function readyController(overrides = {}) {
+  const { createFactoryController } = await import(controllerUrl + "?ready=" + Date.now() + Math.random());
+  const state = overrides.state || memoryState();
+  const lifecycle = {
+    inspect: async () => jsonResponse({ repository, defaultBranch: "main", branch: "main", baseSha: "base-1", headSha: "base-1", tree: [] }),
+    createBranch: async () => jsonResponse({ branch: "feature-a", headSha: "base-1" }, 201),
+    ...overrides.lifecycle,
+  };
+  const controller = createFactoryController({ lifecycle, state, now: () => "2026-09-15T00:00:00.000Z", createId: () => "receipt-" + Math.random() });
+  await controller.execute({ taskId: "task-1", action: "inspect", expectedRevision: 0, input: { repository, intent: "Factory bridge", branch: "main" } });
+  await controller.execute({ taskId: "task-1", action: "create_branch", expectedRevision: 1, input: { name: "feature-a", fromSha: "base-1" } });
+  return { controller, state, lifecycle };
+}
+
 test("controller binds inspect and branch reality to one task", async () => {
   const { createFactoryController } = await import(controllerUrl + "?controller=" + Date.now());
   const lifecycle = {
@@ -91,4 +105,75 @@ test("controller fails closed when branch identity mismatches", async () => {
     input: { name: "feature-a", fromSha: "base-1" },
   }), /IDENTITY_MISMATCH/);
   assert.equal((await state.load()).task.state, "INSPECTING");
+});
+
+test("write receipt advances task head from the actual commit", async () => {
+  const { controller } = await readyController({
+    lifecycle: {
+      putFile: async () => jsonResponse({ ok: true, commit: "commit-2", sha: "blob-2" }),
+    },
+  });
+  const result = await controller.execute({
+    taskId: "task-1",
+    action: "write",
+    expectedRevision: 2,
+    input: { path: "src/app.js", content: "next", expectedSha: "blob-1" },
+  });
+  assert.equal(result.receipt.identity.workBranch, "feature-a");
+  assert.equal(result.receipt.identity.headSha, "commit-2");
+  assert.equal(result.task.headSha, "commit-2");
+  assert.equal(result.task.diffFingerprint, null);
+  assert.equal(result.task.ci, null);
+});
+
+test("compare derives reviewed diff fingerprint from Reality", async () => {
+  const { controller } = await readyController({
+    lifecycle: {
+      compare: async () => jsonResponse({
+        status: "ahead", aheadBy: 1, behindBy: 0,
+        files: [{ path: "src/app.js", status: "modified", additions: 2, deletions: 1, patch: "@@" }],
+      }),
+    },
+  });
+  const result = await controller.execute({
+    taskId: "task-1",
+    action: "compare",
+    expectedRevision: 2,
+    input: {},
+  });
+  assert.equal(result.task.state, "DIFF_REVIEWED");
+  assert.equal(result.task.diffFingerprint, result.receipt.evidence.diffFingerprint);
+  assert.match(result.task.diffFingerprint, /src\/app\.js/);
+});
+
+test("successful side effect plus failed save returns reconciliation required", async () => {
+  const base = memoryState();
+  const { createFactoryController } = await import(controllerUrl + "?split=" + Date.now());
+  const lifecycle = {
+    inspect: async () => jsonResponse({ repository, defaultBranch: "main", branch: "main", baseSha: "base-1", headSha: "base-1", tree: [] }),
+    createBranch: async () => jsonResponse({ branch: "feature-a", headSha: "base-1" }, 201),
+    putFile: async () => jsonResponse({ ok: true, commit: "commit-2", sha: "blob-2" }),
+  };
+  let saves = 0;
+  const state = {
+    load: () => base.load(),
+    async save(input) {
+      saves += 1;
+      if (saves === 3) throw new Error("storage unavailable");
+      return base.save(input);
+    },
+  };
+  const controller = createFactoryController({ lifecycle, state, now: () => "now", createId: () => "r-" + saves });
+  await controller.execute({ taskId: "task-1", action: "inspect", expectedRevision: 0, input: { repository, intent: "x", branch: "main" } });
+  await controller.execute({ taskId: "task-1", action: "create_branch", expectedRevision: 1, input: { name: "feature-a", fromSha: "base-1" } });
+  const result = await controller.execute({
+    taskId: "task-1", action: "write", expectedRevision: 2,
+    input: { path: "src/app.js", content: "next", expectedSha: "blob-1" },
+  });
+  assert.equal(result.status, "RECONCILIATION_REQUIRED");
+  assert.equal(result.receipt.status, "success");
+  assert.equal(result.receipt.identity.headSha, "commit-2");
+  assert.equal(result.task, null);
+  assert.equal(result.revision, 2);
+  assert.equal(result.nextAction, "reconcile");
 });
