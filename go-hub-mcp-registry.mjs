@@ -8,6 +8,8 @@ function schema(properties, required) {
 const definitions = [
   ["go_hub_inspect_repository", "Inspect repository truth and recursive tree at an explicit branch.", "inspect",
     schema({ repository: string, branch: string }, ["repository"]), { readOnlyHint: true, destructiveHint: false }],
+  ["go_hub_list_repositories", "List repositories owned by the configured GO Hub owner that the current GitHub token can see.", "listRepositories",
+    schema({}, []), { readOnlyHint: true, destructiveHint: false }],
   ["go_hub_read_file", "Read one UTF-8 repository file at an explicit ref.", "readFile",
     schema({ repository: string, path: string, ref: string }, ["repository", "path"]), { readOnlyHint: true, destructiveHint: false }],
   ["go_hub_create_branch", "Create a non-default task branch from an exact commit SHA.", "createBranch",
