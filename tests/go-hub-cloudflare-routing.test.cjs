@@ -14,6 +14,9 @@ test("GO Hub API routes run the edge Worker before SPA asset fallback", () => {
   const config = loadWranglerConfig();
   assert.equal(config.main, "go-hub-edge-worker.mjs");
   assert.deepEqual(config.browser, { binding: "BROWSER" });
+  assert.deepEqual(config.vars?.BROWSER_POLICY, {
+    allowedHostnames: ["gumroad.com", "*.gumroad.com"],
+  });
   assert.deepEqual(config.assets?.run_worker_first, [
     "/hub/api/browser/*",
     "/hub/api/github-workspace/*",
