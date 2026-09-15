@@ -148,15 +148,16 @@ export function requestFactorySlot(current, request = {}) {
     });
   }
 
+  const hasWaitingQueue = target.queue.length > 0;
   const job = {
     repository,
     slot,
     goId,
     jobId,
-    status: target.active ? "QUEUED" : "ACTIVE",
+    status: target.active || hasWaitingQueue ? "QUEUED" : "ACTIVE",
     risk: request.risk ? clone(request.risk) : null,
   };
-  if (!target.active) {
+  if (!target.active && !hasWaitingQueue) {
     target.active = job;
     return Object.freeze({ state: Object.freeze(state), outcome: Object.freeze({ status: "ACTIVE" }) });
   }
