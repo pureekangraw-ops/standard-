@@ -54,6 +54,59 @@ export function screenFactoryIntent({ kind, blueprint = null } = {}) {
   return Object.freeze({ decision: "PROCEED", reason: "FACTORY_WORK_ALLOWED" });
 }
 
+export function evaluateQueueRisk({
+  conflict = false,
+  overlappingPaths = [],
+  dependencyRisks = [],
+  staleBase = false,
+} = {}) {
+  const reasons = [];
+  if (conflict) reasons.push("CONFLICT");
+  if (Array.isArray(dependencyRisks) && dependencyRisks.length) reasons.push("DEPENDENCY_RISK");
+  if (reasons.length) return Object.freeze({ status: "BLOCKED", reasons: Object.freeze(reasons) });
+  if (Array.isArray(overlappingPaths) && overlappingPaths.length) reasons.push("PATH_OVERLAP");
+  if (staleBase) reasons.push("STALE_PROJECTION");
+  return Object.freeze({
+    status: reasons.length ? "RECHECK" : "SAFE",
+    reasons: Object.freeze(reasons),
+  });
+}
+
+function wait(reason) {
+  return Object.freeze({ decision: "WAIT", reasons: Object.freeze([reason]) });
+}
+
+export function evaluateFactoryAdmission(input = {}) {
+  const slot = assertSlot(input.slot);
+  if (slot === "assembly") {
+    const readyGate = input.readyGate;
+    const pieceHead = String(input.piece?.headSha || "");
+    if (readyGate?.status !== "READY_FOR_ASSEMBLY" || !pieceHead) return wait("READY_GATE_REQUIRED");
+    if (String(readyGate.headSha || "") !== pieceHead) return wait("READY_GATE_STALE_HEAD");
+    return Object.freeze({ decision: "ADMIT", reasons: Object.freeze([]) });
+  }
+
+  const assemblyHead = String(input.assembly?.integrationHeadSha || "");
+  if (input.assembly?.status !== "ASSEMBLED" || !assemblyHead) return wait("ASSEMBLY_REQUIRED");
+  if (input.assemblyQc?.status !== "pass") return wait("ASSEMBLY_QC_REQUIRED");
+  if (String(input.assemblyQc.checkedHeadSha || "") !== assemblyHead) return wait("ASSEMBLY_QC_STALE_HEAD");
+
+  const prHead = String(input.pullRequest?.headSha || "");
+  if (!input.pullRequest?.number || !prHead) return wait("PULL_REQUEST_REQUIRED");
+  if (input.ci?.status !== "success") return wait("CI_GREEN_REQUIRED");
+  if (String(input.ci.headSha || "") !== prHead) return wait("CI_STALE_HEAD");
+
+  const risk = input.risk || { status: "RECHECK", reasons: ["QUEUE_RISK_REQUIRED"] };
+  const riskReasons = Array.isArray(risk.reasons) ? risk.reasons.map(String) : [];
+  if (risk.status === "BLOCKED") {
+    return Object.freeze({ decision: "BLOCK", reasons: Object.freeze(riskReasons.length ? riskReasons : ["QUEUE_RISK_BLOCKED"]) });
+  }
+  if (risk.status !== "SAFE") {
+    return Object.freeze({ decision: "WAIT", reasons: Object.freeze(riskReasons.length ? riskReasons : ["QUEUE_RISK_RECHECK"]) });
+  }
+  return Object.freeze({ decision: "ADMIT", reasons: Object.freeze([]) });
+}
+
 export function requestFactorySlot(current, request = {}) {
   const state = clone(current || createHephaestusState());
   const repository = required(request.repository, "repository");
