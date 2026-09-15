@@ -16,6 +16,33 @@ function sanitizeCategory(errors) {
   return typeof code === "string" && code ? code : "GRAPHQL_ERROR";
 }
 
+function normalizeProject(project) {
+  return {
+    id: project.id,
+    name: project.name,
+    status: project.status?.name || null,
+    url: project.url || null,
+  };
+}
+
+function normalizeIssue(issue) {
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    description: issue.description ?? null,
+    status: issue.state ? { id: issue.state.id, name: issue.state.name } : null,
+    priority: issue.priority,
+    project: issue.project ? { id: issue.project.id, name: issue.project.name } : null,
+    url: issue.url || null,
+    updatedAt: issue.updatedAt || null,
+  };
+}
+
+function issueInScope(issue, teamId) {
+  return String(issue?.team?.id || "") === String(teamId || "");
+}
+
 export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
   async function request(query, variables = {}) {
     if (!configured(token, teamId)) return { response: json({ code: "LINEAR_NOT_CONFIGURED" }, 503) };
@@ -59,14 +86,31 @@ export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
       }`, { teamId: String(teamId || "") });
       if (result.response) return result.response;
       const nodes = result.data?.team?.projects?.nodes || [];
-      return json({ projects: nodes.map(project => ({
-        id: project.id,
-        name: project.name,
-        status: project.status?.name || null,
-        url: project.url || null,
-      })) });
+      return json({ projects: nodes.map(normalizeProject) });
     },
-    async getIssue() { return json({ code: "LINEAR_INVALID_INPUT" }, 400); },
+    async getIssue(input = {}) {
+      const identifier = typeof input?.identifier === "string" ? input.identifier.trim() : "";
+      if (!identifier) return json({ code: "LINEAR_INVALID_INPUT" }, 400);
+      const result = await request(`query HubIssue($identifier: String!) {
+        issue(id: $identifier) {
+          id
+          identifier
+          title
+          description
+          url
+          updatedAt
+          priority
+          state { id name }
+          team { id }
+          project { id name }
+        }
+      }`, { identifier });
+      if (result.response) return result.response;
+      const issue = result.data?.issue;
+      if (!issue) return json({ code: "LINEAR_ISSUE_NOT_FOUND" }, 404);
+      if (!issueInScope(issue, teamId)) return json({ code: "LINEAR_TEAM_SCOPE_VIOLATION" }, 403);
+      return json({ issue: normalizeIssue(issue) });
+    },
     async createIssue() { return json({ code: "LINEAR_INVALID_INPUT" }, 400); },
     async updateIssue() { return json({ code: "LINEAR_INVALID_INPUT" }, 400); },
   });
