@@ -24,6 +24,10 @@ function allowedHostnamesFromPolicy(policy) {
   return [];
 }
 
+function isBrowserApiPath(pathname) {
+  return pathname === BROWSER_API_ROOT || pathname.startsWith(`${BROWSER_API_ROOT}/`);
+}
+
 export function createEdgeWorkerHandler({ delegate = githubWorker } = {}) {
   if (!delegate || typeof delegate.fetch !== "function") {
     throw new Error("edge delegate fetch is required");
@@ -32,7 +36,7 @@ export function createEdgeWorkerHandler({ delegate = githubWorker } = {}) {
   return Object.freeze({
     async fetch(request, env) {
       const url = new URL(request.url);
-      if (!url.pathname.startsWith(BROWSER_API_ROOT)) {
+      if (!isBrowserApiPath(url.pathname)) {
         return delegate.fetch(request, env);
       }
 
