@@ -56,3 +56,122 @@ test("GraphQL errors are sanitized and do not echo authorization", async () => {
   assert.equal(payload.category, "BAD_USER_INPUT");
   assert.doesNotMatch(JSON.stringify(payload), /secret-token/);
 });
+
+test("Linear service normalizes team project listing", async () => {
+  const { createLinearService } = await loadService("projects");
+  const fetchImpl = async () => new Response(JSON.stringify({
+    data: {
+      team: {
+        id: "team-a",
+        projects: {
+          nodes: [{
+            id: "project-a",
+            name: "Alpha",
+            url: "https://linear.app/x",
+            status: { name: "In Progress" },
+          }],
+        },
+      },
+    },
+  }), { headers: { "content-type": "application/json" } });
+  const service = createLinearService({ fetchImpl, token: "token-a", teamId: "team-a" });
+  const response = await service.listProjects();
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    projects: [{
+      id: "project-a",
+      name: "Alpha",
+      status: "In Progress",
+      url: "https://linear.app/x",
+    }],
+  });
+});
+
+test("Linear service returns normalized in-team issue", async () => {
+  const { createLinearService } = await loadService("issue-read");
+  let capturedBody;
+  const fetchImpl = async (_url, init) => {
+    capturedBody = JSON.parse(init.body);
+    return new Response(JSON.stringify({
+      data: {
+        issue: {
+          id: "issue-a",
+          identifier: "PUR-5",
+          title: "Bridge",
+          description: "desc",
+          url: "https://linear.app/x/issue/PUR-5",
+          updatedAt: "2026-09-16T00:00:00.000Z",
+          priority: 2,
+          state: { id: "state-a", name: "In Progress" },
+          team: { id: "team-a" },
+          project: { id: "project-a", name: "Alpha" },
+        },
+      },
+    }), { headers: { "content-type": "application/json" } });
+  };
+  const service = createLinearService({ fetchImpl, token: "token-a", teamId: "team-a" });
+  const response = await service.getIssue({ identifier: "PUR-5" });
+  assert.equal(response.status, 200);
+  assert.equal(capturedBody.variables.identifier, "PUR-5");
+  assert.deepEqual(await response.json(), {
+    issue: {
+      id: "issue-a",
+      identifier: "PUR-5",
+      title: "Bridge",
+      description: "desc",
+      status: { id: "state-a", name: "In Progress" },
+      priority: 2,
+      project: { id: "project-a", name: "Alpha" },
+      url: "https://linear.app/x/issue/PUR-5",
+      updatedAt: "2026-09-16T00:00:00.000Z",
+    },
+  });
+});
+
+test("Linear service rejects issue outside configured team", async () => {
+  const { createLinearService } = await loadService("scope");
+  const fetchImpl = async () => new Response(JSON.stringify({
+    data: {
+      issue: {
+        id: "issue-b",
+        identifier: "OTHER-1",
+        title: "Other",
+        description: null,
+        url: "https://linear.app/x/issue/OTHER-1",
+        updatedAt: "2026-09-16T00:00:00.000Z",
+        priority: 0,
+        state: { id: "state-b", name: "Todo" },
+        team: { id: "team-b" },
+        project: null,
+      },
+    },
+  }), { headers: { "content-type": "application/json" } });
+  const service = createLinearService({ fetchImpl, token: "token-a", teamId: "team-a" });
+  const response = await service.getIssue({ identifier: "OTHER-1" });
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { code: "LINEAR_TEAM_SCOPE_VIOLATION" });
+});
+
+test("Linear service returns not found for missing issue", async () => {
+  const { createLinearService } = await loadService("not-found");
+  const fetchImpl = async () => new Response(JSON.stringify({ data: { issue: null } }), {
+    headers: { "content-type": "application/json" },
+  });
+  const service = createLinearService({ fetchImpl, token: "token-a", teamId: "team-a" });
+  const response = await service.getIssue({ identifier: "PUR-404" });
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { code: "LINEAR_ISSUE_NOT_FOUND" });
+});
+
+test("Linear service validates issue identifier before upstream call", async () => {
+  const { createLinearService } = await loadService("invalid-id");
+  let calls = 0;
+  const fetchImpl = async () => { calls += 1; throw new Error("must not call upstream"); };
+  const service = createLinearService({ fetchImpl, token: "token-a", teamId: "team-a" });
+  for (const input of [undefined, {}, { identifier: "" }, { identifier: "   " }]) {
+    const response = await service.getIssue(input);
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { code: "LINEAR_INVALID_INPUT" });
+  }
+  assert.equal(calls, 0);
+});
