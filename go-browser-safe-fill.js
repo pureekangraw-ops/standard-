@@ -69,7 +69,9 @@ export function guardAssignment(field, profile) {
   if (field.hidden === true || field.disabled === true || field.readOnly === true) {
     return { allowed: false, code: "FIELD_READONLY_BLOCKED" };
   }
-  if (field.signature?.contenteditable === true) {
+  if (field.signature?.contenteditable === true &&
+      (!Array.isArray(profile.writableContenteditableSemantics) ||
+       !profile.writableContenteditableSemantics.includes(field.semanticRole))) {
     return { allowed: false, code: "UNSUPPORTED_FIELD_KIND" };
   }
   const inputType = String(field.signature?.inputType || "").trim().toLowerCase();
@@ -132,6 +134,7 @@ function normalizeValue(valueKind, value) {
 
 function readElementValue(element, field) {
   if (field.valueKind === "boolean") return Boolean(element?.checked);
+  if (field.signature?.contenteditable === true) return String(element?.textContent || "");
   return String(element?.value == null ? "" : element.value);
 }
 
@@ -146,6 +149,10 @@ function setSimpleValue(element, value) {
 function writeElementValue(element, field, value) {
   if (field.valueKind === "boolean") {
     element.checked = Boolean(value);
+    return;
+  }
+  if (field.signature?.contenteditable === true) {
+    element.textContent = String(value == null ? "" : value);
     return;
   }
   setSimpleValue(element, value);
