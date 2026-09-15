@@ -2,6 +2,7 @@ import { scanLocalDocument } from "./go-browser-local-reader.js";
 
 const CANDIDATE_SELECTOR = 'input, textarea, select, [contenteditable="true"]';
 const FILL_ASSIGNMENT_KEYS = new Set(["fieldId", "value", "valueKind"]);
+const BLOCKED_INPUT_TYPES = new Set(["file", "submit", "button", "reset", "image"]);
 const MIN_RESOLUTION_SCORE = 7;
 const MIN_RESOLUTION_MARGIN = 2;
 
@@ -70,6 +71,10 @@ export function guardAssignment(field, profile) {
   }
   if (field.signature?.contenteditable === true) {
     return { allowed: false, code: "UNSUPPORTED_FIELD_KIND" };
+  }
+  const inputType = String(field.signature?.inputType || "").trim().toLowerCase();
+  if (BLOCKED_INPUT_TYPES.has(inputType)) {
+    return { allowed: false, code: "FIELD_ACTION_BLOCKED" };
   }
   const actionEvidence = [field.name, field.semanticRole, field.signature?.accessibleName]
     .filter(Boolean)
