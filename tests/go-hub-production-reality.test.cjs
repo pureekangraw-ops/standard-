@@ -84,6 +84,7 @@ test("live edge exposes a read-only deployment SHA reality endpoint without dele
     { GOHUB_DEPLOY_SHA: "exact-deploy-sha" },
   );
   assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") || "", /application\/json/);
   assert.deepEqual(await response.json(), {
     product: "GO Hub",
     deploymentSha: "exact-deploy-sha",
