@@ -49,6 +49,36 @@ export function fitWork({ context = {}, reality = {}, lens = {}, destination = {
   });
 }
 
+export function fitFromInformation({ context = {}, reality = {}, lens = {}, information = {} } = {}) {
+  const status = String(information.status || "").toUpperCase();
+  const route = String(information.route || "").trim();
+  if (status !== "PASS" || !route) {
+    return Object.freeze({
+      gate: "WAIT",
+      reason: String(information.waitReason || "NO_USABLE_ROUTE"),
+      route: null,
+      informationSource: "mimir",
+      evidence: information.evidence ?? null,
+      fingerprint: fingerprint(context, reality),
+    });
+  }
+
+  const destinationId = Array.isArray(information.records) && information.records.length
+    ? String(information.records[0]?.id || "").trim() || null
+    : null;
+  const fitted = fitWork({
+    context,
+    reality,
+    lens,
+    destination: { id: destinationId, route },
+  });
+  return Object.freeze({
+    ...fitted,
+    informationSource: "mimir",
+    evidence: information.evidence ?? null,
+  });
+}
+
 export function checkRound(fit, { context = {}, reality = {} } = {}) {
   const current = fingerprint(context, reality);
   return Object.freeze({
