@@ -40,8 +40,44 @@ function heimdallDecision(heimdall = {}) {
   };
 }
 
+function required(value, label) {
+  const text = String(value || "").trim();
+  if (!text) throw new Error(`${label} is required`);
+  return text;
+}
+
+function snapshot(value) {
+  const copy = structuredClone(value);
+  const freeze = current => {
+    if (current && typeof current === "object" && !Object.isFrozen(current)) {
+      Object.values(current).forEach(freeze);
+      Object.freeze(current);
+    }
+    return current;
+  };
+  return freeze(copy);
+}
+
 export function createCityRoute() {
   return CITY_ROUTE;
+}
+
+export function crossBifrost(packet = {}, { direction = "" } = {}) {
+  const bridgeDirection = required(direction, "Bifrost direction").toUpperCase();
+  if (!["CHAT_TO_HUB", "HUB_TO_CHAT"].includes(bridgeDirection)) {
+    throw new Error("unsupported Bifrost direction");
+  }
+  const workId = required(packet.workId, "Work ID");
+  const checkpointId = required(packet.checkpointId, "Checkpoint ID");
+  const returnAddress = required(packet.returnAddress, "Return Address");
+  if (checkpointId !== returnAddress) {
+    throw new Error("Bifrost packet Return Address does not match Checkpoint ID");
+  }
+  return Object.freeze({
+    bridge: "bifrost",
+    direction: bridgeDirection,
+    packet: snapshot({ ...packet, workId, checkpointId, returnAddress }),
+  });
 }
 
 export function enterWorkLoop(fit = {}) {
