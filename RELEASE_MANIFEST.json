@@ -57,6 +57,9 @@
       "path": "go-hub-centre.js"
     },
     {
+      "path": "go-hub-factory-return.js"
+    },
+    {
       "path": "go-hub-code-module.js"
     },
     {
