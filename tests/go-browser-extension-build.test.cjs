@@ -69,3 +69,18 @@ test("build refuses output paths outside the repository temp/dist intent when om
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}\n${result.stdout}`, /BUILD_OUTPUT_REQUIRED/);
 });
+
+test("targeted GO Browser extension suite covers core reader, guard, and package boundaries", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  const command = String(pkg.scripts?.["test:go-browser-extension"] || "");
+  for (const required of [
+    "tests/go-browser-field-contract.test.cjs",
+    "tests/go-browser-local-reader.test.cjs",
+    "tests/go-browser-safe-fill.test.cjs",
+    "tests/go-browser-safe-fill-hardening.test.cjs",
+    "tests/go-browser-extension-boundary.test.cjs",
+    "tests/go-browser-extension-build.test.cjs",
+  ]) {
+    assert.equal(command.includes(required), true, `targeted suite missing ${required}`);
+  }
+});
