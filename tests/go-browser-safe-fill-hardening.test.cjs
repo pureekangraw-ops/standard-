@@ -116,6 +116,16 @@ test("contenteditable remains blocked until it has a dedicated safe write contra
   assert.deepEqual(guardAssignment(contenteditable, GUMROAD_PROFILE), { allowed: false, code: "UNSUPPORTED_FIELD_KIND" });
 });
 
+test("file and action input types are blocked by kind even when mislabeled as safe metadata", async () => {
+  const { guardAssignment, GUMROAD_PROFILE } = await load("blocked-kinds");
+  for (const inputType of ["file", "submit", "button", "reset", "image"]) {
+    const candidate = field({ signature: signature({ inputType }) });
+    const result = guardAssignment(candidate, GUMROAD_PROFILE);
+    assert.equal(result.allowed, false, `${inputType} must not be writable`);
+    assert.equal(["UNSUPPORTED_FIELD_KIND", "FIELD_ACTION_BLOCKED"].includes(result.code), true);
+  }
+});
+
 test("choice writer blocks values absent from current select options and writes nothing", async () => {
   const { GUMROAD_PROFILE, scanLocalDocument, buildFillPlan, executeFillPlan } = await load("choice");
   const select = fakeControl({ tagName: "SELECT", name: "category", ariaLabel: "Category", value: "Course", options: ["Course", "Digital Product"] });
