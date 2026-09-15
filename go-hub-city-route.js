@@ -33,6 +33,22 @@ export function createCityRoute() {
   return CITY_ROUTE;
 }
 
+export function enterWorkLoop(fit = {}) {
+  if (fit.gate !== "PASS") {
+    return Object.freeze({
+      destination: "optician",
+      via: "optician",
+      reason: "GATE_NOT_PASSED",
+    });
+  }
+  return Object.freeze({
+    destination: "go-work-loop",
+    via: "optician",
+    workRoute: String(fit.route || "") || null,
+    destinationId: String(fit.destinationId || "") || null,
+  });
+}
+
 export function routeInformation({ question = "", resumeAt = "go-work-loop" } = {}) {
   return Object.freeze({
     destination: "mimir",
