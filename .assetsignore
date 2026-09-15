@@ -12,6 +12,9 @@ node_modules/**
 !/go-hub-shell.js
 !/go-hub-runtime.js
 !/go-hub-centre.js
+!/go-hub-city-route.js
+!/go-hub-optician.js
+!/go-hub-factory-return.js
 !/go-hub-code-module.js
 !/go-hub-code-task.js
 !/go-hub-evidence-ledger.js
