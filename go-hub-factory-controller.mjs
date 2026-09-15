@@ -70,6 +70,104 @@ export function createFactoryController({ lifecycle, state, now = () => new Date
     }
   }
 
+  async function saveReconciliation({ revision, before, next, receipt, status, reconciliation }) {
+    const saved = await state.save({
+      expectedRevision: revision,
+      task: next.snapshot(),
+      receipt,
+      auditEvent: auditEvent({ action: "reconcile", receipt, before, after: next.snapshot(), at: now() }),
+    });
+    return {
+      status,
+      receipt,
+      task: saved.task,
+      revision: saved.revision,
+      nextAction: saved.task.nextAction,
+      reconciliation,
+    };
+  }
+
+  async function reconcileBeforeMutation(before, revision) {
+    if (!before.workBranch) return { status: "MATCH" };
+    const branchResponse = await lifecycle.inspect({ repository: before.repository, branch: before.workBranch });
+    const branch = await parseResponse(branchResponse);
+    if (!branch.ok) {
+      if (branch.status !== 404) throw new Error(`RECONCILIATION_FAILED:${branch.status}`);
+      const blocker = `work branch missing: ${before.workBranch}`;
+      const receipt = createRealityReceipt({
+        id: createId(), action: "reconcile", status: "failure", repository: before.repository,
+        observedAt: now(), source: "github",
+        identity: { baseBranch: before.baseBranch, baseSha: before.baseSha, workBranch: before.workBranch, headSha: before.headSha },
+        result: branch.payload,
+        evidence: { missing: `branch:${before.workBranch}` },
+      });
+      const next = createCodeTaskFromSnapshot(before).transition("BLOCKED", { blocker, headSha: before.headSha });
+      return saveReconciliation({
+        revision, before, next, receipt, status: "MISSING",
+        reconciliation: { status: "MISSING", resource: `branch:${before.workBranch}` },
+      });
+    }
+
+    const liveHead = branch.payload.headSha;
+    if (!liveHead) throw new Error("RECONCILIATION_FAILED:branch head missing");
+
+    if (before.pullRequest?.number && typeof lifecycle.getPullRequest === "function") {
+      const prResponse = await lifecycle.getPullRequest({ repository: before.repository, number: before.pullRequest.number });
+      const pr = await parseResponse(prResponse);
+      if (!pr.ok) {
+        if (pr.status !== 404) throw new Error(`RECONCILIATION_FAILED:${pr.status}`);
+        const blocker = `PR ${before.pullRequest.number} missing`;
+        const receipt = createRealityReceipt({
+          id: createId(), action: "reconcile", status: "failure", repository: before.repository,
+          observedAt: now(), source: "github",
+          identity: { workBranch: before.workBranch, headSha: liveHead, pullRequestNumber: before.pullRequest.number },
+          result: pr.payload,
+          evidence: { missing: `pr:${before.pullRequest.number}` },
+        });
+        const next = createCodeTaskFromSnapshot(before).transition("BLOCKED", { blocker, headSha: liveHead });
+        return saveReconciliation({
+          revision, before, next, receipt, status: "MISSING",
+          reconciliation: { status: "MISSING", resource: `pr:${before.pullRequest.number}` },
+        });
+      }
+      if (pr.payload.headBranch !== before.workBranch || pr.payload.baseBranch !== before.baseBranch || pr.payload.headSha !== liveHead) {
+        const blocker = `PR ${before.pullRequest.number} identity conflicts with live branch`;
+        const receipt = createRealityReceipt({
+          id: createId(), action: "reconcile", status: "failure", repository: before.repository,
+          observedAt: now(), source: "github",
+          identity: { baseBranch: pr.payload.baseBranch, workBranch: pr.payload.headBranch, headSha: pr.payload.headSha, pullRequestNumber: pr.payload.number },
+          result: pr.payload,
+          evidence: { observedBranchHeadSha: liveHead },
+        });
+        const next = createCodeTaskFromSnapshot(before).transition("CONFLICT", { blocker, headSha: before.headSha });
+        return saveReconciliation({
+          revision, before, next, receipt, status: "CONFLICT",
+          reconciliation: { status: "CONFLICT", observedHeadSha: liveHead, pullRequestHeadSha: pr.payload.headSha },
+        });
+      }
+    }
+
+    if (liveHead !== before.headSha) {
+      const receipt = createRealityReceipt({
+        id: createId(), action: "reconcile", status: "success", repository: before.repository,
+        observedAt: now(), source: "github",
+        identity: { baseBranch: before.baseBranch, baseSha: before.baseSha, workBranch: before.workBranch, headSha: liveHead, pullRequestNumber: before.pullRequest?.number || null },
+        result: branch.payload,
+        evidence: { priorHeadSha: before.headSha, observedHeadSha: liveHead },
+      });
+      const next = createCodeTaskFromSnapshot(before).transition("EDITING", {
+        headSha: liveHead,
+        touchedPaths: before.touchedPaths || [],
+      });
+      return saveReconciliation({
+        revision, before, next, receipt, status: "STALE_TASK",
+        reconciliation: { status: "ADVANCED_EXTERNALLY", observedHeadSha: liveHead },
+      });
+    }
+
+    return { status: "MATCH" };
+  }
+
   return Object.freeze({
     async execute({ taskId, action, input = {}, expectedRevision } = {}) {
       const id = String(taskId || "").trim();
@@ -137,6 +235,8 @@ export function createFactoryController({ lifecycle, state, now = () => new Date
         if (!before.workBranch) {
           return { status: "BLOCKED", receipt: null, task: before, revision: current.revision, nextAction: "edit" };
         }
+        const reconciled = await reconcileBeforeMutation(before, current.revision);
+        if (reconciled.status !== "MATCH") return reconciled;
         const method = action === "write" ? "putFile" : "deleteFile";
         const args = {
           repository: before.repository,
