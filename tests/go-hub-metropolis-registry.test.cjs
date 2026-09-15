@@ -48,6 +48,8 @@ test("MIMIR reads canonical METROPOLIS registry fields and returns a verified ro
   assert.equal(result.status, "PASS");
   assert.equal(result.waitReason, null);
   assert.equal(result.route, "GO → GO Catalog → GO Hub Factory");
+  assert.equal(result.records[0].id, "https://notion.test/factory-record");
+  assert.equal(result.records[0].registryId, "MIR-101");
   assert.equal(result.records[0].name, "GO Hub Factory");
   assert.equal(result.records[0].purpose, "Build and verify code product work packages");
   assert.equal(result.records[0].capability, "Design Production Piece QC Ready Gate Assembly Build Product QC");
