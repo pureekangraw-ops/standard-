@@ -53,3 +53,24 @@ test("MIMIR is city-wide information/navigation and does not become a work desti
     question: "where is Factory?",
   });
 });
+
+test("Optician entry joins the work loop while Factory stays a referenced building and exit remains Heimdall", async () => {
+  const { createCityRoute, enterWorkLoop, routeExit } = await load();
+  const city = createCityRoute();
+  const fitted = {
+    gate: "PASS",
+    lensReference: "lens://crystallize",
+    route: city.destinations.factory.route,
+    destinationId: "factory",
+  };
+
+  assert.deepEqual(enterWorkLoop(fitted), {
+    destination: "go-work-loop",
+    via: "optician",
+    workRoute: "destination://factory",
+    destinationId: "factory",
+  });
+  assert.equal(city.destinations.factory.role, "building-entry");
+  assert.equal(routeExit({ done: true, exitReady: false }).via, "heimdall");
+  assert.equal(routeExit({ done: true, exitReady: true }).via, "bifrost");
+});
