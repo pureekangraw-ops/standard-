@@ -4,7 +4,7 @@
 
 **Goal:** Put the existing Hephaestus Factory foreman into the live `@GO Hub Factory` MCP path with durable per-repository slot state and a hard pre-merge ownership gate.
 
-**Architecture:** Reuse the existing pure Hephaestus admission/queue/release modules inside a Cloudflare Durable Object keyed by repository. Add a thin Factory controller service used by the MCP Worker; add explicit MCP tools for slot request/release/state and require an active merge slot before the existing GitHub merge lifecycle operation may execute.
+**Architecture:** Reuse the existing pure Hephaestus admission/queue/release modules inside a Cloudflare Durable Object keyed by repository. Route live `/mcp` through a focused Factory MCP worker, expose one consolidated `go_hub_factory_foreman` tool for request/release/state, and require active Merge-slot ownership before the existing GitHub merge lifecycle operation may execute.
 
 **Tech Stack:** JavaScript ES modules, Node 22 `node:test`, Cloudflare Workers, SQLite-backed Durable Objects, MCP registry, GitHub REST lifecycle service.
 
@@ -12,14 +12,16 @@
 
 ## Global Constraints
 
+- Canonical flow: `Factory -> Hephaestus -> Assembly(1/repo) -> QC -> Merge(1/repo) -> Verify -> Hephaestus -> Optician`.
 - Existing Hephaestus policy modules remain the only admission/queue policy implementation.
 - GitHub remains authoritative for repository/PR/CI/merge truth.
 - Caller may supply evidence but may not supply a precomputed ADMIT decision.
-- Missing Foreman configuration fails closed for Factory slot operations and merge.
+- Missing Foreman configuration fails closed for Foreman operations and merge.
 - `go_hub_merge_pull_request` must verify matching active Merge-slot ownership before GitHub mutation.
 - Read/inspect/edit/branch/PR operations remain unchanged.
 - Durable state is keyed per repository and stored server-side.
-- TDD: failing test first, confirm RED in PR CI, then production code, then confirm GREEN.
+- Merge public commands before multiplying them: one Foreman tool handles request/release/state.
+- TDD: failing test first, confirm RED, minimal implementation, then exact-head GREEN.
 
 ---
 
@@ -27,84 +29,81 @@
 
 **Files:**
 - Create: `tests/go-hub-factory-controller.test.cjs`
+- Create: `tests/go-hub-factory-mcp-edge.test.cjs`
 - Modify: `tests/go-hub-mcp-registry.test.cjs`
-- Modify: `tests/go-hub-mcp-worker.test.cjs`
 
 **Interfaces:**
-- Expected future `createFactoryControllerService({ namespace })`.
-- Expected future MCP tools: `go_hub_factory_request_slot`, `go_hub_factory_release_slot`, `go_hub_factory_get_state`.
-- Existing `go_hub_merge_pull_request` gains required `goId` and `jobId` and must fail before lifecycle merge if slot ownership is absent.
+- Expected `HephaestusForeman` and `createFactoryControllerService({ namespace })`.
+- Expected MCP tool: `go_hub_factory_foreman` with `request|release|state` action.
+- Existing `go_hub_merge_pull_request` gains required `goId` and `jobId`.
 
-- [ ] **Step 1: Write controller tests** proving persisted repository state, FIFO slot ownership, server-side admission evaluation, and fail-closed missing namespace.
-- [ ] **Step 2: Write registry tests** proving the three Factory tools are published and merge requires GO/job identity.
-- [ ] **Step 3: Write Worker test** proving a merge request with no active matching Foreman Merge slot never calls upstream GitHub.
-- [ ] **Step 4: Open/update the PR and inspect exact-head Safety Gate.** Expected: RED because Factory controller/tool wiring does not exist.
+- [x] **Step 1: Write controller tests** proving one active Assembly slot plus FIFO queue, stale evidence refusal, Verify-before-release, and missing binding fail-closed.
+- [x] **Step 2: Write registry tests** proving one Foreman tool is published and merge requires GO/job identity.
+- [x] **Step 3: Write guard test** proving merge without active matching Merge slot never calls GitHub merge.
+- [x] **Step 4: Confirm RED in exact-head Safety Gate.** Commit `2a4599beb15bb3517301b86d13173c5800aca630` failed because `go-hub-factory-controller.mjs` did not exist.
 
 ### Task 2: Durable Hephaestus controller
 
 **Files:**
 - Create: `go-hub-factory-controller.mjs`
-- Modify: `go-hub-edge-worker.mjs`
 - Modify: `wrangler.go-hub.jsonc`
 - Modify: `package.json`
 
 **Interfaces:**
-- `createFactoryControllerService({ namespace })` returns `requestSlot(input)`, `releaseSlot(input)`, `getState(input)`, `assertActiveMerge(input)`.
-- `HephaestusForeman` Durable Object persists existing Hephaestus state under key `state`.
-- Edge Worker re-exports `HephaestusForeman`.
+- `HephaestusForeman` persists state under `state`.
+- `createFactoryControllerService({ namespace })` returns `foreman(input)`, `getState(input)`, `assertActiveMerge(input)`.
 
-- [ ] **Step 1: Implement the minimal Durable Object wrapper** around `createHephaestusState`, `evaluateFactoryAdmission`, `requestFactorySlot`, `releaseFactorySlot`, and `completeMergeAndReturn`.
-- [ ] **Step 2: Implement the controller service** using `namespace.getByName(repository)`; return `FACTORY_FOREMAN_NOT_CONFIGURED` if the binding is absent.
-- [ ] **Step 3: Configure `HEPHAESTUS`** in `wrangler.go-hub.jsonc` using a SQLite-backed Durable Object export.
-- [ ] **Step 4: Re-export the class** from `go-hub-edge-worker.mjs` and add controller/Hephaestus files to syntax checking.
-- [ ] **Step 5: Verify focused controller tests are GREEN.**
+- [x] **Step 1: Implement Durable Object wrapper** around existing Hephaestus create/admission/request/release/return functions.
+- [x] **Step 2: Re-admit FIFO queue head only after current evidence passes recheck.**
+- [x] **Step 3: Configure `HEPHAESTUS`** with SQLite-backed `HephaestusForeman` migration.
+- [x] **Step 4: Add controller and existing Hephaestus modules to syntax gate.**
+- [ ] **Step 5: Confirm focused/full CI GREEN.**
 
-### Task 3: MCP tools and guarded merge
+### Task 3: Live MCP gate and guarded merge
 
 **Files:**
+- Create: `go-hub-factory-mcp-worker.mjs`
+- Modify: `go-hub-edge-worker.mjs`
 - Modify: `go-hub-mcp-registry.mjs`
-- Modify: `go-hub-worker.mjs`
-- Modify: tests from Task 1.
 
 **Interfaces:**
-- Registry operations: `requestFactorySlot`, `releaseFactorySlot`, `getFactoryState`.
+- `createFactoryGuardedLifecycle({ lifecycle, factory })`.
+- `createFactoryMcpWorker({ fetchImpl })`.
+- Registry operation `factoryForeman`.
 - Existing merge input: `{repository, number, expectedHeadSha, goId, jobId, method?}`.
 
-- [ ] **Step 1: Add the three Factory MCP definitions** with explicit schemas and annotations.
-- [ ] **Step 2: Extend merge schema** so `goId` and `jobId` are required.
-- [ ] **Step 3: Instantiate Factory controller in `/mcp`** from `env.HEPHAESTUS` and add its operations to the registry lifecycle object.
-- [ ] **Step 4: Wrap `mergePullRequest`** so `assertActiveMerge()` runs before the existing GitHub merge lifecycle method; reject with `FACTORY_MERGE_SLOT_REQUIRED` without any upstream mutation when ownership does not match.
-- [ ] **Step 5: Run focused MCP/Worker tests and confirm GREEN.**
+- [x] **Step 1: Add one Foreman MCP definition** with request/release/state actions.
+- [x] **Step 2: Extend merge schema** so `goId` and `jobId` are required.
+- [x] **Step 3: Create Factory MCP worker** using `env.HEPHAESTUS` plus the existing GitHub lifecycle and Notion catalog.
+- [x] **Step 4: Guard merge** with `assertActiveMerge()` before existing GitHub merge lifecycle; reject with `FACTORY_MERGE_SLOT_REQUIRED` before mutation.
+- [x] **Step 5: Route live `/mcp` through Factory MCP at `go-hub-edge-worker.mjs`; other routes delegate unchanged.**
+- [x] **Step 6: Add live-edge routing regression test.**
+- [ ] **Step 7: Confirm exact-head CI GREEN.**
 
-### Task 4: Publication and full safety gate
+### Task 4: Full safety gate and review
 
 **Files:**
-- Modify only if required by active publication tests: `RELEASE_MANIFEST.json`, `.assetsignore`, `go-hub-sw.js`, publication tests.
+- Modify only if required by repository gates/publication parity.
 
-**Interfaces:**
-- `npm run deploy:gate` remains the final repository gate.
-
-- [ ] **Step 1: Run/inspect full PR Safety Gate on the exact head.**
-- [ ] **Step 2: If publication parity fails, add only the files required by the active Worker/runtime publication contract.**
-- [ ] **Step 3: Re-run exact-head Safety Gate until GREEN.**
-- [ ] **Step 4: Re-read spec and diff; confirm no bypass path from MCP merge to GitHub remains.**
+- [ ] **Step 1: Inspect exact-head Safety Gate failure evidence, if any.**
+- [ ] **Step 2: Fix only evidence-backed defects; do not broaden scope.**
+- [ ] **Step 3: Re-run via PR until exact-head Safety Gate is GREEN.**
+- [ ] **Step 4: Compare branch against current `main` and verify no live `/mcp` bypass remains in the deployed edge entrypoint.**
 
 ### Task 5: Merge and production verification
 
 **Files:**
 - No new production files unless verification finds a defect.
 
-**Interfaces:**
-- PR head is exact and green before merge.
-
-- [ ] **Step 1: Merge only through guarded GO Hub merge lifecycle after current-head CI is green.**
-- [ ] **Step 2: Observe main workflow/deploy runs for the merge SHA.**
-- [ ] **Step 3: Re-list MCP tools and verify Factory tools are published.**
-- [ ] **Step 4: Non-destructively inspect Factory state and confirm missing/incorrect Merge-slot ownership rejects merge before GitHub mutation.**
+- [ ] **Step 1: Merge only after exact PR head CI is green and PR remains mergeable.**
+- [ ] **Step 2: Observe main workflow/deploy runs for merge SHA.**
+- [ ] **Step 3: Re-list MCP tools and confirm `go_hub_factory_foreman` is published.**
+- [ ] **Step 4: Verify Foreman state route non-destructively.**
+- [ ] **Step 5: Confirm incorrect Merge-slot ownership is rejected before GitHub mutation.**
 
 ## Self-Review
 
-- Spec coverage: durable state, server-side admission, explicit Factory tools, hard merge gate, fail-closed missing binding, and existing lifecycle preservation are mapped to Tasks 1–5.
-- Placeholder scan: no TBD/TODO/deferred implementation steps remain.
-- Type consistency: controller methods and registry operation names are defined once and reused consistently.
-- Scope: this closes only the MCP/controller authority seam. It does not redesign Optician, QC, GitHub lifecycle, or browser-local task state.
+- Spec coverage: Factory entry/exit, Assembly serialization, QC boundary, Merge serialization, Verify-before-release, durable state, live MCP routing, and hard merge gate are mapped to Tasks 1–5.
+- Placeholder scan: no TBD/TODO/deferred implementation placeholders remain.
+- Type consistency: Foreman/controller/guard names match across production and tests.
+- Scope: this closes only the live Factory/MCP authority seam and does not redesign Optician, QC, GitHub lifecycle, or browser-local task state.
