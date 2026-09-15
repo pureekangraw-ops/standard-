@@ -132,32 +132,46 @@ export function createTestDestinationAdapter(handler = envelope => ({ received: 
   });
 }
 
-
 export function createCentrePassage() {
   return freeze({
     enter(input = {}) {
       return createCheckpoint(input);
     },
-
     review(work, input = {}) {
       if (work?.status === CENTRE_STATES.WAIT) return resumeIntake(work, input);
       return intakeTask(work, input);
     },
-
     fit(work, input = {}) {
       return fitLens(work, input);
     },
-
     leave(work, input = {}) {
       return createHandoff(work, input);
     },
-
     return(work, returned = {}) {
       return receiveReturn(work, returned);
     },
   });
 }
 
+export function createGoWorkLoop({ passage = createCentrePassage() } = {}) {
+  return freeze({
+    enter(input = {}) {
+      let work = passage.enter(input);
+      work = passage.review(work, input);
+      if (work.status !== CENTRE_STATES.READY || !input.lens) return work;
+      return passage.fit(work, input.lens);
+    },
+    act(work, { destination, capability } = {}) {
+      assertState(work, CENTRE_STATES.READY);
+      const outbound = passage.leave(work, { destination });
+      if (!capability || typeof capability.accept !== "function") {
+        throw new Error("Destination capability accept() is required");
+      }
+      const returned = capability.accept(outbound.envelope);
+      return passage.return(outbound.work, returned);
+    },
+  });
+}
 
 export function validateCentreWork(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -189,13 +203,9 @@ export function createCentreSession({ persistence, initial = {}, passage = creat
       const stored = await persistence.loadState();
       return stored ? validateCentreWork(stored) : passage.enter(initial);
     },
-
     async save(work, commandType = "SAVE_CENTRE_WORK") {
       const proposed = validateCentreWork(work);
-      return persistence.commitState({
-        proposed,
-        command: { type: commandType },
-      });
+      return persistence.commitState({ proposed, command: { type: commandType } });
     },
   });
 }
@@ -223,9 +233,5 @@ export function createReturnPacket(access, payload = null) {
   if (!access || access.checkpointId !== access.returnAddress) {
     throw new Error("Destination access has no valid Return Address");
   }
-  return snapshot({
-    workId: access.workId,
-    checkpointId: access.returnAddress,
-    payload,
-  });
+  return snapshot({ workId: access.workId, checkpointId: access.returnAddress, payload });
 }
