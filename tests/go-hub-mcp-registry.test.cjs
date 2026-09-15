@@ -6,6 +6,21 @@ const { pathToFileURL } = require("node:url");
 
 const registryUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-mcp-registry.mjs")).href;
 
+const factoryWorkContext = Object.freeze({
+  workId: "WORK-A",
+  checkpointId: "CENTRE-001",
+  returnAddress: "CENTRE-001",
+  destination: "destination://factory",
+  task: "Build GO City",
+  requestedResult: "Verified result",
+  lensReference: "lens://city",
+});
+
+const mimirWorkContext = Object.freeze({
+  ...factoryWorkContext,
+  destination: "destination://mimir",
+});
+
 test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe annotations", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?contract=" + Date.now());
   const calls = [];
@@ -42,6 +57,21 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(tools.find(tool => tool.name === "go_hub_merge_pull_request").annotations.destructiveHint, true);
   assert.deepEqual(tools[0].securitySchemes, [{ type: "oauth2", scopes: ["go-hub"] }]);
 
+  const mutating = [
+    "go_hub_create_branch",
+    "go_hub_put_file",
+    "go_hub_delete_file",
+    "go_hub_open_pull_request",
+    "go_hub_rerun_failed_jobs",
+    "go_hub_factory_foreman",
+    "go_hub_merge_pull_request",
+    "go_hub_mimir_search_catalog",
+  ];
+  for (const name of mutating) {
+    assert.equal(tools.find(tool => tool.name === name).inputSchema.required.includes("workContext"), true, `${name} must require city work context`);
+  }
+  assert.equal(tools.find(tool => tool.name === "go_hub_inspect_repository").inputSchema.required.includes("workContext"), false);
+
   const result = await registry.callTool("go_hub_inspect_repository", {
     repository: "pureekangraw-ops/standard-",
     branch: "main",
@@ -50,7 +80,49 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(calls[0].name, "inspect");
 });
 
-test("merge schema requires active GO/job identity for Hephaestus ownership", async () => {
+test("city lifecycle tools require exact Centre identity and correct destination", async () => {
+  const { createMcpRegistry } = await import(registryUrl + "?identity=" + Date.now());
+  const calls = [];
+  const lifecycle = new Proxy({}, {
+    get: (_, name) => async input => {
+      calls.push({ name, input });
+      return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+    },
+  });
+  const registry = createMcpRegistry({ lifecycle });
+
+  await assert.rejects(registry.callTool("go_hub_put_file", {
+    repository: "pureekangraw-ops/standard-",
+    path: "x.js",
+    branch: "task-branch",
+    content: "x",
+  }), /workContext/);
+
+  await assert.rejects(registry.callTool("go_hub_put_file", {
+    repository: "pureekangraw-ops/standard-",
+    path: "x.js",
+    branch: "task-branch",
+    content: "x",
+    workContext: { ...factoryWorkContext, returnAddress: "CENTRE-002" },
+  }), /Return Address|returnAddress/);
+
+  await assert.rejects(registry.callTool("go_hub_mimir_search_catalog", {
+    task: "Find Factory",
+    requestedResult: "Route evidence",
+    workContext: factoryWorkContext,
+  }), /destination/i);
+
+  await registry.callTool("go_hub_mimir_search_catalog", {
+    task: "Find Factory",
+    requestedResult: "Route evidence",
+    lensReference: "lens://city",
+    workContext: mimirWorkContext,
+  });
+  assert.equal(calls.at(-1).name, "searchCatalog");
+  assert.deepEqual(calls.at(-1).input.workContext, mimirWorkContext);
+});
+
+test("merge schema requires active GO/job identity before work context", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?merge=" + Date.now());
   const registry = createMcpRegistry({
     lifecycle: {
@@ -94,6 +166,7 @@ test("registry preserves domain failures and rejects unknown tools", async () =>
     path: "x.js",
     branch: "main",
     content: "x",
+    workContext: factoryWorkContext,
   });
   assert.equal(blocked.isError, true);
   assert.deepEqual(blocked.structuredContent, { code: "DEFAULT_BRANCH_WRITE_BLOCKED" });
