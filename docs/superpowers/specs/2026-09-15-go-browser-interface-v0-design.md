@@ -26,9 +26,14 @@ Mobile GO Hub / caller
         v
 GO Hub Edge Worker
         |
-        +-- /hub/api/browser/* --> Browser Interface
-        |                           - validate request
-        |                           - enforce server-owned target policy
+        +-- /hub/api/browser/* --> Owner Gate
+        |                           - server policy
+        |                           - owner passcode
+        |                           - exact namespace
+        |                           |
+        |                           v
+        |                        Browser Interface
+        |                           - validate target
         |                           - Browser Run snapshot
         |                           - Field Map
         |
@@ -42,10 +47,21 @@ POST /hub/api/browser/read
         |
         v
 Server-owned Browser Policy
+  - requireOwnerPasscode: true
+  - allowed initial hosts: gumroad.com / *.gumroad.com
+        |
+        v
+Owner Gate
+  - existing GOHUB_OWNER_PASSCODE secret
+  - x-go-owner-passcode request header
+  - missing secret -> fail closed
+  - missing/wrong passcode -> fail closed
+        |
+        v
+Target Guard
   - HTTP(S) only
   - embedded URL credentials blocked
-  - initial target hostname must be allowed
-  - caller cannot expand the allowlist
+  - caller cannot expand allowlist
         |
         v
 Cloudflare Browser Run quickAction("snapshot")
@@ -61,24 +77,22 @@ Field Mapper
         |
         v
 Read Result
-  - page metadata
-  - Field Map
-  - unknown evidence
 ```
 
-## V0 target policy
+## V0 production policy
 
-The deployment policy is server-owned in `env.BROWSER_POLICY`. V0 is deliberately restricted to:
+The deployment policy is server-owned in `env.BROWSER_POLICY`:
 
 ```json
 {
-  "allowedHostnames": ["gumroad.com", "*.gumroad.com"]
+  "allowedHostnames": ["gumroad.com", "*.gumroad.com"],
+  "requireOwnerPasscode": true
 }
 ```
 
-A request body field named `allowedHostnames` has no authority and is ignored by the edge router.
+A caller-supplied `allowedHostnames` value has no authority and is ignored. The protected route reuses GO Hub's existing `GOHUB_OWNER_PASSCODE` deployment secret instead of creating a second owner authority. The caller supplies the passcode in `x-go-owner-passcode`.
 
-This policy restricts the **initial target URL accepted by GO Hub**. It is not a network sandbox. Cloudflare Browser Run Guardrails apply to Browser Sessions (Puppeteer / Playwright / CDP) and are not available for Quick Actions. A rendered Gumroad page may therefore load its normal third-party dependencies or follow redirects according to Browser Run behavior. If V1 requires a true hostname-constrained browser session, move that execution path to a guarded Browser Session instead of claiming the V0 Quick Action policy provides that guarantee.
+This policy restricts the **initial target URL accepted by GO Hub**. It is not a network sandbox. Cloudflare Browser Run Guardrails apply to Browser Sessions and are not available for Quick Actions. A rendered Gumroad page may load normal third-party dependencies or follow redirects according to Browser Run behavior. If a later version requires a true hostname-constrained browser session, move execution to a guarded Browser Session rather than claiming V0 Quick Actions provide that guarantee.
 
 ## Core Browser Interface contract
 
@@ -86,9 +100,9 @@ Internal `readPage(input)` accepts:
 
 - `url`: required HTTP(S) URL.
 - `allowedHostnames`: required non-empty server-supplied list.
-- `waitUntil`: optional internal adapter value; defaults to `domcontentloaded`.
+- `waitUntil`: optional adapter value; defaults to `domcontentloaded`.
 
-The public edge route accepts the page URL and does not trust the caller to define hostname policy.
+The public edge route accepts the page URL only as target intent; it does not trust the caller to define hostname authority.
 
 The result contains:
 
@@ -97,18 +111,7 @@ The result contains:
 - `pageEvidence`: Markdown plus root accessibility role/name when available.
 - `unknowns`: evidence the mapper could not classify safely.
 
-A Field Map entry contains:
-
-- `fieldId`
-- `role`
-- `name`
-- `semanticRole`
-- `required`
-- `disabled`
-- `valueKind`
-- `options`
-- `riskClass`
-- `path`
+A Field Map entry contains `fieldId`, `role`, `name`, `semanticRole`, `required`, `disabled`, `valueKind`, `options`, `riskClass`, and `path`.
 
 `fieldId` is derived from the accessibility-tree child-index path. It is V0 evidence, not a permanent DOM locator. Any future write adapter must re-resolve the target immediately before writing.
 
@@ -118,30 +121,30 @@ V0 maps common editable accessibility roles: `textbox`, `searchbox`, `combobox`,
 
 Semantic roles are inferred conservatively from explicit accessible names. Known categories include `title`, `description`, `price`, `category`, `tags`, `email`, `username`, `password`, `otp`, `payment`, and `unknown`.
 
-Risk classes used by V0:
+Risk classes:
 
 - `SAFE_READ`: recognized ordinary non-sensitive field.
 - `SENSITIVE`: password, OTP, or payment/card/bank field.
 - `UNKNOWN`: insufficient evidence.
 
-V0 is read-only regardless of risk class. Risk metadata exists now so later write adapters cannot silently bypass the same evidence contract.
+V0 is read-only regardless of risk class.
 
 ## Edge route
 
 `POST /hub/api/browser/read`:
 
-1. validates JSON,
-2. loads `allowedHostnames` from server-owned `env.BROWSER_POLICY`,
-3. validates URL/protocol/embedded credentials/initial target hostname,
-4. requires `env.BROWSER.quickAction`,
-5. calls Browser Run `snapshot` with `formats: ["markdown", "accessibilityTree"]`,
-6. normalizes the upstream response,
-7. maps the accessibility tree into a Field Map,
-8. returns JSON evidence.
+1. matches the exact browser namespace,
+2. loads server-owned Browser policy,
+3. if owner auth is required, checks the existing `GOHUB_OWNER_PASSCODE` secret before parsing the request body or calling Browser Run,
+4. rejects missing/wrong owner passcode,
+5. validates JSON,
+6. validates URL/protocol/embedded credentials/initial target hostname,
+7. requires `env.BROWSER.quickAction`,
+8. calls Browser Run `snapshot` with `formats: ["markdown", "accessibilityTree"]`,
+9. treats thrown errors, non-OK responses, and `success:false` envelopes as upstream failure,
+10. maps the accessibility tree into a Field Map and returns evidence.
 
-The route does not require `GITHUB_TOKEN`; browser inspection does not inherit source-control authority.
-
-The edge namespace is exact: only `/hub/api/browser` and `/hub/api/browser/*` belong to Browser Interface. Lookalike paths such as `/hub/api/browserfoo` delegate to the existing Worker.
+Browser inspection does not inherit `GITHUB_TOKEN` authority. The edge namespace is exact: only `/hub/api/browser` and `/hub/api/browser/*` belong to Browser Interface. Lookalike paths such as `/hub/api/browserfoo` delegate to the existing Worker.
 
 ## Cloudflare configuration
 
@@ -149,35 +152,43 @@ The edge namespace is exact: only `/hub/api/browser` and `/hub/api/browser/*` be
 
 - `main = "go-hub-edge-worker.mjs"`
 - `browser.binding = "BROWSER"`
-- `vars.BROWSER_POLICY` with the Gumroad-only V0 host policy
+- `vars.BROWSER_POLICY` with Gumroad-only + owner-auth policy
 - worker-first routing for `/hub/api/browser/*` plus all pre-existing GO Hub routes
 
-Compatibility date `2026-09-14` satisfies Browser Run Quick Actions' `2026-03-24` minimum. No Browser Run API token is exposed to the browser client.
+The existing GO Hub deploy workflow already supplies `GOHUB_OWNER_PASSCODE` as a Worker secret. No Browser Run API token or owner secret is stored in client code or Wrangler vars.
 
 ## Failure behavior
 
 Fail closed:
 
+- missing/invalid server policy -> `503 BROWSER_POLICY_NOT_CONFIGURED`
+- owner auth required but Worker secret missing -> `503 BROWSER_OWNER_AUTH_NOT_CONFIGURED`
+- owner passcode missing/wrong -> `403 BROWSER_OWNER_AUTH_FAILED`
 - malformed URL -> `400 INVALID_BROWSER_URL`
 - non-HTTP(S) -> `400 INVALID_BROWSER_PROTOCOL`
 - embedded username/password -> `400 BROWSER_URL_CREDENTIALS_BLOCKED`
 - hostname outside server policy -> `403 BROWSER_HOST_NOT_ALLOWED`
-- missing server policy -> `503 BROWSER_POLICY_NOT_CONFIGURED`
 - missing Browser binding -> `503 BROWSER_NOT_CONFIGURED`
-- Browser Run rejection / exception -> `502 BROWSER_UPSTREAM_ERROR`
+- Browser Run rejection / exception / `success:false` -> `502 BROWSER_UPSTREAM_ERROR`
 - missing accessibility tree -> empty fields plus explicit `ACCESSIBILITY_TREE_MISSING`; never invent fields
 
-## Security note for the next slice
+## Security boundary
 
-V0 narrows the target surface but does not introduce a new end-user authentication scheme for `/hub/api/browser/read`. Before broadening the host policy, adding persistent sessions, or exposing costlier write/interactive operations, reuse or extend GO Hub's owner/session authorization boundary and add abuse controls. Do not treat a hostname allowlist as caller authentication.
+Owner authentication and the host allowlist serve different purposes:
+
+- Owner authentication controls **who may spend the browser capability**.
+- The host policy controls **which initial target GO Hub accepts**.
+- Neither is a Browser Session network sandbox.
+
+Rate limiting and stronger session-oriented authorization remain appropriate before broadening the target policy or adding interactive/write operations.
 
 ## Mobile / no-computer requirement
 
-V0 requires no desktop extension and no desktop DevTools. Diagnostics are structured JSON and all build/test/deploy evidence comes through the repository/CI path, so the implementation can be developed and operated from the user's phone.
+V0 requires no desktop extension and no desktop DevTools. Diagnostics are structured JSON and build/test/deploy evidence comes through repository CI, so implementation and operation can be driven from the user's phone.
 
 ## Tests / evidence requirements
 
-Required regression coverage includes:
+Regression coverage includes:
 
 1. disallowed initial hosts blocked before Browser Run,
 2. caller-supplied allowlists cannot expand authority,
@@ -186,27 +197,30 @@ Required regression coverage includes:
 5. common editable controls become deterministic Field Map entries,
 6. password/OTP/payment fields marked sensitive,
 7. unknowns remain unknown,
-8. Browser Run exceptions become explicit upstream failures,
+8. thrown Browser Run errors and `success:false` envelopes become explicit upstream failures,
 9. browser route works without `GITHUB_TOKEN`,
 10. missing policy/binding fail closed,
 11. browser edge namespace does not steal lookalike paths,
-12. Wrangler binding/policy/worker-first routes and syntax coverage are part of repository gates.
+12. protected policy fails closed if owner secret is absent,
+13. missing/wrong owner passcode is rejected before Browser Run,
+14. configured owner may execute the read,
+15. Wrangler binding/policy/worker-first routes and syntax coverage are part of repository gates.
 
 Repository `deploy:gate` remains the integration gate.
 
 ## V0 Definition of Done
 
-GO Hub has a deployed read-only browser capability that can accept an explicitly authorized Gumroad URL and return a truthful normalized map of semantic form fields from the rendered page, with server-owned target policy, no mutation path, exact route ownership, and repository gate evidence.
+GO Hub has a deployed, owner-protected, read-only browser capability that accepts an authorized Gumroad URL and returns a truthful normalized map of semantic form fields from the rendered page, with server-owned target policy, no mutation path, exact route ownership, and repository gate evidence.
 
-Deployment success alone is not product verification. A real Browser Run production read must be treated as a separate Reality smoke when the deployed endpoint can be exercised with the production binding.
+Deployment success alone is not product verification. A real authenticated Browser Run production read is a separate Reality smoke.
 
 ## Deferred
 
 Not in V0:
 
-- persistent/guarded Browser Sessions
-- end-user browser capability auth redesign / rate limiting
-- authenticated site-session handoff
+- persistent / guarded Browser Sessions
+- rate limiting / richer session authorization
+- authenticated Gumroad site-session handoff
 - Live View / Human in the Loop UI
 - Safe Fill / write adapter
 - local Firefox/Edge extension adapter
