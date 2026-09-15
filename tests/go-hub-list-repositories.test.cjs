@@ -38,8 +38,9 @@ test("lifecycle lists every allowed-owner repository with safe metadata and pagi
 
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url: String(url), init });
-    if (String(url).includes("page=1")) return githubResponse(firstPage);
-    if (String(url).includes("page=2")) {
+    const page = new URL(String(url)).searchParams.get("page");
+    if (page === "1") return githubResponse(firstPage);
+    if (page === "2") {
       return githubResponse([
         repository(101, {
           private: true,
