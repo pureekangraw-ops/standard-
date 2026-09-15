@@ -56,3 +56,61 @@ test("new build without approved Blueprint is sent back to planning", async () =
   });
   assert.equal(screenFactoryIntent({ kind: "create", blueprint: { approved: true } }).decision, "PROCEED");
 });
+
+test("queue risk fails closed on overlap stale projection conflict or dependency risk", async () => {
+  const { evaluateQueueRisk } = await load();
+  assert.deepEqual(evaluateQueueRisk({}), { status: "SAFE", reasons: [] });
+  assert.deepEqual(evaluateQueueRisk({ overlappingPaths: ["go-hub-shell.js"] }), {
+    status: "RECHECK",
+    reasons: ["PATH_OVERLAP"],
+  });
+  assert.deepEqual(evaluateQueueRisk({ staleBase: true }), {
+    status: "RECHECK",
+    reasons: ["STALE_PROJECTION"],
+  });
+  assert.deepEqual(evaluateQueueRisk({ conflict: true }), {
+    status: "BLOCKED",
+    reasons: ["CONFLICT"],
+  });
+  assert.deepEqual(evaluateQueueRisk({ dependencyRisks: ["runtime-contract"] }), {
+    status: "BLOCKED",
+    reasons: ["DEPENDENCY_RISK"],
+  });
+});
+
+test("Assembly admission requires Ready Gate truth for the exact Piece head", async () => {
+  const { evaluateFactoryAdmission } = await load();
+  const pass = evaluateFactoryAdmission({
+    slot: "assembly",
+    readyGate: { status: "READY_FOR_ASSEMBLY", headSha: "piece-head" },
+    piece: { headSha: "piece-head" },
+  });
+  assert.deepEqual(pass, { decision: "ADMIT", reasons: [] });
+  const stale = evaluateFactoryAdmission({
+    slot: "assembly",
+    readyGate: { status: "READY_FOR_ASSEMBLY", headSha: "old-head" },
+    piece: { headSha: "piece-head" },
+  });
+  assert.equal(stale.decision, "WAIT");
+  assert.deepEqual(stale.reasons, ["READY_GATE_STALE_HEAD"]);
+});
+
+test("Merge admission requires exact Assembly QC PR CI heads and SAFE risk", async () => {
+  const { evaluateFactoryAdmission } = await load();
+  const base = {
+    slot: "merge",
+    assembly: { status: "ASSEMBLED", integrationHeadSha: "integration-head" },
+    assemblyQc: { status: "pass", checkedHeadSha: "integration-head" },
+    pullRequest: { number: 49, headSha: "pr-head" },
+    ci: { status: "success", headSha: "pr-head" },
+    risk: { status: "SAFE", reasons: [] },
+  };
+  assert.deepEqual(evaluateFactoryAdmission(base), { decision: "ADMIT", reasons: [] });
+  const staleCi = evaluateFactoryAdmission({ ...base, ci: { status: "success", headSha: "old-head" } });
+  assert.equal(staleCi.decision, "WAIT");
+  assert.deepEqual(staleCi.reasons, ["CI_STALE_HEAD"]);
+  const recheck = evaluateFactoryAdmission({ ...base, risk: { status: "RECHECK", reasons: ["PATH_OVERLAP"] } });
+  assert.deepEqual(recheck, { decision: "WAIT", reasons: ["PATH_OVERLAP"] });
+  const blocked = evaluateFactoryAdmission({ ...base, risk: { status: "BLOCKED", reasons: ["CONFLICT"] } });
+  assert.deepEqual(blocked, { decision: "BLOCK", reasons: ["CONFLICT"] });
+});
