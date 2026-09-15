@@ -6,9 +6,10 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 
-test("deployment publishes MCP and OAuth routes and checks every module", () => {
+test("deployment publishes Browser, MCP, and OAuth routes and checks every module", () => {
   const wrangler = JSON.parse(fs.readFileSync(path.join(root, "wrangler.go-hub.jsonc"), "utf8"));
   assert.deepEqual(wrangler.assets.run_worker_first, [
+    "/hub/api/browser/*",
     "/hub/api/github-workspace/*",
     "/mcp",
     "/oauth/*",
@@ -16,7 +17,14 @@ test("deployment publishes MCP and OAuth routes and checks every module", () => 
   ]);
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  for (const file of ["go-hub-oauth.mjs", "go-hub-mcp-registry.mjs", "go-hub-mcp.mjs", "go-hub-worker.mjs"]) {
+  for (const file of [
+    "go-hub-browser-interface.js",
+    "go-hub-edge-worker.mjs",
+    "go-hub-oauth.mjs",
+    "go-hub-mcp-registry.mjs",
+    "go-hub-mcp.mjs",
+    "go-hub-worker.mjs",
+  ]) {
     assert.match(packageJson.scripts["check:syntax"], new RegExp(file.replaceAll(".", "\\.")));
   }
 
