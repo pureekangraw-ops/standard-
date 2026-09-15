@@ -205,3 +205,22 @@ test("Browser Interface converts Browser Run exceptions into explicit upstream f
   assert.equal(response.status, 502);
   assert.deepEqual(await response.json(), { code: "BROWSER_UPSTREAM_ERROR" });
 });
+
+test("Browser Interface rejects Browser Run success false envelopes", async () => {
+  const browser = {
+    async quickAction() {
+      return browserResponse({
+        success: false,
+        errors: [{ code: 2001, message: "Rate limit exceeded" }],
+      });
+    },
+  };
+  const { createBrowserInterface } = await loadModule("upstream-envelope");
+  const response = await createBrowserInterface({ browser }).readPage({
+    url: "https://example.com/form",
+    allowedHostnames: ["example.com"],
+  });
+
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), { code: "BROWSER_UPSTREAM_ERROR" });
+});
