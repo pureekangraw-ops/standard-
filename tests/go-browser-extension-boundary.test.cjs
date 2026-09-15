@@ -23,11 +23,13 @@ function readExtensionSource() {
     .join("\n");
 }
 
-test("manifest is MV3, top-frame, Gumroad-only, and exposes runtime modules only to Gumroad", () => {
+test("manifest is MV3, Android-enabled, AMO-signable, Gumroad-only, and top-frame", () => {
   const manifest = readManifest();
   const matches = ["*://gumroad.com/*", "*://*.gumroad.com/*"];
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.browser_specific_settings.gecko.id, "go-browser-local-v1@pureekangraw.local");
+  assert.deepEqual(manifest.browser_specific_settings.gecko.data_collection_permissions, { required: ["none"] });
+  assert.deepEqual(manifest.browser_specific_settings.gecko_android, {});
   assert.equal(manifest.content_scripts.length, 1);
   assert.equal(manifest.content_scripts[0].all_frames, false);
   assert.deepEqual([...manifest.content_scripts[0].matches].sort(), [...matches].sort());
