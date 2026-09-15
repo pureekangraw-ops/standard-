@@ -22,3 +22,12 @@ jobs:
           node-version: 22
       - name: Run deploy gate
         run: npm run deploy:gate
+      - name: Build unsigned GO Browser review artifact
+        run: npm run build:go-browser-extension
+      - name: Upload unsigned GO Browser review artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-browser-local-v1-unsigned-${{ github.event.pull_request.head.sha || github.sha }}
+          path: dist/go-browser-local-v1
+          if-no-files-found: error
+          retention-days: 7
