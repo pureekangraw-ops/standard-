@@ -26,7 +26,7 @@ test("shared lifecycle service exposes the guarded workstation contract", async 
     Object.keys(lifecycle).sort(),
     [
       "compare", "createBranch", "deleteFile", "getCI", "getPullRequest",
-      "getWorkflowRuns", "inspect", "mergePullRequest", "openPullRequest",
+      "getWorkflowRuns", "inspect", "listRepositories", "mergePullRequest", "openPullRequest",
       "putFile", "readFile", "rerunFailed", "tree",
     ],
   );
