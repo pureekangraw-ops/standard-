@@ -6,6 +6,14 @@
   "browser": {
     "binding": "BROWSER"
   },
+  "vars": {
+    "BROWSER_POLICY": {
+      "allowedHostnames": [
+        "gumroad.com",
+        "*.gumroad.com"
+      ]
+    }
+  },
   "assets": {
     "directory": ".",
     "binding": "ASSETS",
