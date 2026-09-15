@@ -174,8 +174,53 @@ export function createFactoryController({ lifecycle, state, now = () => new Date
       if (!id) throw new Error("taskId is required");
       const current = await loadCurrent(expectedRevision);
 
+      if (action === "inspect" && current.stored?.task) {
+        const before = current.stored.task;
+        const repository = String(input.repository || before.repository || "").trim();
+        if (!repository || repository !== before.repository) throw new Error("IDENTITY_MISMATCH");
+        const branch = before.workBranch || before.baseBranch || input.branch;
+        const response = await lifecycle.inspect({ repository, ...(branch ? { branch } : {}) });
+        const parsed = await parseResponse(response);
+        const receipt = createRealityReceipt({
+          id: createId(), action, status: parsed.ok ? "success" : "failure", repository,
+          observedAt: now(), source: "github",
+          identity: parsed.ok ? {
+            baseBranch: parsed.payload.defaultBranch,
+            baseSha: parsed.payload.baseSha,
+            workBranch: before.workBranch || null,
+            headSha: parsed.payload.headSha,
+            pullRequestNumber: before.pullRequest?.number || null,
+          } : {
+            baseBranch: before.baseBranch,
+            baseSha: before.baseSha,
+            workBranch: before.workBranch,
+            headSha: before.headSha,
+            pullRequestNumber: before.pullRequest?.number || null,
+          },
+          result: parsed.payload,
+          evidence: parsed.ok ? { treeCount: Array.isArray(parsed.payload.tree) ? parsed.payload.tree.length : 0, resumed: true } : { upstreamStatus: parsed.status },
+        });
+        const task = createCodeTaskFromSnapshot(before);
+        if (!parsed.ok) return save({ revision: current.revision, task, receipt, action, before });
+        if (before.workBranch && parsed.payload.branch !== before.workBranch) throw new Error("IDENTITY_MISMATCH");
+        if (!before.workBranch && parsed.payload.branch !== before.baseBranch) throw new Error("IDENTITY_MISMATCH");
+        const next = parsed.payload.headSha !== before.headSha
+          ? task.transition(before.workBranch ? "EDITING" : "INSPECTING", {
+              baseBranch: parsed.payload.defaultBranch,
+              baseSha: parsed.payload.baseSha,
+              workBranch: before.workBranch || null,
+              headSha: parsed.payload.headSha,
+              ...(before.workBranch ? { touchedPaths: before.touchedPaths || [] } : {}),
+            })
+          : task.appendAudit("FACTORY_INSPECT_REFRESH", {
+              repository,
+              branch: parsed.payload.branch,
+              headSha: parsed.payload.headSha,
+            });
+        return save({ revision: current.revision, task: next, receipt, action, before });
+      }
+
       if (action === "inspect") {
-        if (current.stored) throw new Error("inspect requires a new task");
         const repository = String(input.repository || "").trim();
         const intent = String(input.intent || "").trim();
         if (!repository) throw new Error("repository is required");
