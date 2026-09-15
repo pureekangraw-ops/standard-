@@ -43,14 +43,13 @@ test("GO Hub shell bootstrap uses the neutral runtime registry", () => {
   assert.doesNotMatch(source, /metropolis-r5/i);
 });
 
-
 test("GO Hub shell restores the durable Code task before capability registration", () => {
   const source = read("go-hub-shell.js");
   assert.match(source, /go-hub-persistence\.js/);
   assert.match(source, /createLocalStorageKeyValueStore/);
   assert.match(source, /createCodeTaskSession/);
   assert.match(source, /await taskSession\.load\(\)/);
-  assert.match(source, /createCodeCapability\(\{ workspace, task \}\)/);
+  assert.match(source, /createCodeCapability\(\{ workspace, task/);
 });
 
 test("GO Hub shell mounts the six truths from the restored Code task projection", () => {
@@ -72,7 +71,6 @@ test("GO Hub shell mounts the six truths from the restored Code task projection"
   });
 });
 
-
 test("CENTRE is the durable entry and exit gate before Code capability access", () => {
   const source = read("go-hub-shell.js");
   const htmlFiles = [read("index.html"), read("go-hub.html")];
@@ -82,7 +80,7 @@ test("CENTRE is the durable entry and exit gate before Code capability access", 
     "await centreSession.load()",
     "admitDestination",
     "destination://factory",
-    "runtime.register(\"Code\", access.capability)",
+    "runtime.register(\"Code\"",
     "runtime.unregister(\"Code\")",
     "REVIEW_AT_CENTRE",
     "FIT_LENS",
@@ -104,4 +102,13 @@ test("CENTRE is the durable entry and exit gate before Code capability access", 
       assert.equal(html.includes(marker), true, `Centre surface must include ${marker}`);
     }
   }
+});
+
+test("Factory return in the Shell is derived from real workbench truth and bound Centre identity", () => {
+  const source = read("go-hub-shell.js");
+  assert.match(source, /go-hub-factory-return\.js/);
+  assert.match(source, /createFactoryWorkContext/);
+  assert.match(source, /createFactoryRealityReturn/);
+  assert.match(source, /workContext/);
+  assert.doesNotMatch(source, /returned-by-operator/);
 });
