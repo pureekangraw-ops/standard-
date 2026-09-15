@@ -10,6 +10,20 @@ function json(payload, status = 200) {
   });
 }
 
+function allowedHostnamesFromPolicy(policy) {
+  if (policy && typeof policy === "object" && Array.isArray(policy.allowedHostnames)) {
+    return policy.allowedHostnames.filter(value => typeof value === "string" && value.trim());
+  }
+  if (typeof policy === "string") {
+    try {
+      return allowedHostnamesFromPolicy(JSON.parse(policy));
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 export function createEdgeWorkerHandler({ delegate = githubWorker } = {}) {
   if (!delegate || typeof delegate.fetch !== "function") {
     throw new Error("edge delegate fetch is required");
@@ -31,7 +45,16 @@ export function createEdgeWorkerHandler({ delegate = githubWorker } = {}) {
         return json({ code: "INVALID_JSON" }, 400);
       }
 
-      return createBrowserInterface({ browser: env?.BROWSER }).readPage(body);
+      const allowedHostnames = allowedHostnamesFromPolicy(env?.BROWSER_POLICY);
+      if (allowedHostnames.length === 0) {
+        return json({ code: "BROWSER_POLICY_NOT_CONFIGURED" }, 503);
+      }
+
+      return createBrowserInterface({ browser: env?.BROWSER }).readPage({
+        url: body.url,
+        waitUntil: body.waitUntil,
+        allowedHostnames,
+      });
     },
   });
 }
