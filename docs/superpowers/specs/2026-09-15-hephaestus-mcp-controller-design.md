@@ -32,7 +32,7 @@ That path can reach GitHub lifecycle operations without passing through Hephaest
 
 ## Architecture
 
-Use one Cloudflare Durable Object instance per repository as the server-authoritative Hephaestus state holder. The Durable Object reuses the existing pure Hephaestus functions for admission, FIFO queueing, release, recheck, and post-merge return.
+Use one global Cloudflare Durable Object instance named `factory` as the server-authoritative Hephaestus state holder for the entire Factory. The existing Hephaestus state already contains repository-local `assembly` and `merge` lanes, so one global object preserves both per-repository serialization and the existing invariant that one GO may actively own at most one Hephaestus slot across repositories.
 
 A focused `go-hub-factory-controller.mjs` adapter exposes the Foreman to the MCP Worker. To avoid multiplying public commands, the registry adds one `go_hub_factory_foreman` tool with `request`, `release`, and `state` actions. GitHub lifecycle remains authoritative for repository/PR/CI/merge truth.
 
@@ -42,9 +42,9 @@ Binding: `HEPHAESTUS`
 
 Class: `HephaestusForeman`
 
-Object key: exact repository name, for example `pureekangraw-ops/standard-`.
+Object name: `factory`.
 
-Stored record: the existing `createHephaestusState()` shape under one durable storage key. Durable Object request serialization plus persistent storage provides one queue/slot authority per repository.
+Stored record: the existing `createHephaestusState()` shape under one durable storage key. Its `repositories` map owns repository-local Assembly/Merge lanes. Durable Object request serialization plus persistent storage provides one authoritative Factory queue/slot state.
 
 ## Factory admission and slots
 
@@ -91,7 +91,7 @@ Actions:
 
 - `request`: request Assembly or Merge slot with GO/job identity and current evidence. Server computes admission; caller cannot submit a precomputed ADMIT decision.
 - `release`: release Assembly, or release Merge only with passed post-merge verification.
-- `state`: read current repository Foreman state.
+- `state`: read current Factory Foreman state.
 
 Existing `go_hub_merge_pull_request` gains `goId` and `jobId`; the controller must prove that identity owns the active repository Merge slot before GitHub mutation.
 
@@ -119,6 +119,7 @@ Read/inspect/edit/branch/PR operations are not globally locked by Hephaestus. Th
 - Live Factory route is `Hephaestus -> Assembly(1/repo) -> QC -> Merge(1/repo) -> Verify -> Hephaestus -> Optician`.
 - Two jobs cannot simultaneously own one repository Assembly slot.
 - Two jobs cannot simultaneously own one repository Merge slot.
+- One GO cannot simultaneously own Factory slots across repositories.
 - MCP merge cannot call GitHub unless matching GO/job owns the active Merge slot.
 - Foreman state survives separate Worker requests.
 - Admission decisions are server-computed from current evidence.
