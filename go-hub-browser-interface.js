@@ -178,5 +178,3 @@ export function createBrowserInterface({ browser } = {}) {
     },
   });
 }
-
-export default createBrowserInterface;
