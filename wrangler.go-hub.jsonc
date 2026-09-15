@@ -11,7 +11,8 @@
       "allowedHostnames": [
         "gumroad.com",
         "*.gumroad.com"
-      ]
+      ],
+      "requireOwnerPasscode": true
     }
   },
   "assets": {
