@@ -179,3 +179,29 @@ test("Browser Interface fails closed for invalid URL protocol and missing bindin
   assert.equal(missing.status, 503);
   assert.deepEqual(await missing.json(), { code: "BROWSER_NOT_CONFIGURED" });
 });
+
+test("Browser Interface rejects embedded URL credentials before Browser Run", async () => {
+  let called = false;
+  const browser = { async quickAction() { called = true; return browserResponse({}); } };
+  const { createBrowserInterface } = await loadModule("credentials");
+  const response = await createBrowserInterface({ browser }).readPage({
+    url: "https://alice:secret@example.com/form",
+    allowedHostnames: ["example.com"],
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { code: "BROWSER_URL_CREDENTIALS_BLOCKED" });
+  assert.equal(called, false);
+});
+
+test("Browser Interface converts Browser Run exceptions into explicit upstream failure", async () => {
+  const browser = { async quickAction() { throw new Error("browser exploded"); } };
+  const { createBrowserInterface } = await loadModule("upstream-throw");
+  const response = await createBrowserInterface({ browser }).readPage({
+    url: "https://example.com/form",
+    allowedHostnames: ["example.com"],
+  });
+
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), { code: "BROWSER_UPSTREAM_ERROR" });
+});
