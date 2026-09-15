@@ -6,6 +6,12 @@ function required(value, label) {
   return text;
 }
 
+function snapshot(value) {
+  const copy = structuredClone(value);
+  if (copy && typeof copy === "object") Object.freeze(copy);
+  return copy;
+}
+
 export function completeMergeAndReturn(current, input = {}) {
   const repository = required(input.repository, "repository");
   const goId = required(input.goId, "goId");
@@ -14,6 +20,15 @@ export function completeMergeAndReturn(current, input = {}) {
   if (verification?.status !== "pass" || !String(verification.mainSha || "").trim() ||
       !String(verification.checkedAt || "").trim()) {
     throw new Error("passed post-merge verification is required");
+  }
+
+  const evidence = verification.evidence;
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence) ||
+      evidence.root?.status !== "pass" || evidence.mcp?.status !== "pass") {
+    throw new Error("structured production verification evidence is required");
+  }
+  if (String(evidence.deploymentSha || "") !== String(verification.mainSha)) {
+    throw new Error("production deployment SHA must match verified main SHA");
   }
 
   const released = releaseFactorySlot(current, {
@@ -33,6 +48,7 @@ export function completeMergeAndReturn(current, input = {}) {
       goId,
       jobId,
       mainSha: String(verification.mainSha),
+      postMergeVerification: snapshot(verification),
     }),
   });
 }
