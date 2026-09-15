@@ -6,6 +6,8 @@ const { pathToFileURL } = require("node:url");
 
 const moduleUrl = pathToFileURL(path.resolve(__dirname, "../go-hub-hephaestus.js")).href;
 const load = () => import(`${moduleUrl}?${Date.now()}-${Math.random()}`);
+const handoffUrl = pathToFileURL(path.resolve(__dirname, "../go-hub-hephaestus-handoff.js")).href;
+const loadHandoff = () => import(`${handoffUrl}?${Date.now()}-${Math.random()}`);
 const admit = Object.freeze({ decision: "ADMIT", reasons: [] });
 
 function request(overrides = {}) {
@@ -139,8 +141,9 @@ test("queued GO gets a return-to-chat report with queue and risk context", async
   });
 });
 
-test("slot release moves the next FIFO job to NEEDS_RECHECK without making it active", async () => {
-  const { createHephaestusState, requestFactorySlot, releaseFactorySlot } = await load();
+test("slot release promotes the next FIFO job as NEEDS_RECHECK before it can work", async () => {
+  const { createHephaestusState, requestFactorySlot } = await load();
+  const { releaseFactorySlot, admitQueuedFactorySlot } = await loadHandoff();
   let state = requestFactorySlot(createHephaestusState(), request()).state;
   state = requestFactorySlot(state, request({ goId: "go-b", jobId: "job-b" })).state;
   const released = releaseFactorySlot(state, {
@@ -152,13 +155,20 @@ test("slot release moves the next FIFO job to NEEDS_RECHECK without making it ac
   assert.equal(released.outcome.promotedJobId, "job-b");
   assert.equal(released.state.repositories["pureekangraw-ops/standard-"].assembly.active, null);
   assert.equal(released.state.repositories["pureekangraw-ops/standard-"].assembly.queue[0].status, "NEEDS_RECHECK");
-  const rechecked = requestFactorySlot(released.state, request({ goId: "go-b", jobId: "job-b" }));
+  const rechecked = admitQueuedFactorySlot(released.state, {
+    repository: "pureekangraw-ops/standard-",
+    slot: "assembly",
+    goId: "go-b",
+    jobId: "job-b",
+    admission: admit,
+  });
   assert.equal(rechecked.outcome.status, "ACTIVE");
   assert.equal(rechecked.state.repositories["pureekangraw-ops/standard-"].assembly.active.status, "ACTIVE");
 });
 
 test("Merge completion requires post-merge verification before returning to Optician", async () => {
-  const { createHephaestusState, requestFactorySlot, completeMergeAndReturn } = await load();
+  const { createHephaestusState, requestFactorySlot } = await load();
+  const { completeMergeAndReturn } = await loadHandoff();
   const active = requestFactorySlot(createHephaestusState(), request({ slot: "merge" }));
   assert.throws(() => completeMergeAndReturn(active.state, {
     repository: "pureekangraw-ops/standard-",
