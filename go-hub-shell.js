@@ -3,12 +3,12 @@ import { createCodeCapability, createCodeTaskSession } from "./go-hub-code-modul
 import { createLocalStorageKeyValueStore, createStatePersistence } from "./go-hub-persistence.js";
 import { createGitHubWorkspace } from "./go-hub-github-workspace.js";
 import { createWorkbenchView } from "./go-hub-workbench-model.js";
+import { createFactoryRealityReturn, createFactoryWorkContext } from "./go-hub-factory-return.js";
 import {
   CENTRE_STATES,
   admitDestination,
   createCentrePassage,
   createCentreSession,
-  createReturnPacket,
 } from "./go-hub-centre.js";
 
 const FACTORY_DESTINATION = "destination://factory";
@@ -33,7 +33,7 @@ const taskSession = createCodeTaskSession({
   },
 });
 const task = await taskSession.load();
-const codeCapability = createCodeCapability({ workspace, task });
+const baseCodeCapability = createCodeCapability({ workspace, task });
 
 const centre = createCentrePassage();
 const centrePersistence = createStatePersistence({
@@ -61,15 +61,20 @@ function field(name) {
   return centreForm?.elements.namedItem(name) || null;
 }
 
+function createFactoryAccess() {
+  return admitDestination(centreWork, {
+    destination: FACTORY_DESTINATION,
+    capability: baseCodeCapability,
+  });
+}
+
 function syncFactoryAccess() {
   const shouldOpen = centreWork.status === CENTRE_STATES.AWAY
     && centreWork.handoff?.destination === FACTORY_DESTINATION;
   if (shouldOpen && !runtime.get("Code")) {
-    const access = admitDestination(centreWork, {
-      destination: FACTORY_DESTINATION,
-      capability: codeCapability,
-    });
-    runtime.register("Code", access.capability);
+    const access = createFactoryAccess();
+    const workContext = createFactoryWorkContext(access, task.snapshot());
+    runtime.register("Code", createCodeCapability({ workspace, task, workContext }));
   } else if (!shouldOpen && runtime.get("Code")) {
     runtime.unregister("Code");
   }
@@ -175,13 +180,10 @@ centreForm?.addEventListener("submit", async event => {
       }).work;
       await centreSession.save(centreWork, "LEAVE_CENTRE");
     } else if (centreWork.status === CENTRE_STATES.AWAY) {
-      const access = admitDestination(centreWork, {
-        destination: centreWork.handoff.destination,
-        capability: codeCapability,
-      });
+      const access = createFactoryAccess();
       centreWork = centre.return(
         centreWork,
-        createReturnPacket(access, { status: "returned-by-operator" }),
+        createFactoryRealityReturn(access, task.snapshot()),
       );
       await centreSession.save(centreWork, "RETURN_TO_CENTRE");
     }
