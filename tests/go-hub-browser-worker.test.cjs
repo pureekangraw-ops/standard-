@@ -5,7 +5,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
-const workerUrl = pathToFileURL(path.join(root, "go-hub-worker.mjs")).href;
+const workerUrl = pathToFileURL(path.join(root, "go-hub-edge-worker.mjs")).href;
 
 function browserResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -18,7 +18,7 @@ async function loadWorker(tag) {
   return import(`${workerUrl}?browser=${tag}-${Date.now()}`);
 }
 
-test("Worker browser route reads a page without GitHub credentials", async () => {
+test("Edge browser route reads a page without GitHub credentials", async () => {
   const calls = [];
   const BROWSER = {
     async quickAction(action, options) {
@@ -36,8 +36,8 @@ test("Worker browser route reads a page without GitHub credentials", async () =>
       });
     },
   };
-  const { createWorkerHandler } = await loadWorker("read");
-  const handler = createWorkerHandler();
+  const { createEdgeWorkerHandler } = await loadWorker("read");
+  const handler = createEdgeWorkerHandler();
   const request = new Request("https://hub.example/hub/api/browser/read", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -56,9 +56,9 @@ test("Worker browser route reads a page without GitHub credentials", async () =>
   assert.equal(calls.length, 1);
 });
 
-test("Worker browser route fails closed when Browser Run is not configured", async () => {
-  const { createWorkerHandler } = await loadWorker("missing");
-  const handler = createWorkerHandler();
+test("Edge browser route fails closed when Browser Run is not configured", async () => {
+  const { createEdgeWorkerHandler } = await loadWorker("missing");
+  const handler = createEdgeWorkerHandler();
   const request = new Request("https://hub.example/hub/api/browser/read", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -73,11 +73,11 @@ test("Worker browser route fails closed when Browser Run is not configured", asy
   assert.deepEqual(await response.json(), { code: "BROWSER_NOT_CONFIGURED" });
 });
 
-test("Worker browser route rejects invalid JSON before browser execution", async () => {
+test("Edge browser route rejects invalid JSON before browser execution", async () => {
   let called = false;
   const BROWSER = { async quickAction() { called = true; return browserResponse({}); } };
-  const { createWorkerHandler } = await loadWorker("json");
-  const handler = createWorkerHandler();
+  const { createEdgeWorkerHandler } = await loadWorker("json");
+  const handler = createEdgeWorkerHandler();
   const request = new Request("https://hub.example/hub/api/browser/read", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -90,9 +90,9 @@ test("Worker browser route rejects invalid JSON before browser execution", async
   assert.equal(called, false);
 });
 
-test("Worker browser API rejects unsupported methods and paths", async () => {
-  const { createWorkerHandler } = await loadWorker("not-found");
-  const handler = createWorkerHandler();
+test("Edge browser API rejects unsupported methods and paths", async () => {
+  const { createEdgeWorkerHandler } = await loadWorker("not-found");
+  const handler = createEdgeWorkerHandler();
   const getResponse = await handler.fetch(new Request("https://hub.example/hub/api/browser/read"), { BROWSER: {} });
   const unknownResponse = await handler.fetch(new Request("https://hub.example/hub/api/browser/unknown", { method: "POST" }), { BROWSER: {} });
 
