@@ -142,3 +142,24 @@ test("Edge browser API rejects unsupported methods and paths", async () => {
   assert.equal(unknownResponse.status, 404);
   assert.deepEqual(await unknownResponse.json(), { code: "NOT_FOUND" });
 });
+
+test("Edge delegates lookalike non-browser namespaces to the existing Worker", async () => {
+  const delegated = [];
+  const delegate = {
+    async fetch(request, env) {
+      delegated.push({ url: request.url, env });
+      return new Response("delegated", { status: 202 });
+    },
+  };
+  const { createEdgeWorkerHandler } = await loadWorker("boundary");
+  const handler = createEdgeWorkerHandler({ delegate });
+  const env = { sentinel: true };
+  const response = await handler.fetch(
+    new Request("https://hub.example/hub/api/browserfoo"),
+    env,
+  );
+
+  assert.equal(response.status, 202);
+  assert.equal(await response.text(), "delegated");
+  assert.deepEqual(delegated, [{ url: "https://hub.example/hub/api/browserfoo", env }]);
+});
