@@ -84,22 +84,86 @@ function first(record, keys) {
   return null;
 }
 
+function hasCanonicalRegistryData(record) {
+  return first(record, [
+    "Operational Status",
+    "Verification State",
+    "Purpose",
+    "Capability",
+    "Source ID",
+  ]) !== null;
+}
+
 function normalizeCatalogRecord(record) {
   const name = first(record, ["name", "ชื่อ"]);
+  const registryContract = hasCanonicalRegistryData(record);
+  const purpose = text(first(record, ["Purpose", "purpose"])).trim();
+  const capability = text(first(record, [
+    "Capability",
+    "capability",
+    "คุณสมบัติ",
+    "หน้าที่",
+  ])).trim();
+  const location = text(first(record, [
+    "Location",
+    "location",
+    "surface",
+    "Where / Surface",
+  ])).trim();
+  const operationalStatus = text(first(record, [
+    "Operational Status",
+    "operationalStatus",
+    "availability",
+    "สถานะปัจจุบัน",
+    "สถานะ",
+  ])).trim();
+  const verificationState = text(first(record, [
+    "Verification State",
+    "verificationState",
+  ])).trim();
+  const callable = text(first(record, [
+    "Callable",
+    "callable",
+    "callableExposure",
+    "Callable Action / Tool Exposure",
+  ])).trim();
+  const sourceId = text(first(record, ["Source ID", "sourceId"])).trim();
+  const sourceUrl = String(first(record, [
+    "Source URL",
+    "sourceUrl",
+    "source",
+    "url",
+  ]) || "");
+  const evidence = text(first(record, [
+    "Evidence",
+    "evidence",
+    "หลักฐาน / หมายเหตุ",
+  ])).trim();
+
   return {
-    id: String(first(record, ["id", "url"]) || name || ""),
+    id: String(first(record, ["Registry ID", "registryId", "id", "url"]) || name || ""),
+    registryId: text(first(record, ["Registry ID", "registryId"])).trim(),
+    registryContract,
     name: text(name).trim(),
     type: text(first(record, ["type", "ประเภท"])).trim(),
-    capability: text(first(record, ["capability", "คุณสมบัติ", "หน้าที่"])).trim(),
-    surface: text(first(record, ["surface", "Where / Surface"])).trim(),
-    availability: text(first(record, ["availability", "สถานะปัจจุบัน", "สถานะ"])).trim(),
+    purpose,
+    capability,
+    location,
+    surface: location,
+    operationalStatus,
+    availability: operationalStatus,
+    verificationState,
     readiness: text(first(record, ["readiness", "สถานะ"])).trim(),
     permission: text(first(record, ["permission", "Permission"])).trim(),
-    callableExposure: text(first(record, [
-      "callableExposure",
-      "Callable Action / Tool Exposure",
-    ])).trim(),
+    callable,
+    callableExposure: callable,
     route: text(first(record, ["route", "Route", "วิธีใช้"])).trim(),
+    owner: text(first(record, ["Owner", "owner"])).trim(),
+    sourceId,
+    sourceUrl,
+    evidence,
+    aliases: text(first(record, ["Aliases", "aliases"])).trim(),
+    tags: text(first(record, ["Tags", "tags"])).trim(),
     rating: text(first(record, ["rating", "GO Rating"])).trim(),
     constraints: text(first(record, [
       "constraints",
@@ -108,19 +172,24 @@ function normalizeCatalogRecord(record) {
     ])).trim(),
     verifiedAt: first(record, ["verifiedAt", "date:Verified Date:start"]),
     modifiedAt: first(record, ["modifiedAt", "date:Modified Date:start"]),
-    source: String(first(record, ["source", "url"]) || ""),
+    source: sourceUrl,
   };
 }
 
-function recordText(record) {
+function coreRecordText(record) {
   return [
     record.name,
     record.type,
+    record.purpose,
     record.capability,
-    record.surface,
+    record.location,
     record.route,
     record.constraints,
   ].join(" ").toLowerCase();
+}
+
+function helperRecordText(record) {
+  return [record.aliases, record.tags].join(" ").toLowerCase();
 }
 
 function queryTerms(query) {
@@ -134,11 +203,54 @@ function queryTerms(query) {
 }
 
 function relevance(record, terms) {
-  const haystack = recordText(record);
-  return terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
+  const core = coreRecordText(record);
+  const helper = helperRecordText(record);
+  return terms.reduce((score, term) => ({
+    core: score.core + (core.includes(term) ? 1 : 0),
+    helper: score.helper + (helper.includes(term) ? 1 : 0),
+  }), { core: 0, helper: 0 });
 }
 
-function gate(record) {
+function canonicalGate(record) {
+  const status = record.operationalStatus.toLowerCase();
+  const verification = record.verificationState.toLowerCase();
+  const permission = record.permission.toLowerCase();
+
+  if (["broken", "deprecated"].includes(status)) {
+    return { status: WAIT, reason: "UNAVAILABLE" };
+  }
+  if (status === "wait") return { status: WAIT, reason: "WAIT" };
+  if (permission === "blocked") return { status: WAIT, reason: "BLOCKED" };
+  if (permission === "requires approval") return { status: WAIT, reason: "NEED_AUTHORITY" };
+
+  if (verification === "pending") {
+    return { status: WAIT, reason: "PENDING_VERIFICATION" };
+  }
+  if (verification === "stale") {
+    return { status: WAIT, reason: "STALE_VERIFICATION" };
+  }
+  if (verification === "conflict") {
+    return { status: WAIT, reason: "CONFLICT" };
+  }
+  if (verification === "failed") {
+    return { status: WAIT, reason: "VERIFICATION_FAILED" };
+  }
+
+  if (!record.name || !record.type || !record.purpose || !record.capability ||
+      !record.operationalStatus || !record.permission || !record.route ||
+      !record.verificationState || !record.verifiedAt || !record.sourceId ||
+      !record.evidence) {
+    return { status: WAIT, reason: "MISSING_DECISION_CRITICAL_FIELD" };
+  }
+
+  if (status !== "active" || verification !== "verified" || permission !== "allowed") {
+    return { status: WAIT, reason: "UNKNOWN" };
+  }
+
+  return { status: PASS, reason: null };
+}
+
+function legacyGate(record) {
   const availability = record.availability.toLowerCase();
   const readiness = record.readiness.toLowerCase();
   const permission = record.permission.toLowerCase();
@@ -164,9 +276,17 @@ function gate(record) {
   return { status: PASS, reason: null };
 }
 
+function gate(record) {
+  return record.registryContract ? canonicalGate(record) : legacyGate(record);
+}
+
 function numericRating(value) {
   const match = String(value || "").match(/\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : -1;
+}
+
+function candidateScore(candidate) {
+  return candidate.relevance.core * 2 + candidate.relevance.helper;
 }
 
 export function createMimirCatalogSearchPort({ readCatalog } = {}) {
@@ -179,8 +299,8 @@ export function createMimirCatalogSearchPort({ readCatalog } = {}) {
     const records = normalizeRecords(sourceRows).map(normalizeCatalogRecord);
     const terms = queryTerms(query);
     const candidates = records
-      .map(record => ({ record, score: relevance(record, terms), gate: gate(record) }))
-      .filter(candidate => candidate.score > 0);
+      .map(record => ({ record, relevance: relevance(record, terms), gate: gate(record) }))
+      .filter(candidate => candidate.relevance.core > 0);
 
     if (!candidates.length) {
       return { status: WAIT, waitReason: "NO_MATCH", records: [], route: null };
@@ -189,13 +309,13 @@ export function createMimirCatalogSearchPort({ readCatalog } = {}) {
     const usable = candidates
       .filter(candidate => candidate.gate.status === PASS)
       .sort((a, b) =>
-        b.score - a.score ||
+        candidateScore(b) - candidateScore(a) ||
         numericRating(b.record.rating) - numericRating(a.record.rating) ||
         a.record.name.localeCompare(b.record.name),
       );
 
     const selected = usable[0] || candidates.sort((a, b) =>
-      b.score - a.score || a.record.name.localeCompare(b.record.name),
+      candidateScore(b) - candidateScore(a) || a.record.name.localeCompare(b.record.name),
     )[0];
 
     return {
@@ -205,6 +325,8 @@ export function createMimirCatalogSearchPort({ readCatalog } = {}) {
       route: selected.gate.status === PASS ? selected.record.route : null,
       evidence: {
         source: selected.record.source,
+        sourceId: selected.record.sourceId || null,
+        recordEvidence: selected.record.evidence || null,
         verifiedAt: selected.record.verifiedAt,
         modifiedAt: selected.record.modifiedAt,
         gateBeforeRating: true,
