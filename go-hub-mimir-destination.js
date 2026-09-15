@@ -141,7 +141,7 @@ function normalizeCatalogRecord(record) {
   ])).trim();
 
   return {
-    id: String(first(record, ["Registry ID", "registryId", "id", "url"]) || name || ""),
+    id: String(first(record, ["id", "url"]) || name || ""),
     registryId: text(first(record, ["Registry ID", "registryId"])).trim(),
     registryContract,
     name: text(name).trim(),
