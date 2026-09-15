@@ -10,6 +10,7 @@ const extensionRoot = path.join(root, "browser-extension", "go-browser-local-v1"
 const manifestPath = path.join(extensionRoot, "manifest.json");
 const panelPath = path.join(extensionRoot, "go-browser-panel.js");
 const contentScriptPath = path.join(extensionRoot, "content-script.js");
+const signingWorkflowPath = path.join(root, ".github", "workflows", "go-browser-extension-sign.yml");
 const panelUrl = pathToFileURL(panelPath).href;
 
 function readManifest() {
@@ -118,4 +119,16 @@ test("panel controller is read-only on create, Scan, value edit, and guard previ
   controller.fill();
   assert.equal(writeCalls, 1);
   assert.equal(controller.getState().phase, "RECEIPT");
+});
+
+test("Mozilla signing is manual-only, unlisted, secret-backed, and pinned to a reviewed action commit", () => {
+  const workflow = fs.readFileSync(signingWorkflowPath, "utf8");
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /pull_request:/);
+  assert.doesNotMatch(workflow, /\n\s*push:/);
+  assert.match(workflow, /secrets\.AMO_SIGN_KEY/);
+  assert.match(workflow, /secrets\.AMO_SIGN_SECRET/);
+  assert.match(workflow, /channel:\s*unlisted/);
+  assert.match(workflow, /kewisch\/action-web-ext@84a13bb9e1b6108c43788ba091c41ca1dba6ad45/);
+  assert.match(workflow, /AMO_SIGNING_NOT_CONFIGURED/);
 });
