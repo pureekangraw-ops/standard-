@@ -52,6 +52,29 @@
       <p data-hub-empty>No capabilities registered yet.</p>
       <ul class="hub-capabilities" data-hub-capabilities></ul>
     </section>
+    <section class="hub-panel code-operator" data-code-operator aria-labelledby="code-operator-title">
+      <div class="operator-heading">
+        <div>
+          <p class="hub-kicker">ACTIVE WORK</p>
+          <h2 id="code-operator-title">Code Operator Desk</h2>
+        </div>
+        <button type="button" data-code-inspect>Inspect GitHub truth</button>
+      </div>
+      <p class="operator-error" data-code-error hidden></p>
+      <dl class="operator-grid">
+        <div><dt>State</dt><dd data-code-state>—</dd></div>
+        <div><dt>Next action</dt><dd data-code-next-action>—</dd></div>
+        <div class="operator-wide"><dt>Repository</dt><dd data-code-repository>—</dd></div>
+        <div><dt>Base</dt><dd data-code-base>—</dd></div>
+        <div><dt>Work branch</dt><dd data-code-work-branch>—</dd></div>
+        <div class="operator-wide"><dt>Head SHA</dt><dd data-code-head>—</dd></div>
+        <div><dt>Pull request</dt><dd data-code-pr>—</dd></div>
+        <div><dt>CI</dt><dd data-code-ci>—</dd></div>
+        <div><dt>Deploy</dt><dd data-code-deploy>—</dd></div>
+        <div><dt>Verification</dt><dd data-code-verification>—</dd></div>
+        <div class="operator-wide"><dt>Blocker</dt><dd data-code-blocker>None</dd></div>
+      </dl>
+    </section>
   </main>
   <script src="./go-hub-sw-bootstrap.js"></script>
   <script type="module" src="./go-hub-shell.js"></script>
