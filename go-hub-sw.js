@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "go-hub-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v7-city-roundtrip`;
+const CACHE_NAME = `${CACHE_PREFIX}v7-centre-city-roundtrip`;
 const APP_SHELL = [
   "./",
   "./index.html",
