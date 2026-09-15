@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Put the existing Hephaestus Factory foreman into the live `@GO Hub Factory` MCP path with durable per-repository slot state and a hard pre-merge ownership gate.
+**Goal:** Put the existing Hephaestus Factory foreman into the live `@GO Hub Factory` MCP path with durable Factory-wide state, per-repository Assembly/Merge slots, and a hard pre-merge ownership gate.
 
-**Architecture:** Reuse the existing pure Hephaestus admission/queue/release modules inside a Cloudflare Durable Object keyed by repository. Route live `/mcp` through a focused Factory MCP worker, expose one consolidated `go_hub_factory_foreman` tool for request/release/state, and require active Merge-slot ownership before the existing GitHub merge lifecycle operation may execute.
+**Architecture:** Reuse the existing pure Hephaestus admission/queue/release modules inside one global Cloudflare Durable Object named `factory`. Its existing `repositories` map preserves one Assembly and one Merge slot per repository while also preserving the invariant that one GO cannot actively own multiple Hephaestus slots across repositories. Route live `/mcp` through a focused Factory MCP worker, expose one consolidated `go_hub_factory_foreman` tool for request/release/state, and require active Merge-slot ownership before the existing GitHub merge lifecycle operation may execute.
 
 **Tech Stack:** JavaScript ES modules, Node 22 `node:test`, Cloudflare Workers, SQLite-backed Durable Objects, MCP registry, GitHub REST lifecycle service.
 
@@ -19,7 +19,8 @@
 - Missing Foreman configuration fails closed for Foreman operations and merge.
 - `go_hub_merge_pull_request` must verify matching active Merge-slot ownership before GitHub mutation.
 - Read/inspect/edit/branch/PR operations remain unchanged.
-- Durable state is keyed per repository and stored server-side.
+- One global durable Hephaestus state owns all repository lanes.
+- One GO actively owns at most one Hephaestus slot across repositories.
 - Merge public commands before multiplying them: one Foreman tool handles request/release/state.
 - TDD: failing test first, confirm RED, minimal implementation, then exact-head GREEN.
 
@@ -50,14 +51,16 @@
 - Modify: `package.json`
 
 **Interfaces:**
-- `HephaestusForeman` persists state under `state`.
+- `HephaestusForeman` persists one global state under `state`.
+- Durable Object instance name is `factory`.
 - `createFactoryControllerService({ namespace })` returns `foreman(input)`, `getState(input)`, `assertActiveMerge(input)`.
 
 - [x] **Step 1: Implement Durable Object wrapper** around existing Hephaestus create/admission/request/release/return functions.
 - [x] **Step 2: Re-admit FIFO queue head only after current evidence passes recheck.**
-- [x] **Step 3: Configure `HEPHAESTUS`** with SQLite-backed `HephaestusForeman` migration.
-- [x] **Step 4: Add controller and existing Hephaestus modules to syntax gate.**
-- [ ] **Step 5: Confirm focused/full CI GREEN.**
+- [x] **Step 3: Add regression proving one GO cannot own slots across repositories and use one global Durable Object instance.**
+- [x] **Step 4: Configure `HEPHAESTUS`** with SQLite-backed `HephaestusForeman` migration.
+- [x] **Step 5: Add controller and existing Hephaestus modules to syntax gate.**
+- [ ] **Step 6: Confirm focused/full CI GREEN.**
 
 ### Task 3: Live MCP gate and guarded merge
 
@@ -82,18 +85,12 @@
 
 ### Task 4: Full safety gate and review
 
-**Files:**
-- Modify only if required by repository gates/publication parity.
-
 - [ ] **Step 1: Inspect exact-head Safety Gate failure evidence, if any.**
 - [ ] **Step 2: Fix only evidence-backed defects; do not broaden scope.**
 - [ ] **Step 3: Re-run via PR until exact-head Safety Gate is GREEN.**
 - [ ] **Step 4: Compare branch against current `main` and verify no live `/mcp` bypass remains in the deployed edge entrypoint.**
 
 ### Task 5: Merge and production verification
-
-**Files:**
-- No new production files unless verification finds a defect.
 
 - [ ] **Step 1: Merge only after exact PR head CI is green and PR remains mergeable.**
 - [ ] **Step 2: Observe main workflow/deploy runs for merge SHA.**
@@ -103,7 +100,7 @@
 
 ## Self-Review
 
-- Spec coverage: Factory entry/exit, Assembly serialization, QC boundary, Merge serialization, Verify-before-release, durable state, live MCP routing, and hard merge gate are mapped to Tasks 1–5.
+- Spec coverage: Factory entry/exit, Assembly serialization, QC boundary, Merge serialization, Verify-before-release, global durable state, cross-repo GO exclusivity, live MCP routing, and hard merge gate are mapped to Tasks 1–5.
 - Placeholder scan: no TBD/TODO/deferred implementation placeholders remain.
 - Type consistency: Foreman/controller/guard names match across production and tests.
 - Scope: this closes only the live Factory/MCP authority seam and does not redesign Optician, QC, GitHub lifecycle, or browser-local task state.
