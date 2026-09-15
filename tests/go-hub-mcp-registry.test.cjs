@@ -6,7 +6,7 @@ const { pathToFileURL } = require("node:url");
 
 const registryUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-mcp-registry.mjs")).href;
 
-test("registry publishes lifecycle plus Hephaestus Factory tools with safe annotations", async () => {
+test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe annotations", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?contract=" + Date.now());
   const calls = [];
   const lifecycle = new Proxy({}, {
@@ -32,17 +32,13 @@ test("registry publishes lifecycle plus Hephaestus Factory tools with safe annot
     "go_hub_get_ci",
     "go_hub_get_failure_evidence",
     "go_hub_rerun_failed_jobs",
-    "go_hub_factory_request_slot",
-    "go_hub_factory_release_slot",
-    "go_hub_factory_get_state",
+    "go_hub_factory_foreman",
     "go_hub_merge_pull_request",
     "go_hub_get_workflow_runs",
     "go_hub_mimir_search_catalog",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
-  assert.equal(tools.find(tool => tool.name === "go_hub_factory_get_state").annotations.readOnlyHint, true);
-  assert.equal(tools.find(tool => tool.name === "go_hub_factory_request_slot").annotations.readOnlyHint, false);
-  assert.equal(tools.find(tool => tool.name === "go_hub_factory_release_slot").annotations.readOnlyHint, false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_factory_foreman").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_merge_pull_request").annotations.destructiveHint, true);
   assert.deepEqual(tools[0].securitySchemes, [{ type: "oauth2", scopes: ["go-hub"] }]);
 
