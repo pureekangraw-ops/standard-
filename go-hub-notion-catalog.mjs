@@ -123,6 +123,7 @@ export function createNotionCatalogService({
         });
         return json({
           ...result,
+          workContext: input.workContext == null ? null : structuredClone(input.workContext),
           catalog: {
             source: "notion",
             dataSourceId,

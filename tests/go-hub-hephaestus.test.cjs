@@ -23,6 +23,19 @@ function request(overrides = {}) {
   };
 }
 
+function productionVerification() {
+  return {
+    status: "pass",
+    mainSha: "main-after-merge",
+    checkedAt: "2026-09-15T23:30:00+07:00",
+    evidence: {
+      deploymentSha: "main-after-merge",
+      root: { status: "pass", httpStatus: 200 },
+      mcp: { status: "pass", httpStatus: 401 },
+    },
+  };
+}
+
 test("Hephaestus gives one GO the repo slot and queues the next GO", async () => {
   const { createHephaestusState, requestFactorySlot } = await load();
   const initial = createHephaestusState();
@@ -168,7 +181,7 @@ test("slot release promotes the next FIFO job as NEEDS_RECHECK before it can wor
   assert.equal(rechecked.state.repositories["pureekangraw-ops/standard-"].assembly.active.status, "ACTIVE");
 });
 
-test("Merge completion requires post-merge verification before returning to Optician", async () => {
+test("Merge completion requires structured post-merge production verification before returning to Optician", async () => {
   const { createHephaestusState, requestFactorySlot } = await load();
   const { completeMergeAndReturn } = await loadReturn();
   const active = requestFactorySlot(createHephaestusState(), request({ slot: "merge" }));
@@ -179,7 +192,7 @@ test("Merge completion requires post-merge verification before returning to Opti
     postMergeVerification: { status: "fail" },
   }), /post-merge verification/i);
 
-  const completed = completeMergeAndReturn(active.state, {
+  assert.throws(() => completeMergeAndReturn(active.state, {
     repository: "pureekangraw-ops/standard-",
     goId: "go-a",
     jobId: "job-a",
@@ -188,6 +201,14 @@ test("Merge completion requires post-merge verification before returning to Opti
       mainSha: "main-after-merge",
       checkedAt: "2026-09-15T23:30:00+07:00",
     },
+  }), /production verification evidence/i);
+
+  const verified = productionVerification();
+  const completed = completeMergeAndReturn(active.state, {
+    repository: "pureekangraw-ops/standard-",
+    goId: "go-a",
+    jobId: "job-a",
+    postMergeVerification: verified,
   });
   assert.deepEqual(completed.returnPacket, {
     destination: "optician",
@@ -196,6 +217,7 @@ test("Merge completion requires post-merge verification before returning to Opti
     goId: "go-a",
     jobId: "job-a",
     mainSha: "main-after-merge",
+    postMergeVerification: verified,
   });
   assert.equal(completed.state.repositories["pureekangraw-ops/standard-"].merge.active, null);
 });

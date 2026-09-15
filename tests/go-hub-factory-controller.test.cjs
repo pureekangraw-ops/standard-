@@ -44,6 +44,19 @@ function mergeRequest(overrides = {}) {
   };
 }
 
+function productionVerification() {
+  return {
+    status: "pass",
+    mainSha: "main-after-merge",
+    checkedAt: "2026-09-15T23:59:00+07:00",
+    evidence: {
+      deploymentSha: "main-after-merge",
+      root: { status: "pass", httpStatus: 200 },
+      mcp: { status: "pass", httpStatus: 401 },
+    },
+  };
+}
+
 test("Durable Hephaestus persists one active Assembly slot and FIFO queue", async () => {
   const { HephaestusForeman } = await import(controllerUrl);
   const foreman = new HephaestusForeman(memoryContext(), {});
@@ -77,10 +90,7 @@ test("Factory uses one global Hephaestus state so a GO cannot own slots across r
 
   const secondResponse = await controller.foreman({
     action: "request",
-    ...assemblyRequest({
-      repository: "pureekangraw-ops/other",
-      jobId: "job-other",
-    }),
+    ...assemblyRequest({ repository: "pureekangraw-ops/other", jobId: "job-other" }),
   });
   const second = await secondResponse.json();
   assert.equal(second.outcome.status, "WAIT");
@@ -115,10 +125,11 @@ test("Merge stays owned through Verify and exits through Hephaestus to Optician"
     slot: "merge",
     goId: "go-a",
     jobId: "job-merge",
-    postMergeVerification: { status: "pass", mainSha: "main-after-merge", checkedAt: "2026-09-15T23:59:00+07:00" },
+    postMergeVerification: productionVerification(),
   });
   assert.equal(completed.returnPacket.destination, "optician");
   assert.equal(completed.returnPacket.reason, "FACTORY_REALITY_CHANGED");
+  assert.equal(completed.returnPacket.postMergeVerification.evidence.deploymentSha, "main-after-merge");
 });
 
 test("Factory controller fails closed without Durable Object binding", async () => {

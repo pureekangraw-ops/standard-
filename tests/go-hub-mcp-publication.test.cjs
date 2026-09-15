@@ -6,9 +6,10 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 
-test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus", () => {
+test("deployment publishes Browser, Factory MCP, OAuth, deployment reality, and durable Hephaestus", () => {
   const wrangler = JSON.parse(fs.readFileSync(path.join(root, "wrangler.go-hub.jsonc"), "utf8"));
   assert.deepEqual(wrangler.assets.run_worker_first, [
+    "/hub/api/version",
     "/hub/api/browser/*",
     "/hub/api/github-workspace/*",
     "/mcp",
@@ -43,5 +44,7 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
     "GOHUB_MASTER_KEY",
     "GOHUB_OWNER_PASSCODE",
   ]) assert.match(workflow, new RegExp(secret));
+  assert.match(workflow, /GOHUB_DEPLOY_SHA/);
+  assert.match(workflow, /Post-deploy smoke/);
   assert.match(workflow, /chmod 600/);
 });

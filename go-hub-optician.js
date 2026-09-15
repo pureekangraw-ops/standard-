@@ -1,4 +1,4 @@
-const REQUIRED_CONTEXT = Object.freeze(["who", "what", "where", "when", "why"]);
+const REQUIRED_CONTEXT = Object.freeze(["purpose", "successCondition"]);
 
 function stable(value) {
   if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;

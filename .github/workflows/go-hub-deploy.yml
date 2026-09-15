@@ -34,9 +34,12 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Deploy GO Hub Worker
+        id: deploy
         shell: bash
         run: |
+          set -euo pipefail
           secrets_file="${RUNNER_TEMP}/go-hub.secrets"
+          deploy_log="${RUNNER_TEMP}/go-hub-deploy.log"
           : > "${secrets_file}"
           chmod 600 "${secrets_file}"
           if [ -n "${GOHUB_GITHUB_TOKEN}" ]; then
@@ -48,8 +51,48 @@ jobs:
           else
             echo "GO Hub OAuth secrets are incomplete; MCP will remain fail-closed."
           fi
+
+          args=(npx wrangler deploy --config wrangler.go-hub.jsonc --var "GOHUB_DEPLOY_SHA:${GITHUB_SHA}")
           if [ -s "${secrets_file}" ]; then
-            npx wrangler deploy --config wrangler.go-hub.jsonc --secrets-file "${secrets_file}"
-          else
-            npx wrangler deploy --config wrangler.go-hub.jsonc
+            args+=(--secrets-file "${secrets_file}")
           fi
+          "${args[@]}" 2>&1 | tee "${deploy_log}"
+
+          deploy_url="$(grep -Eo 'https://[^[:space:]]+\.workers\.dev' "${deploy_log}" | tail -n 1 || true)"
+          if [ -z "${deploy_url}" ]; then
+            echo "GO Hub deployment URL was not present in Wrangler output." >&2
+            exit 1
+          fi
+          printf 'url=%s\n' "${deploy_url}" >> "${GITHUB_OUTPUT}"
+
+      - name: Post-deploy smoke
+        shell: bash
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+
+          root_status="$(curl -sS --retry 5 --retry-all-errors --retry-delay 2 -o "${RUNNER_TEMP}/go-hub-root.html" -w '%{http_code}' "${DEPLOY_URL}/")"
+          if [ "${root_status}" != "200" ]; then
+            echo "GO Hub root smoke failed with HTTP ${root_status}." >&2
+            exit 1
+          fi
+
+          version_json="$(curl -fsS --retry 5 --retry-all-errors --retry-delay 2 "${DEPLOY_URL}/hub/api/version")"
+          VERSION_JSON="${version_json}" node - <<'NODE'
+          const payload = JSON.parse(process.env.VERSION_JSON || "{}");
+          if (payload.product !== "GO Hub") throw new Error("production identity mismatch");
+          if (payload.deploymentSha !== process.env.GITHUB_SHA) {
+            throw new Error(`deploymentSha mismatch: ${payload.deploymentSha || "missing"} != ${process.env.GITHUB_SHA}`);
+          }
+          console.log(`Verified deploymentSha ${payload.deploymentSha}`);
+          NODE
+
+          mcp_status="$(curl -sS --retry 3 --retry-all-errors --retry-delay 2 -o "${RUNNER_TEMP}/go-hub-mcp.json" -w '%{http_code}' -X POST "${DEPLOY_URL}/mcp" -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}')"
+          if [ "${mcp_status}" != "401" ]; then
+            echo "GO Hub MCP smoke expected protected HTTP 401, got ${mcp_status}." >&2
+            cat "${RUNNER_TEMP}/go-hub-mcp.json" >&2 || true
+            exit 1
+          fi
+
+          echo "Post-deploy smoke PASS for ${GITHUB_SHA}: root=200, version=exact SHA, mcp=protected."
