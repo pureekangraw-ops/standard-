@@ -57,6 +57,37 @@ test("Durable Hephaestus persists one active Assembly slot and FIFO queue", asyn
   assert.equal(lane.queue[0].jobId, "job-b");
 });
 
+test("Factory uses one global Hephaestus state so a GO cannot own slots across repositories", async () => {
+  const { HephaestusForeman, createFactoryControllerService } = await import(controllerUrl);
+  const instances = new Map();
+  const namespace = {
+    getByName(name) {
+      if (!instances.has(name)) {
+        const foreman = new HephaestusForeman(memoryContext(), {});
+        instances.set(name, { fetch: request => foreman.fetch(request) });
+      }
+      return instances.get(name);
+    },
+  };
+  const controller = createFactoryControllerService({ namespace });
+
+  const firstResponse = await controller.foreman({ action: "request", ...assemblyRequest() });
+  const first = await firstResponse.json();
+  assert.equal(first.outcome.status, "ACTIVE");
+
+  const secondResponse = await controller.foreman({
+    action: "request",
+    ...assemblyRequest({
+      repository: "pureekangraw-ops/other",
+      jobId: "job-other",
+    }),
+  });
+  const second = await secondResponse.json();
+  assert.equal(second.outcome.status, "WAIT");
+  assert.equal(second.outcome.reason, "GO_ALREADY_ACTIVE");
+  assert.deepEqual([...instances.keys()], ["factory"]);
+});
+
 test("server-side admission refuses stale Assembly evidence", async () => {
   const { HephaestusForeman } = await import(controllerUrl);
   const foreman = new HephaestusForeman(memoryContext(), {});
