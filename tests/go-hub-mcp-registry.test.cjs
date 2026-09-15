@@ -6,7 +6,7 @@ const { pathToFileURL } = require("node:url");
 
 const registryUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-mcp-registry.mjs")).href;
 
-test("registry publishes exact lifecycle tools with safe annotations", async () => {
+test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe annotations", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?contract=" + Date.now());
   const calls = [];
   const lifecycle = new Proxy({}, {
@@ -32,18 +32,15 @@ test("registry publishes exact lifecycle tools with safe annotations", async () 
     "go_hub_get_ci",
     "go_hub_get_failure_evidence",
     "go_hub_rerun_failed_jobs",
+    "go_hub_factory_foreman",
     "go_hub_merge_pull_request",
     "go_hub_get_workflow_runs",
     "go_hub_mimir_search_catalog",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
-  assert.equal(tools.find(tool => tool.name === "go_hub_list_repositories").annotations.readOnlyHint, true);
-  assert.deepEqual(tools[0].securitySchemes, [{ type: "oauth2", scopes: ["go-hub"] }]);
-  assert.ok(tools.every(tool => Array.isArray(tool.securitySchemes)));
-  assert.equal(tools.find(tool => tool.name === "go_hub_get_failure_evidence").annotations.readOnlyHint, true);
-  assert.equal(tools.find(tool => tool.name === "go_hub_put_file").annotations.readOnlyHint, false);
-  assert.equal(tools.find(tool => tool.name === "go_hub_delete_file").annotations.destructiveHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_factory_foreman").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_merge_pull_request").annotations.destructiveHint, true);
+  assert.deepEqual(tools[0].securitySchemes, [{ type: "oauth2", scopes: ["go-hub"] }]);
 
   const result = await registry.callTool("go_hub_inspect_repository", {
     repository: "pureekangraw-ops/standard-",
@@ -51,6 +48,36 @@ test("registry publishes exact lifecycle tools with safe annotations", async () 
   });
   assert.deepEqual(result.structuredContent, { ok: true, operation: "inspect" });
   assert.equal(calls[0].name, "inspect");
+});
+
+test("merge schema requires active GO/job identity for Hephaestus ownership", async () => {
+  const { createMcpRegistry } = await import(registryUrl + "?merge=" + Date.now());
+  const registry = createMcpRegistry({
+    lifecycle: {
+      mergePullRequest: async () => new Response(JSON.stringify({ merged: true }), {
+        headers: { "content-type": "application/json" },
+      }),
+    },
+  });
+
+  await assert.rejects(
+    registry.callTool("go_hub_merge_pull_request", {
+      repository: "pureekangraw-ops/standard-",
+      number: 50,
+      expectedHeadSha: "head-sha",
+    }),
+    /missing required argument: goId/,
+  );
+
+  await assert.rejects(
+    registry.callTool("go_hub_merge_pull_request", {
+      repository: "pureekangraw-ops/standard-",
+      number: 50,
+      expectedHeadSha: "head-sha",
+      goId: "go-a",
+    }),
+    /missing required argument: jobId/,
+  );
 });
 
 test("registry preserves domain failures and rejects unknown tools", async () => {

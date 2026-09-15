@@ -1,5 +1,6 @@
 const string = { type: "string", minLength: 1 };
 const integer = { type: "integer", minimum: 1 };
+const object = { type: "object" };
 
 function schema(properties, required) {
   return { type: "object", properties, required, additionalProperties: false };
@@ -30,8 +31,24 @@ const definitions = [
     schema({ repository: string, runId: integer }, ["repository", "runId"]), { readOnlyHint: true, destructiveHint: false }],
   ["go_hub_rerun_failed_jobs", "Rerun failed jobs for one workflow run.", "rerunFailed",
     schema({ repository: string, runId: integer }, ["repository", "runId"]), { readOnlyHint: false, destructiveHint: false }],
-  ["go_hub_merge_pull_request", "Merge only when the expected head is current and exact-head CI is green.", "mergePullRequest",
-    schema({ repository: string, number: integer, expectedHeadSha: string, method: { type: "string", enum: ["merge", "squash", "rebase"] } }, ["repository", "number", "expectedHeadSha"]), { readOnlyHint: false, destructiveHint: true }],
+  ["go_hub_factory_foreman", "Enter, release, or inspect the Hephaestus Factory foreman for one repository Assembly/Merge lane.", "factoryForeman",
+    schema({
+      action: { type: "string", enum: ["request", "release", "state"] },
+      repository: string,
+      slot: { type: "string", enum: ["assembly", "merge"] },
+      goId: string,
+      jobId: string,
+      readyGate: object,
+      piece: object,
+      assembly: object,
+      assemblyQc: object,
+      pullRequest: object,
+      ci: object,
+      risk: object,
+      postMergeVerification: object,
+    }, ["action", "repository"]), { readOnlyHint: false, destructiveHint: false }],
+  ["go_hub_merge_pull_request", "Merge only when Hephaestus owns the Merge slot, the expected head is current, and exact-head CI is green.", "mergePullRequest",
+    schema({ repository: string, number: integer, expectedHeadSha: string, goId: string, jobId: string, method: { type: "string", enum: ["merge", "squash", "rebase"] } }, ["repository", "number", "expectedHeadSha", "goId", "jobId"]), { readOnlyHint: false, destructiveHint: true }],
   ["go_hub_get_workflow_runs", "Observe workflow and deployment runs for one exact SHA.", "getWorkflowRuns",
     schema({ repository: string, sha: string }, ["repository", "sha"]), { readOnlyHint: true, destructiveHint: false }],
   ["go_hub_mimir_search_catalog", "Search the live owner-scoped Notion catalog, apply current Gate before GO Rating, and return PASS or explicit WAIT evidence.", "searchCatalog",
