@@ -19,7 +19,7 @@
     "file": "go-hub-sw.js",
     "mode": "go-hub-exclusive",
     "cachePrefix": "go-hub-app-",
-    "cacheGeneration": "v7-city-roundtrip",
+    "cacheGeneration": "v7-centre-city-roundtrip",
     "autoActivate": true
   },
   "validation": {
