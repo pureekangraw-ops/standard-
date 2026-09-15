@@ -10,7 +10,11 @@ function taskSnapshot(task) {
   return structuredClone(task);
 }
 
-export function createCodeCapability({ workspace = null, task = null } = {}) {
+function contextSnapshot(workContext) {
+  return workContext == null ? null : structuredClone(workContext);
+}
+
+export function createCodeCapability({ workspace = null, task = null, workContext = null } = {}) {
   const canList = hasMethod(workspace, "listFiles");
   const canRead = canList && hasMethod(workspace, "readText");
   const canInspect = canRead && hasMethod(workspace, "inspect") && hasMethod(workspace, "listTree");
@@ -42,6 +46,7 @@ export function createCodeCapability({ workspace = null, task = null } = {}) {
     canObserveDeploy,
     workspace,
     task: snapshot,
+    workContext: contextSnapshot(workContext),
     nextAction: snapshot?.nextAction || null,
     blocker: snapshot?.blocker || null,
     repository: snapshot?.repository || workspace?.repository || null,
@@ -67,7 +72,6 @@ export function createCodeCapability({ workspace = null, task = null } = {}) {
     lessons: Array.isArray(snapshot?.lessons) ? snapshot.lessons : [],
   });
 }
-
 
 export function createCodeTaskSession({ persistence, initial = {} } = {}) {
   if (!persistence || typeof persistence.loadState !== "function" ||
