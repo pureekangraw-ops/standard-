@@ -1,5 +1,8 @@
 const string = { type: "string", minLength: 1 };
 const integer = { type: "integer", minimum: 1 };
+const revision = { type: "integer", minimum: 0 };
+const object = { type: "object" };
+const FACTORY_ACTIONS = ["inspect", "create_branch", "write", "delete", "compare", "open_pr", "check_ci", "diagnose_failure"];
 
 function schema(properties, required) {
   return { type: "object", properties, required, additionalProperties: false };
@@ -34,6 +37,8 @@ const definitions = [
     schema({ repository: string, number: integer, expectedHeadSha: string, method: { type: "string", enum: ["merge", "squash", "rebase"] } }, ["repository", "number", "expectedHeadSha"]), { readOnlyHint: false, destructiveHint: true }],
   ["go_hub_get_workflow_runs", "Observe workflow and deployment runs for one exact SHA.", "getWorkflowRuns",
     schema({ repository: string, sha: string }, ["repository", "sha"]), { readOnlyHint: true, destructiveHint: false }],
+  ["go_hub_factory_action", "Execute one allowlisted Factory action through the server-authoritative task controller.", "factoryAction",
+    schema({ taskId: string, action: { type: "string", enum: FACTORY_ACTIONS }, input: object, expectedRevision: revision }, ["taskId", "action", "input"]), { readOnlyHint: false, destructiveHint: false }],
   ["go_hub_mimir_search_catalog", "Search the live owner-scoped Notion catalog, apply current Gate before GO Rating, and return PASS or explicit WAIT evidence.", "searchCatalog",
     schema({ task: string, requestedResult: string, lensReference: string }, ["task", "requestedResult"]), { readOnlyHint: true, destructiveHint: false }],
 ].map(([name, description, operation, inputSchema, annotations]) =>
@@ -51,6 +56,11 @@ function assertArguments(definition, args) {
   }
   for (const key of Object.keys(args)) {
     if (!Object.hasOwn(definition.inputSchema.properties, key)) throw new Error("unknown argument: " + key);
+  }
+  const actionSchema = definition.inputSchema.properties.action;
+  if (actionSchema?.enum && !actionSchema.enum.includes(args.action)) throw new Error("invalid action");
+  if (definition.inputSchema.properties.expectedRevision && args.expectedRevision != null && (!Number.isSafeInteger(args.expectedRevision) || args.expectedRevision < 0)) {
+    throw new Error("invalid expectedRevision");
   }
 }
 
