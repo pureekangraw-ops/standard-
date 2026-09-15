@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "go-hub",
-  "main": "go-hub-worker.mjs",
+  "main": "go-hub-entry.mjs",
   "compatibility_date": "2026-09-14",
   "assets": {
     "directory": ".",
