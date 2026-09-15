@@ -236,5 +236,18 @@ export function createGitHubWorkspace({
         `/workflow-runs?repository=${encodeURIComponent(repo)}&sha=${encodeURIComponent(assertRef(sha, "sha"))}`
       );
     },
+
+    async factoryAction({ taskId, action, input = {}, expectedRevision } = {}) {
+      const body = {
+        taskId: String(taskId || ""),
+        action: String(action || ""),
+        input: structuredClone(input || {}),
+      };
+      if (expectedRevision != null) body.expectedRevision = Number(expectedRevision);
+      return request("/factory-action", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+    },
   });
 }

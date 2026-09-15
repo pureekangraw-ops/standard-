@@ -54,6 +54,7 @@ test("active publication truth declares exclusive GO Hub ownership", () => {
   assert.equal(release.serviceWorker.file, "go-hub-sw.js");
   assert.equal(release.serviceWorker.mode, "go-hub-exclusive");
   assert.equal(release.serviceWorker.cachePrefix, "go-hub-app-");
+  assert.equal(release.serviceWorker.cacheGeneration, "v7-factory-controller-authority");
   assert.equal(release.serviceWorker.autoActivate, true);
 
   const files = release.productionFiles.map(item => item.path).sort();
@@ -61,6 +62,7 @@ test("active publication truth declares exclusive GO Hub ownership", () => {
 
   const allowlist = read(".assetsignore");
   const sw = read("go-hub-sw.js");
+  assert.match(sw, /v7-factory-controller-authority/);
   for (const file of activeHubFiles) {
     assert.match(allowlist, new RegExp(`!/${file.replaceAll(".", "\\.")}`));
     if (file !== "go-hub-sw.js") {

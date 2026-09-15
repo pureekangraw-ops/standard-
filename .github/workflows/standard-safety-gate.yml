@@ -14,11 +14,78 @@ jobs:
     name: STANDARD regression safety gate
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Use Node.js 22
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run deploy gate
-        run: npm run deploy:gate
+      - run: npm run deploy:gate
+
+  diagnose-factory-new:
+    name: DIAG factory-new
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/go-hub-factory*.test.cjs tests/go-hub-reality-receipt.test.cjs
+
+  diagnose-changed-contracts:
+    name: DIAG changed-contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/go-hub-code-module.test.cjs tests/go-hub-capability-contract-hardening.test.cjs tests/go-hub-shell.test.cjs tests/go-hub-mcp-registry.test.cjs tests/go-hub-mcp-publication.test.cjs tests/go-hub-github-workspace.test.cjs
+
+  diagnose-existing-go-hub:
+    name: DIAG existing-go-hub
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test $(find tests -name 'go-hub-*.test.cjs' ! -name 'go-hub-factory*.test.cjs' ! -name 'go-hub-reality-receipt.test.cjs' ! -name 'go-hub-code-module.test.cjs' ! -name 'go-hub-capability-contract-hardening.test.cjs' ! -name 'go-hub-shell.test.cjs' ! -name 'go-hub-mcp-registry.test.cjs' ! -name 'go-hub-mcp-publication.test.cjs' ! -name 'go-hub-github-workspace.test.cjs' -print)
+
+  diagnose-non-go-hub:
+    name: DIAG non-go-hub
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test $(find tests -name '*.test.cjs' ! -name 'go-hub-*.test.cjs' -print)
+
+  diagnose-syntax:
+    name: DIAG syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check:syntax
+
+  diagnose-utf8:
+    name: DIAG utf8
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check:utf8
+
+  diagnose-no-ride:
+    name: DIAG no-ride
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check:no-ride

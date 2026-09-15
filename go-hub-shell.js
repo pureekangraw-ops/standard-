@@ -12,11 +12,14 @@ import {
 } from "./go-hub-centre.js";
 
 const FACTORY_DESTINATION = "destination://factory";
+const FACTORY_TASK_ID = "pureekangraw-ops:active-code-task";
+const FACTORY_REVISION_KEY = "go-hub-code:factory-revision";
 const runtime = createHubRuntime();
 const workspace = createGitHubWorkspace({
   gatewayBase: "/hub/api/github-workspace",
   repository: "pureekangraw-ops/standard-",
 });
+
 const taskPersistence = createStatePersistence({
   store: createLocalStorageKeyValueStore({
     storage: globalThis.localStorage,
@@ -32,8 +35,52 @@ const taskSession = createCodeTaskSession({
     repository: workspace.repository,
   },
 });
-const task = await taskSession.load();
-const codeCapability = createCodeCapability({ workspace, task });
+
+const cachedTask = await taskSession.load();
+let authoritativeTask = cachedTask.snapshot();
+let factoryRevision = Number(globalThis.localStorage?.getItem(FACTORY_REVISION_KEY) || 0);
+if (!Number.isSafeInteger(factoryRevision) || factoryRevision < 0) factoryRevision = 0;
+let codeCapability = createCodeCapability({ workspace, task: authoritativeTask, controllerReady: false });
+let factorySyncError = null;
+
+async function callFactoryInspect(expectedRevision) {
+  return workspace.factoryAction({
+    taskId: FACTORY_TASK_ID,
+    action: "inspect",
+    input: {
+      repository: workspace.repository,
+      intent: authoritativeTask.intent || "GO Hub Code workstation",
+      branch: authoritativeTask.workBranch || authoritativeTask.baseBranch || "main",
+    },
+    ...(expectedRevision == null ? {} : { expectedRevision }),
+  });
+}
+
+async function syncFactoryAuthority() {
+  try {
+    let result;
+    try {
+      result = await callFactoryInspect(factoryRevision);
+    } catch (error) {
+      if (error?.code !== "STALE_TASK_REVISION") throw error;
+      result = await callFactoryInspect(null);
+    }
+    if (!result?.task || !Number.isSafeInteger(Number(result.revision))) {
+      throw new Error("Factory controller returned incomplete task authority");
+    }
+    authoritativeTask = structuredClone(result.task);
+    factoryRevision = Number(result.revision);
+    globalThis.localStorage?.setItem(FACTORY_REVISION_KEY, String(factoryRevision));
+    await taskSession.save(authoritativeTask);
+    codeCapability = createCodeCapability({ workspace, task: authoritativeTask, controllerReady: true });
+    factorySyncError = null;
+  } catch (error) {
+    factorySyncError = error instanceof Error ? error.message : String(error);
+    codeCapability = createCodeCapability({ workspace, task: authoritativeTask, controllerReady: false });
+  }
+}
+
+await syncFactoryAuthority();
 
 const centre = createCentrePassage();
 const centrePersistence = createStatePersistence({
@@ -132,9 +179,11 @@ function renderCentre() {
 function render() {
   syncFactoryAccess();
   const capabilities = runtime.list();
-  status.textContent = centreWork.status === CENTRE_STATES.AWAY
-    ? "GO is away from Centre."
-    : "GO is at Centre.";
+  status.textContent = factorySyncError
+    ? `Factory sync required — ${factorySyncError}`
+    : centreWork.status === CENTRE_STATES.AWAY
+      ? "GO is away from Centre."
+      : "GO is at Centre.";
   empty.hidden = capabilities.length > 0;
   workbenchShell.hidden = !runtime.get("Code");
   list.replaceChildren(
@@ -148,7 +197,7 @@ function render() {
     }),
   );
   renderCentre();
-  renderWorkbench(task.snapshot());
+  renderWorkbench(authoritativeTask);
 }
 
 centreForm?.addEventListener("submit", async event => {
