@@ -21,6 +21,7 @@ test("registry publishes exact lifecycle tools with safe annotations", async () 
   const tools = registry.listTools();
   assert.deepEqual(tools.map(tool => tool.name), [
     "go_hub_inspect_repository",
+    "go_hub_list_repositories",
     "go_hub_read_file",
     "go_hub_create_branch",
     "go_hub_put_file",
@@ -35,6 +36,7 @@ test("registry publishes exact lifecycle tools with safe annotations", async () 
     "go_hub_mimir_search_catalog",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_list_repositories").annotations.readOnlyHint, true);
   assert.deepEqual(tools[0].securitySchemes, [{ type: "oauth2", scopes: ["go-hub"] }]);
   assert.ok(tools.every(tool => Array.isArray(tool.securitySchemes)));
   assert.equal(tools.find(tool => tool.name === "go_hub_put_file").annotations.readOnlyHint, false);
