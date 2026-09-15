@@ -1,3 +1,9 @@
+import {
+  semanticRoleForName,
+  valueKindForRole,
+  readRiskClassForSemanticRole,
+} from "./go-browser-field-contract.js";
+
 const EDITABLE_ROLES = new Set([
   "textbox",
   "searchbox",
@@ -47,35 +53,6 @@ function hostnameAllowed(hostname, allowedHostnames) {
     allowedHostnames.some(pattern => hostnameMatches(hostname, pattern));
 }
 
-function semanticRoleFor(name) {
-  const value = String(name || "").trim().toLowerCase();
-  if (!value) return "unknown";
-  if (/password|passcode/.test(value)) return "password";
-  if (/\botp\b|one[- ]?time|verification code/.test(value)) return "otp";
-  if (/card number|credit card|debit card|\bcvv\b|\bcvc\b|bank account|account number/.test(value)) return "payment";
-  if (/\bdescription\b|details|summary/.test(value)) return "description";
-  if (/\bprice\b|amount|cost/.test(value)) return "price";
-  if (/\bcategory\b|product type|type of product/.test(value)) return "category";
-  if (/\btags?\b|keywords?/.test(value)) return "tags";
-  if (/\bemail\b/.test(value)) return "email";
-  if (/username|user name|handle/.test(value)) return "username";
-  if (/\btitle\b|product name|item name/.test(value)) return "title";
-  return "unknown";
-}
-
-function valueKindFor(role) {
-  if (role === "spinbutton" || role === "slider") return "number";
-  if (role === "checkbox" || role === "switch") return "boolean";
-  if (role === "combobox" || role === "radio") return "choice";
-  return "text";
-}
-
-function riskClassFor(semanticRole) {
-  if (["password", "otp", "payment"].includes(semanticRole)) return "SENSITIVE";
-  if (semanticRole === "unknown") return "UNKNOWN";
-  return "SAFE_READ";
-}
-
 function childOptions(node) {
   return Array.isArray(node?.children)
     ? node.children
@@ -93,7 +70,7 @@ export function mapAccessibilityTree(tree) {
     const role = String(node.role || "").toLowerCase();
     if (EDITABLE_ROLES.has(role)) {
       const name = String(node.name || "").trim();
-      const semanticRole = semanticRoleFor(name);
+      const semanticRole = semanticRoleForName(name);
       const fieldId = `field:${path.length ? path.join(".") : "root"}`;
       const field = {
         fieldId,
@@ -102,9 +79,9 @@ export function mapAccessibilityTree(tree) {
         semanticRole,
         required: node.required === true,
         disabled: node.disabled === true,
-        valueKind: valueKindFor(role),
+        valueKind: valueKindForRole(role),
         options: childOptions(node),
-        riskClass: riskClassFor(semanticRole),
+        riskClass: readRiskClassForSemanticRole(semanticRole),
         path: [...path],
       };
       fields.push(field);
