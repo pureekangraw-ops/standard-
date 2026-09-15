@@ -6,6 +6,20 @@
   "browser": {
     "binding": "BROWSER"
   },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "HEPHAESTUS",
+        "class_name": "HephaestusForeman"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-hephaestus-foreman",
+      "new_sqlite_classes": ["HephaestusForeman"]
+    }
+  ],
   "vars": {
     "BROWSER_POLICY": {
       "allowedHostnames": [
