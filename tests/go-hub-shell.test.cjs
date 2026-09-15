@@ -43,22 +43,24 @@ test("GO Hub shell bootstrap uses the neutral runtime registry", () => {
   assert.doesNotMatch(source, /metropolis-r5/i);
 });
 
-
-test("GO Hub shell restores the durable Code task before capability registration", () => {
+test("GO Hub shell treats local Code task as cache and server Factory task as authority", () => {
   const source = read("go-hub-shell.js");
-  assert.match(source, /go-hub-persistence\.js/);
   assert.match(source, /createLocalStorageKeyValueStore/);
   assert.match(source, /createCodeTaskSession/);
-  assert.match(source, /await taskSession\.load\(\)/);
-  assert.match(source, /createCodeCapability\(\{ workspace, task \}\)/);
+  assert.match(source, /cachedTask/);
+  assert.match(source, /workspace\.factoryAction\(/);
+  assert.match(source, /action:\s*["']inspect["']/);
+  assert.match(source, /expectedRevision/);
+  assert.match(source, /controllerReady:\s*true/);
+  assert.doesNotMatch(source, /const task = await taskSession\.load\(\);\s*const codeCapability = createCodeCapability\(\{ workspace, task \}\)/s);
 });
 
-test("GO Hub shell mounts the six truths from the restored Code task projection", () => {
+test("GO Hub shell mounts the six truths from the authoritative Code task projection", () => {
   const source = read("go-hub-shell.js");
   const goHubHtml = read("go-hub.html");
   const indexHtml = read("index.html");
   assert.match(source, /createWorkbenchView/);
-  assert.match(source, /renderWorkbench\(task\.snapshot\(\)\)/);
+  assert.match(source, /renderWorkbench\(authoritativeTask/);
   [
     "data-workbench-mission",
     "data-workbench-blueprint",
@@ -71,7 +73,6 @@ test("GO Hub shell mounts the six truths from the restored Code task projection"
     assert.match(indexHtml, new RegExp(selector));
   });
 });
-
 
 test("CENTRE is the durable entry and exit gate before Code capability access", () => {
   const source = read("go-hub-shell.js");
