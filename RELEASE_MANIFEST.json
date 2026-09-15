@@ -1,7 +1,7 @@
 {
   "release": "go-hub-hard-cutover-1",
   "product": "GO Hub",
-  "releaseDate": "2026-09-14",
+  "releaseDate": "2026-09-15",
   "rootEntry": "index.html",
   "features": [
     "GO Hub neutral root control surface",
@@ -11,13 +11,16 @@
     "provider-neutral Code capability",
     "GitHub-backed Code workspace through trusted same-origin gateway",
     "durable CENTRE checkpoint before destination access",
-    "single CENTRE entry and return passage for GO"
+    "single CENTRE entry and return passage for GO",
+    "server-authoritative Factory task controller",
+    "Reality Receipt binding for Factory lifecycle actions",
+    "browser local task reduced to cache/projection"
   ],
   "serviceWorker": {
     "file": "go-hub-sw.js",
     "mode": "go-hub-exclusive",
     "cachePrefix": "go-hub-app-",
-    "cacheGeneration": "v6-centre-live-checkpoint",
+    "cacheGeneration": "v7-factory-controller-authority",
     "autoActivate": true
   },
   "validation": {
@@ -26,6 +29,8 @@
       "GO Hub hard-cutover contracts",
       "GO Hub runtime boundaries",
       "GO Hub Code capability boundary",
+      "Factory Controller authority and reconciliation",
+      "Reality Receipt identity binding",
       "active publication parity",
       "syntax",
       "utf8",
@@ -33,79 +38,31 @@
       "CENTRE checkpoint identity and destination gate"
     ]
   },
-  "note": "GO Hub owns the active root. GO must review and fit at a durable CENTRE checkpoint before Code/Factory capability access, then return through the same checkpoint. Repository credentials remain server-side.",
+  "note": "GO Hub owns the active root. GO must review and fit at a durable CENTRE checkpoint before Code/Factory capability access, then return through the same checkpoint. Factory task authority is server-side; browser localStorage is cache/projection only. Repository credentials remain server-side.",
   "productionFiles": [
-    {
-      "path": "index.html"
-    },
-    {
-      "path": "go-hub.html"
-    },
-    {
-      "path": "go-hub.webmanifest"
-    },
-    {
-      "path": "go-hub-shell.css"
-    },
-    {
-      "path": "go-hub-shell.js"
-    },
-    {
-      "path": "go-hub-runtime.js"
-    },
-    {
-      "path": "go-hub-centre.js"
-    },
-    {
-      "path": "go-hub-code-module.js"
-    },
-    {
-      "path": "go-hub-code-task.js"
-    },
-    {
-      "path": "go-hub-evidence-ledger.js"
-    },
-    {
-      "path": "go-hub-piece-qc.js"
-    },
-    {
-      "path": "go-hub-ready-gate.js"
-    },
-    {
-      "path": "go-hub-assembly-bench.js"
-    },
-    {
-      "path": "go-hub-assembly-qc.js"
-    },
-    {
-      "path": "go-hub-artifact.js"
-    },
-    {
-      "path": "go-hub-product-qc.js"
-    },
-    {
-      "path": "go-hub-verification-scanner.js"
-    },
-    {
-      "path": "go-hub-housekeeper.js"
-    },
-    {
-      "path": "go-hub-learning-recorder.js"
-    },
-    {
-      "path": "go-hub-workbench-model.js"
-    },
-    {
-      "path": "go-hub-github-workspace.js"
-    },
-    {
-      "path": "go-hub-persistence.js"
-    },
-    {
-      "path": "go-hub-sw-bootstrap.js"
-    },
-    {
-      "path": "go-hub-sw.js"
-    }
+    { "path": "index.html" },
+    { "path": "go-hub.html" },
+    { "path": "go-hub.webmanifest" },
+    { "path": "go-hub-shell.css" },
+    { "path": "go-hub-shell.js" },
+    { "path": "go-hub-runtime.js" },
+    { "path": "go-hub-centre.js" },
+    { "path": "go-hub-code-module.js" },
+    { "path": "go-hub-code-task.js" },
+    { "path": "go-hub-evidence-ledger.js" },
+    { "path": "go-hub-piece-qc.js" },
+    { "path": "go-hub-ready-gate.js" },
+    { "path": "go-hub-assembly-bench.js" },
+    { "path": "go-hub-assembly-qc.js" },
+    { "path": "go-hub-artifact.js" },
+    { "path": "go-hub-product-qc.js" },
+    { "path": "go-hub-verification-scanner.js" },
+    { "path": "go-hub-housekeeper.js" },
+    { "path": "go-hub-learning-recorder.js" },
+    { "path": "go-hub-workbench-model.js" },
+    { "path": "go-hub-github-workspace.js" },
+    { "path": "go-hub-persistence.js" },
+    { "path": "go-hub-sw-bootstrap.js" },
+    { "path": "go-hub-sw.js" }
   ]
 }
