@@ -1,13 +1,17 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "go-hub",
-  "main": "go-hub-worker.mjs",
+  "main": "go-hub-edge-worker.mjs",
   "compatibility_date": "2026-09-14",
+  "browser": {
+    "binding": "BROWSER"
+  },
   "assets": {
     "directory": ".",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     "run_worker_first": [
+      "/hub/api/browser/*",
       "/hub/api/github-workspace/*",
       "/mcp",
       "/oauth/*",
