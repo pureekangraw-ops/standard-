@@ -5,7 +5,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const controllerUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-factory-controller.mjs")).href;
-const workerUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-worker.mjs")).href;
+const factoryMcpUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-factory-mcp-worker.mjs")).href;
 
 function memoryContext() {
   const values = new Map();
@@ -99,7 +99,7 @@ test("Factory controller fails closed without Durable Object binding", async () 
 });
 
 test("guarded MCP lifecycle rejects merge before GitHub when Hephaestus slot is not owned", async () => {
-  const { createFactoryGuardedLifecycle } = await import(workerUrl + "?guard=" + Date.now());
+  const { createFactoryGuardedLifecycle } = await import(factoryMcpUrl + "?guard=" + Date.now());
   let mergeCalls = 0;
   const lifecycle = {
     async mergePullRequest() {
@@ -110,6 +110,9 @@ test("guarded MCP lifecycle rejects merge before GitHub when Hephaestus slot is 
   const factory = {
     async assertActiveMerge() {
       return new Response(JSON.stringify({ active: false }), { headers: { "content-type": "application/json" } });
+    },
+    async foreman() {
+      return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
     },
   };
   const guarded = createFactoryGuardedLifecycle({ lifecycle, factory });
