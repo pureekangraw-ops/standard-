@@ -13,6 +13,8 @@ test("GO Hub deploy publishes Linear bridge runtime configuration without commit
   assert.match(workflow, /LINEAR_TEAM_ID:\s*\$\{\{\s*vars\.LINEAR_TEAM_ID\s*\}\}/);
   assert.match(workflow, /printf 'LINEAR_API_KEY=%s\\n'/);
   assert.match(workflow, /printf 'LINEAR_TEAM_ID=%s\\n'/);
+  assert.match(workflow, /Linear bridge runtime configuration is incomplete/);
+  assert.match(workflow, /exit 1/);
   assert.doesNotMatch(workflow, /LINEAR_API_KEY:\s*[A-Za-z0-9_-]{20,}/);
 });
 
