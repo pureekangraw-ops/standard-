@@ -14,7 +14,18 @@ function response(payload) {
   return new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } });
 }
 
-test("Linear service resolves configured team key to UUID before listing projects", async () => {
+function diagTest(name, fn) {
+  test(name, async () => {
+    try {
+      await fn();
+    } catch (error) {
+      console.error(`TEAM_KEY_DIAG ${name}: ${error?.stack || error}`);
+      throw error;
+    }
+  });
+}
+
+diagTest("Linear service resolves configured team key to UUID before listing projects", async () => {
   const { createLinearService } = await loadService("team-key-projects");
   const requests = [];
   const fetchImpl = async (_url, init) => {
@@ -43,7 +54,7 @@ test("Linear service resolves configured team key to UUID before listing project
   });
 });
 
-test("Linear service uses resolved team UUID for issue scope and caches resolution", async () => {
+diagTest("Linear service uses resolved team UUID for issue scope and caches resolution", async () => {
   const { createLinearService } = await loadService("team-key-scope");
   const requests = [];
   const fetchImpl = async (_url, init) => {
@@ -67,7 +78,7 @@ test("Linear service uses resolved team UUID for issue scope and caches resoluti
   assert.equal(requests.filter(item => /teams/.test(item.query)).length, 1);
 });
 
-test("Linear service creates issue with resolved team UUID, never the configured key", async () => {
+diagTest("Linear service creates issue with resolved team UUID, never the configured key", async () => {
   const { createLinearService } = await loadService("team-key-create");
   const requests = [];
   const fetchImpl = async (_url, init) => {
@@ -90,7 +101,7 @@ test("Linear service creates issue with resolved team UUID, never the configured
   assert.notEqual(requests[1].variables.input.teamId, "PUR");
 });
 
-test("Linear service returns a sanitized configuration error when team key is not found", async () => {
+diagTest("Linear service returns a sanitized configuration error when team key is not found", async () => {
   const { createLinearService } = await loadService("team-key-missing");
   const service = createLinearService({
     token: "token-a",
