@@ -11,6 +11,18 @@ async function load() {
   return import(`${moduleUrl}?task=${Date.now()}-${Math.random()}`);
 }
 
+function advanceProductionToWrite(task, { repository = "repo", baseSha = "base-head", blueprintRef = "spec.md", planRef = "plan://test" } = {}) {
+  return task
+    .recordProductionStep({ step: "INSPECT_REALITY", evidence: { repository, headSha: baseSha } })
+    .recordProductionStep({ step: "BASELINE", evidence: { baseSha } })
+    .recordProductionStep({ step: "TRACE", evidence: { summary: "trace before edit" } })
+    .recordProductionStep({ step: "PLAN", evidence: { blueprintRef, planRef } });
+}
+
+function localVerify(task, headSha) {
+  return task.recordProductionStep({ step: "LOCAL_VERIFY", evidence: { status: "pass", headSha, checks: { test: "pass" } } });
+}
+
 test("task advances inspect to branch/edit/diff with SHA-bound evidence", async () => {
   const { createCodeTask } = await load();
   let task = createCodeTask({ id: "task-1", intent: "edit hub", repository: "pureekangraw-ops/standard-" });
@@ -207,7 +219,9 @@ test("production truth is resumable and bound to the mounted blueprint", async (
   let task = createCodeTask({ id: "e2-1", repository: "pureekangraw-ops/standard-" })
     .setWorkbenchTruth({ blueprint: { title: "Factory Blueprint", ref: "spec.md", status: "approved" }, currentPiece: { id: "wp-1", title: "Old piece", purpose: "stale" } });
   task = task.setWorkPackage({ id: "wp-1", title: "Piece Controller", purpose: "control one work package", blueprintRef: "spec.md", inputs: ["CodeTask snapshot"], expectedOutputs: ["sealed piece"], dependencies: [], assemblyTarget: "Engine 2 production line" });
-  task = task.recordPiece({ id: "piece-1", workPackageId: "wp-1", repository: "pureekangraw-ops/standard-", branch: "engine-2", headSha: "head-1", changedPaths: ["go-hub-code-task.js"], outputs: ["piece truth"] })
+  task = advanceProductionToWrite(task, { repository: "pureekangraw-ops/standard-", baseSha: "base-1", blueprintRef: "spec.md", planRef: "plan://e2-1" });
+  task = task.recordPiece({ id: "piece-1", workPackageId: "wp-1", repository: "pureekangraw-ops/standard-", branch: "engine-2", headSha: "head-1", changedPaths: ["go-hub-code-task.js"], outputs: ["piece truth"] });
+  task = localVerify(task, "head-1")
     .addEvidence({ id: "ev-1", scope: "piece", claim: "purpose-correct", kind: "test", headSha: "head-1" });
   task = task.recordPieceQc({ status: "pass", checkedHeadSha: "head-1", checks: { purpose: true, behavior: true, interface: true, evidence: true }, evidenceIds: ["ev-1"], checkedAt: "2026-09-14T12:00:00.000Z" });
   task = task.recordGateHandoff({ status: "READY_FOR_ASSEMBLY", pieceId: "piece-1", workPackageId: "wp-1", blueprintRef: "spec.md", headSha: "head-1", evidenceIds: ["ev-1"] });
@@ -218,29 +232,34 @@ test("production truth is resumable and bound to the mounted blueprint", async (
   assert.equal(restored.piece.headSha, "head-1");
   assert.equal(restored.pieceQc.checkedHeadSha, "head-1");
   assert.equal(restored.gateHandoff.status, "READY_FOR_ASSEMBLY");
+  assert.deepEqual(restored.productionTrace.map(item => item.step), ["INSPECT_REALITY", "BASELINE", "TRACE", "PLAN", "WRITE", "LOCAL_VERIFY"]);
 });
 
-test("production rejects blueprint drift and new piece revisions invalidate QC and handoff", async () => {
+test("production rejects blueprint drift, wrong work package, and edits after Ready Gate", async () => {
   const { createCodeTask } = await load();
   let task = createCodeTask({ id: "e2-boundary" }).setWorkbenchTruth({ blueprint: { ref: "approved.md" } });
   assert.throws(() => task.setWorkPackage({ id: "wp-1", title: "Piece", purpose: "prove boundary", blueprintRef: "other.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "line" }), /mounted blueprint/);
   task = task.setWorkPackage({ id: "wp-1", title: "Piece", purpose: "prove boundary", blueprintRef: "approved.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "line" });
+  task = advanceProductionToWrite(task, { repository: "repo", baseSha: "base-1", blueprintRef: "approved.md", planRef: "plan://boundary" });
   assert.throws(() => task.recordPiece({ id: "piece-1", workPackageId: "other", repository: "repo", branch: "branch", headSha: "head-1" }), /work package/);
-  task = task.recordPiece({ id: "piece-1", workPackageId: "wp-1", repository: "repo", branch: "branch", headSha: "head-1" })
+  task = task.recordPiece({ id: "piece-1", workPackageId: "wp-1", repository: "repo", branch: "branch", headSha: "head-1" });
+  task = localVerify(task, "head-1")
     .addEvidence({ id: "ev-1", scope: "piece", claim: "purpose-correct", kind: "test", headSha: "head-1" })
     .recordPieceQc({ status: "pass", checkedHeadSha: "head-1", checks: {}, evidenceIds: ["ev-1"], checkedAt: "now" })
     .recordGateHandoff({ status: "READY_FOR_ASSEMBLY", pieceId: "piece-1", workPackageId: "wp-1", blueprintRef: "approved.md", headSha: "head-1", evidenceIds: ["ev-1"] });
-  task = task.recordPiece({ id: "piece-1", workPackageId: "wp-1", repository: "repo", branch: "branch", headSha: "head-2" });
-  assert.equal(task.factoryStage, "PRODUCTION");
-  assert.equal(task.pieceQc, null);
-  assert.equal(task.gateHandoff, null);
+  assert.equal(task.factoryStage, "READY_GATE");
+  assert.throws(() => task.recordPiece({ id: "piece-1", workPackageId: "wp-1", repository: "repo", branch: "branch", headSha: "head-2" }), /Production sequence requires WRITE/);
+  assert.equal(task.pieceQc.status, "pass");
+  assert.equal(task.gateHandoff.status, "READY_FOR_ASSEMBLY");
 });
 
 test("task cannot enter Ready Gate by recording a handoff that bypasses exact-head Piece QC", async () => {
   const { createCodeTask } = await load();
   let task = createCodeTask({ id: "e2-no-bypass" }).setWorkbenchTruth({ blueprint: { ref: "spec.md" } })
-    .setWorkPackage({ id: "wp-1", title: "Piece", purpose: "prevent bypass", blueprintRef: "spec.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "future assembly" })
+    .setWorkPackage({ id: "wp-1", title: "Piece", purpose: "prevent bypass", blueprintRef: "spec.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "future assembly" });
+  task = advanceProductionToWrite(task, { repository: "repo", baseSha: "base-1", blueprintRef: "spec.md", planRef: "plan://no-bypass" })
     .recordPiece({ id: "piece-1", workPackageId: "wp-1", repository: "repo", branch: "engine-2", headSha: "head-1" });
+  task = localVerify(task, "head-1");
   assert.throws(() => task.recordGateHandoff({ status: "READY_FOR_ASSEMBLY", pieceId: "piece-1", workPackageId: "wp-1", blueprintRef: "spec.md", headSha: "head-1", evidenceIds: [] }), /passed Piece QC/);
   task = task.recordPieceQc({ status: "pass", checkedHeadSha: "head-1", checks: { purpose: true, behavior: true, interface: true, evidence: true }, evidenceIds: ["missing"], checkedAt: "2026-09-14T12:00:00.000Z" });
   assert.throws(() => task.recordGateHandoff({ status: "READY_FOR_ASSEMBLY", pieceId: "piece-1", workPackageId: "wp-1", blueprintRef: "spec.md", headSha: "head-1", evidenceIds: ["missing"] }), /evidence/);
@@ -249,8 +268,10 @@ test("task cannot enter Ready Gate by recording a handoff that bypasses exact-he
 test("assembly and product truth is resumable and invalidates downstream results", async () => {
   const { createCodeTask, createCodeTaskFromSnapshot } = await load();
   let task = createCodeTask({ id: "e3-task" }).setWorkbenchTruth({ blueprint: { ref: "spec.md" } })
-    .setWorkPackage({ id: "wp-1", title: "Piece", purpose: "input", blueprintRef: "spec.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "app" })
-    .recordPiece({ id: "piece-1", workPackageId: "wp-1", repository: "repo", branch: "e2", headSha: "piece-head" })
+    .setWorkPackage({ id: "wp-1", title: "Piece", purpose: "input", blueprintRef: "spec.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "app" });
+  task = advanceProductionToWrite(task, { repository: "repo", baseSha: "base-1", blueprintRef: "spec.md", planRef: "plan://e3-task" })
+    .recordPiece({ id: "piece-1", workPackageId: "wp-1", repository: "repo", branch: "e2", headSha: "piece-head" });
+  task = localVerify(task, "piece-head")
     .addEvidence({ id: "piece-ev", scope: "piece", claim: "purpose-correct", kind: "test", headSha: "piece-head" })
     .recordPieceQc({ status: "pass", checkedHeadSha: "piece-head", checks: {}, evidenceIds: ["piece-ev"], checkedAt: "now" })
     .recordGateHandoff({ status: "READY_FOR_ASSEMBLY", pieceId: "piece-1", workPackageId: "wp-1", blueprintRef: "spec.md", headSha: "piece-head", evidenceIds: ["piece-ev"] });
