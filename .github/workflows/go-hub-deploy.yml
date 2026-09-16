@@ -33,6 +33,35 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Preflight Cloudflare Linear bindings
+        shell: bash
+        run: |
+          settings_file="${RUNNER_TEMP}/go-hub-settings.json"
+          curl --fail-with-body --silent --show-error \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/go-hub/settings" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            > "${settings_file}"
+          node - "${settings_file}" <<'NODE'
+          const fs = require("node:fs");
+          const settings = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const bindings = settings?.result?.bindings || [];
+          const byName = new Map(bindings.map(binding => [binding.name, binding.type]));
+          const expected = new Map([
+            ["LINEAR_API_KEY", "secret_text"],
+            ["LINEAR_TEAM_ID", "plain_text"],
+          ]);
+          let failed = false;
+          for (const [name, type] of expected) {
+            const actual = byName.get(name);
+            if (actual !== type) {
+              console.error(`::error::Cloudflare binding missing or wrong type: ${name} expected ${type}, got ${actual || "MISSING"}`);
+              failed = true;
+            }
+          }
+          if (failed) process.exit(1);
+          console.log("Cloudflare Linear binding preflight passed: required names/types are present.");
+          NODE
+
       - name: Deploy GO Hub Worker
         shell: bash
         run: |
