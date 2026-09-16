@@ -106,3 +106,21 @@ test("CENTRE is the durable entry and exit gate before Code capability access", 
     }
   }
 });
+
+test("active shell must pass Optician and canonical city route before leaving Centre for Factory", () => {
+  const source = read("go-hub-shell.js");
+
+  assert.match(source, /go-hub-optician\.js/);
+  assert.match(source, /go-hub-city-route\.js/);
+  assert.match(source, /fitWork/);
+  assert.match(source, /routeInbound/);
+  assert.match(source, /fit\.gate !== "PASS"/);
+  assert.match(source, /route\.destination !== "go-work-loop"/);
+  assert.match(source, /centre\.leave\(centreWork/);
+
+  const fitIndex = source.indexOf("fitWork(");
+  const routeIndex = source.indexOf("routeInbound(");
+  const leaveIndex = source.indexOf("centre.leave(centreWork");
+  assert.ok(fitIndex >= 0 && routeIndex > fitIndex && leaveIndex > routeIndex,
+    "Optician fit and city route must run before Centre handoff");
+});
