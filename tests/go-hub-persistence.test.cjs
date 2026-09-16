@@ -59,7 +59,6 @@ test("GO Hub persistence rejects invalid proposed state before write", async () 
   assert.equal(await persistence.loadState(), null);
 });
 
-
 test("GO Hub local storage port restores an identical task snapshot", async () => {
   const { createLocalStorageKeyValueStore, createStatePersistence } = await import(pathToFileURL(modulePath).href);
   const values = new Map();
@@ -254,7 +253,14 @@ test("Engine 3 assembles a Ready Gate Piece into a resumable verified Product", 
     task = task.addEvidence({ id, scope: "assembly", claim, kind: "functional-test", headSha: "assembly-head" });
   }
   task = task.recordAssemblyQc(evaluateAssemblyQc({ assembly: task.snapshot().assembly, blueprint, evidence: task.snapshot().evidence }));
-  const artifact = createBuildArtifact({ id: "artifact-3", kind: "worker", assembly: task.snapshot().assembly, assemblyQc: task.snapshot().assemblyQc, digest: "sha256:engine-3", location: "production", builtAt: "2026-09-14T12:00:00.000Z" });
+  task = task.recordMergeGate({
+    status: "MERGED_VERIFIED", assemblyId: "assembly-3", sourceHeadSha: "assembly-head",
+    pullRequest: { number: 53, headSha: "assembly-head" },
+    ci: { status: "success", headSha: "assembly-head" },
+    merge: { headSha: "assembly-head", mergeSha: "main-head", pullRequestNumber: 53 },
+    postMergeVerification: { status: "pass", mainSha: "main-head", checkedAt: "2026-09-14T12:00:00.000Z" },
+  });
+  const artifact = createBuildArtifact({ id: "artifact-3", kind: "worker", assembly: task.snapshot().assembly, assemblyQc: task.snapshot().assemblyQc, mergeGate: task.snapshot().mergeGate, digest: "sha256:engine-3", location: "production", builtAt: "2026-09-14T12:00:00.000Z" });
   task = task.recordBuildArtifact(artifact);
   for (const [id, claim] of [["artifact-load", "artifact-loads"], ["artifact-binding", "source-binding-correct"], ["artifact-flow", "core-flow-correct"], ["artifact-outcome", "blueprint-outcome-correct"]]) {
     task = task.addEvidence({ id, scope: "artifact", claim, kind: "functional-test", value: { digest: artifact.digest } });
@@ -268,7 +274,9 @@ test("Engine 3 assembles a Ready Gate Piece into a resumable verified Product", 
   assert.equal(createWorkbenchView(restored).status, "PRODUCT_VERIFIED");
   assert.equal(restored.blueprint.ref, blueprintRef);
   assert.deepEqual(restored.assembly.sourceHeads, ["piece-head"]);
-  assert.equal(restored.buildArtifact.sourceHeadSha, restored.assembly.integrationHeadSha);
+  assert.equal(restored.mergeGate.mainSha, "main-head");
+  assert.equal(restored.buildArtifact.sourceHeadSha, restored.mergeGate.mainSha);
+  assert.equal(restored.buildArtifact.assemblyHeadSha, restored.assembly.integrationHeadSha);
   assert.deepEqual(restored.productQc.evidenceIds, ["artifact-load", "artifact-flow", "artifact-outcome"]);
   assert.equal(createCodeCapability({ task: restored }).productQc.status, "pass");
 });
@@ -283,7 +291,7 @@ test("Engine 4 scans closes and learns through exact persistence", async () => {
   const { planCloseout }=await load("go-hub-housekeeper.js");
   const { recordLesson }=await load("go-hub-learning-recorder.js");
   const initial=createCodeTask({id:"engine-4-functional"}).snapshot();
-  const truth={...initial,factoryStage:"PRODUCT_VERIFIED",blueprint:{ref:"spec.md",status:"approved"},piece:{id:"p",headSha:"piece-head"},pieceQc:{status:"pass",checkedHeadSha:"piece-head"},gateHandoff:{status:"READY_FOR_ASSEMBLY",headSha:"piece-head",blueprintRef:"spec.md"},assembly:{id:"assembly",status:"ASSEMBLED",integrationHeadSha:"assembly-head",blueprintRef:"spec.md"},assemblyQc:{status:"pass",checkedHeadSha:"assembly-head"},buildArtifact:{id:"artifact",status:"BUILT",digest:"digest-4",sourceHeadSha:"assembly-head",blueprintRef:"spec.md"},productQc:{status:"pass",artifactId:"artifact",artifactDigest:"digest-4"}};
+  const truth={...initial,factoryStage:"PRODUCT_VERIFIED",blueprint:{ref:"spec.md",status:"approved"},piece:{id:"p",headSha:"piece-head"},pieceQc:{status:"pass",checkedHeadSha:"piece-head"},gateHandoff:{status:"READY_FOR_ASSEMBLY",headSha:"piece-head",blueprintRef:"spec.md"},assembly:{id:"assembly",status:"ASSEMBLED",integrationHeadSha:"assembly-head",blueprintRef:"spec.md"},assemblyQc:{status:"pass",checkedHeadSha:"assembly-head"},mergeGate:{status:"MERGED_VERIFIED",assemblyId:"assembly",sourceHeadSha:"assembly-head",pullRequestHeadSha:"assembly-head",ciHeadSha:"assembly-head",mergeSha:"main-head",mainSha:"main-head"},buildArtifact:{id:"artifact",status:"BUILT",digest:"digest-4",assemblyHeadSha:"assembly-head",sourceHeadSha:"main-head",blueprintRef:"spec.md"},productQc:{status:"pass",artifactId:"artifact",artifactDigest:"digest-4"}};
   const broken=structuredClone(truth); broken.assemblyQc.checkedHeadSha="stale"; assert.equal(scanFactoryTruth(broken).station,"assembly-qc");
   let task=createCodeTaskFromSnapshot(truth); const scan=scanFactoryTruth(task.snapshot()); task=task.recordVerificationScan(scan);
   task=task.recordCloseout(planCloseout({task:task.snapshot(),scan,transientKeys:["draft"],obsoleteKeys:["old-cache"]}));
