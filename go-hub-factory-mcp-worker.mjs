@@ -59,6 +59,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         fetchImpl,
         token: env?.LINEAR_API_KEY,
         teamId: env?.LINEAR_TEAM_ID,
+        teamKey: env?.LINEAR_TEAM_KEY,
       });
       const registry = createMcpRegistry({
         lifecycle: Object.freeze({
