@@ -17,8 +17,6 @@ jobs:
       GOHUB_GITHUB_TOKEN: ${{ secrets.GOHUB_GITHUB_TOKEN }}
       GOHUB_MASTER_KEY: ${{ secrets.GOHUB_MASTER_KEY }}
       GOHUB_OWNER_PASSCODE: ${{ secrets.GOHUB_OWNER_PASSCODE }}
-      LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
-      LINEAR_TEAM_ID: ${{ vars.LINEAR_TEAM_ID }}
 
     steps:
       - name: Check out repository
@@ -38,11 +36,6 @@ jobs:
       - name: Deploy GO Hub Worker
         shell: bash
         run: |
-          if [ -z "${LINEAR_API_KEY}" ] || [ -z "${LINEAR_TEAM_ID}" ]; then
-            echo "::error::Linear bridge runtime configuration is incomplete. Configure LINEAR_API_KEY secret and LINEAR_TEAM_ID repository variable."
-            exit 1
-          fi
-
           secrets_file="${RUNNER_TEMP}/go-hub.secrets"
           : > "${secrets_file}"
           chmod 600 "${secrets_file}"
@@ -55,8 +48,6 @@ jobs:
           else
             echo "GO Hub OAuth secrets are incomplete; MCP will remain fail-closed."
           fi
-          printf 'LINEAR_API_KEY=%s\n' "${LINEAR_API_KEY}" >> "${secrets_file}"
-          printf 'LINEAR_TEAM_ID=%s\n' "${LINEAR_TEAM_ID}" >> "${secrets_file}"
           if [ -s "${secrets_file}" ]; then
             npx wrangler deploy --config wrangler.go-hub.jsonc --secrets-file "${secrets_file}"
           else

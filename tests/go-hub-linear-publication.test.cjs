@@ -6,16 +6,17 @@ const assert = require("node:assert/strict");
 
 const root = path.resolve(__dirname, "..");
 const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "go-hub-deploy.yml"), "utf8");
+const wrangler = JSON.parse(fs.readFileSync(path.join(root, "wrangler.go-hub.jsonc"), "utf8"));
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
-test("GO Hub deploy publishes Linear bridge runtime configuration without committing values", () => {
-  assert.match(workflow, /LINEAR_API_KEY:\s*\$\{\{\s*secrets\.LINEAR_API_KEY\s*\}\}/);
-  assert.match(workflow, /LINEAR_TEAM_ID:\s*\$\{\{\s*vars\.LINEAR_TEAM_ID\s*\}\}/);
-  assert.match(workflow, /printf 'LINEAR_API_KEY=%s\\n'/);
-  assert.match(workflow, /printf 'LINEAR_TEAM_ID=%s\\n'/);
-  assert.match(workflow, /Linear bridge runtime configuration is incomplete/);
-  assert.match(workflow, /exit 1/);
-  assert.doesNotMatch(workflow, /LINEAR_API_KEY:\s*[A-Za-z0-9_-]{20,}/);
+test("Cloudflare is the runtime source of truth for Linear configuration", () => {
+  assert.equal(wrangler.keep_vars, true, "dashboard vars such as LINEAR_TEAM_ID must survive Wrangler deploys");
+  assert.deepEqual(wrangler.secrets?.required, ["LINEAR_API_KEY"], "deploy must require the Cloudflare Linear secret");
+  assert.doesNotMatch(workflow, /secrets\.LINEAR_API_KEY/);
+  assert.doesNotMatch(workflow, /vars\.LINEAR_TEAM_ID/);
+  assert.doesNotMatch(workflow, /printf 'LINEAR_API_KEY=/);
+  assert.doesNotMatch(workflow, /printf 'LINEAR_TEAM_ID=/);
+  assert.doesNotMatch(workflow, /Linear bridge runtime configuration is incomplete/);
 });
 
 test("deploy syntax gate includes the Linear service module", () => {
