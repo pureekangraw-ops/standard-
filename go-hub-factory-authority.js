@@ -12,7 +12,9 @@ export function deriveFactoryNextAction(snapshot = {}) {
     case "ASSEMBLY":
       return "assembly-qc";
     case "ASSEMBLY_QC":
-      return snapshot.assemblyQc?.status === "pass" ? "build" : "fix-assembly";
+      return snapshot.assemblyQc?.status === "pass" ? "merge-gate" : "fix-assembly";
+    case "MERGE_GATE":
+      return "build";
     case "BUILD":
       return "product-qc";
     case "PRODUCT_QC":
