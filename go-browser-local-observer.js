@@ -2,6 +2,8 @@ const OBSERVER_SCHEMA_VERSION = "go-browser-observer-v1";
 const GUMROAD_HOSTS = Object.freeze(["gumroad.com", "*.gumroad.com"]);
 const CANDIDATE_SELECTOR = 'input, textarea, select, [contenteditable="true"]';
 const SCREENSHOT_CONSENT_TTL_MS = 30_000;
+const MAX_SCREENSHOT_DATA_URL_CHARS = 1_500_000;
+const SENSITIVE_PAGE_PATTERN = /password|passcode|\botp\b|one[- ]?time|verification code|card number|credit card|debit card|\bcvv\b|\bcvc\b|bank account|authorization|bearer\s+[a-z0-9._-]+|access token|refresh token|api key|recovery code|sk-[a-z0-9_-]+/i;
 
 export const OBSERVER_STATUS = Object.freeze({
   SESSION_INACTIVE: "SESSION_INACTIVE",
@@ -52,12 +54,20 @@ export function collectObserverSnapshot({ document, location, title = "", viewpo
   return { ok: true, packet: Object.freeze({ schema_version: OBSERVER_SCHEMA_VERSION, session_id: session.sessionId, captured_at: capturedAt(now), origin: url.origin, sanitized_path: sanitizedPath, page_title: cleanText(title), viewport: Object.freeze({ width: Number(viewport.width) || 0, height: Number(viewport.height) || 0 }), page_fingerprint: pageFingerprint, visible_landmarks: Object.freeze([]), visible_text_snippets: Object.freeze([]), interactive_elements: Object.freeze(captured.fields.map(field => Object.freeze({ label: field.label, field_kind: field.field_kind, semantic: field.semantic }))), fields: captured.fields, redaction_report: captured.redactionReport, optional_screenshot_ref: null }) };
 }
 
+export function assessScreenshotSafety({ document, snapshot } = {}) {
+  if (!document?.body || typeof document.querySelectorAll !== "function" || !snapshot?.redaction_report) return { safe: false, code: OBSERVER_STATUS.SENSITIVE_CONTENT_BLOCKED };
+  if (Number(snapshot.redaction_report.sensitive_blocked) > 0 || Number(snapshot.redaction_report.unknown_redacted) > 0) return { safe: false, code: OBSERVER_STATUS.SENSITIVE_CONTENT_BLOCKED };
+  if (SENSITIVE_PAGE_PATTERN.test(cleanText(document.body.innerText))) return { safe: false, code: OBSERVER_STATUS.SENSITIVE_CONTENT_BLOCKED };
+  const opaque = Array.from(document.querySelectorAll("iframe, canvas, video")).some(isVisible);
+  if (opaque) return { safe: false, code: OBSERVER_STATUS.SENSITIVE_CONTENT_BLOCKED };
+  return { safe: true, code: null };
+}
+
 export function parseObserverBootstrap(value, now = Date.now()) {
   let input = value;
   if (typeof value === "string") { try { input = JSON.parse(value); } catch { throw new Error(OBSERVER_STATUS.SCHEMA_REJECTED); } }
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error(OBSERVER_STATUS.SCHEMA_REJECTED);
-  let hub;
-  try { hub = new URL(String(input.hub_origin || "")); } catch { throw new Error(OBSERVER_STATUS.DESTINATION_BLOCKED); }
+  let hub; try { hub = new URL(String(input.hub_origin || "")); } catch { throw new Error(OBSERVER_STATUS.DESTINATION_BLOCKED); }
   const sessionId = cleanText(input.session_id); const sessionToken = cleanText(input.session_token); const allowedOrigin = cleanText(input.allowed_origin); const expiresAt = Number(input.expires_at); const current = Number(now);
   if (hub.protocol !== "https:" || hub.origin !== cleanText(input.hub_origin) || !sessionId || !sessionToken) throw new Error(OBSERVER_STATUS.DESTINATION_BLOCKED);
   let allowed; try { allowed = new URL(allowedOrigin); } catch { throw new Error(OBSERVER_STATUS.HOST_BLOCKED); }
@@ -72,21 +82,15 @@ export function createObserverTransport({ bootstrap = null, hubOrigin, sessionId
   if (typeof fetchImpl !== "function") throw new TypeError("fetch implementation required");
   const snapshotDestination = new URL("/hub/api/browser/observer/snapshot", parsed.hubOrigin).toString();
   function headers() { return { "content-type": "application/json", "x-go-observer-session-id": parsed.sessionId, "x-go-observer-session-token": parsed.sessionToken }; }
-  async function post(path, body) {
-    try {
-      const response = await fetchImpl(new URL(path, parsed.hubOrigin).toString(), { method: "POST", headers: headers(), ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) return { ok: false, code: payload.code || OBSERVER_STATUS.HUB_UNAVAILABLE };
-      return { ok: true, code: null, payload };
-    } catch { return { ok: false, code: OBSERVER_STATUS.HUB_UNAVAILABLE }; }
-  }
+  async function post(path, body) { try { const response = await fetchImpl(new URL(path, parsed.hubOrigin).toString(), { method: "POST", headers: headers(), ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); const payload = await response.json().catch(() => ({})); if (!response.ok) return { ok: false, code: payload.code || OBSERVER_STATUS.HUB_UNAVAILABLE }; return { ok: true, code: null, payload }; } catch { return { ok: false, code: OBSERVER_STATUS.HUB_UNAVAILABLE }; } }
   return Object.freeze({
     bootstrap: parsed,
     async sendSnapshot(packet) { return post("/hub/api/browser/observer/snapshot", packet); },
     async stop() { return post("/hub/api/browser/observer/session/stop"); },
     async grantScreenshotConsent() { return post("/hub/api/browser/observer/screenshot/consent"); },
+    async uploadScreenshot({ dataUrl, pageFingerprint } = {}) { const value = String(dataUrl || ""); if (!/^data:image\/(?:jpeg|png);base64,[a-z0-9+/=]+$/i.test(value) || value.length > MAX_SCREENSHOT_DATA_URL_CHARS || !cleanText(pageFingerprint)) return { ok: false, code: OBSERVER_STATUS.SCHEMA_REJECTED }; const result = await post("/hub/api/browser/observer/screenshot", { data_url: value, page_fingerprint: cleanText(pageFingerprint) }); return result.ok ? { ok: true, code: null, screenshot_ref: cleanText(result.payload?.screenshot_ref) || null } : result; },
     async send({ destination, packet } = {}) { let target; try { target = new URL(String(destination || "")).toString(); } catch { return { ok: false, code: OBSERVER_STATUS.DESTINATION_BLOCKED }; } if (target !== snapshotDestination) return { ok: false, code: OBSERVER_STATUS.DESTINATION_BLOCKED }; const result = await post("/hub/api/browser/observer/snapshot", packet); return result.ok ? { ok: true, code: null } : result; },
   });
 }
 
-export { OBSERVER_SCHEMA_VERSION, GUMROAD_HOSTS, SCREENSHOT_CONSENT_TTL_MS };
+export { OBSERVER_SCHEMA_VERSION, GUMROAD_HOSTS, SCREENSHOT_CONSENT_TTL_MS, MAX_SCREENSHOT_DATA_URL_CHARS };
