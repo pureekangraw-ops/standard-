@@ -15,6 +15,10 @@
       {
         "name": "HEPHAESTUS",
         "class_name": "HephaestusForeman"
+      },
+      {
+        "name": "OBSERVER_SESSIONS",
+        "class_name": "ObserverSessionRegistry"
       }
     ]
   },
@@ -22,6 +26,10 @@
     {
       "tag": "v1-hephaestus-foreman",
       "new_sqlite_classes": ["HephaestusForeman"]
+    },
+    {
+      "tag": "v2-browser-observer-sessions",
+      "new_sqlite_classes": ["ObserverSessionRegistry"]
     }
   ],
   "vars": {
@@ -40,6 +48,7 @@
     "run_worker_first": [
       "/hub/api/browser/*",
       "/hub/api/github-workspace/*",
+      "/hub/observer",
       "/mcp",
       "/oauth/*",
       "/.well-known/*"
