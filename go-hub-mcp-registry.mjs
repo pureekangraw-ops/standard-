@@ -39,6 +39,8 @@ const definitions = [
   def("go_hub_merge_pull_request", "Merge with Foreman ownership and exact-head CI.", "mergePullRequest", schema({ repository: str, number: int, expectedHeadSha: str, goId: str, jobId: str, method: { type: "string", enum: ["merge", "squash", "rebase"] }, workContext }, ["repository", "number", "expectedHeadSha", "goId", "jobId", "workContext"]), ann(false, true)),
   def("go_hub_get_workflow_runs", "Observe workflow and deployment runs.", "getWorkflowRuns", schema({ repository: str, sha: str }, ["repository", "sha"]), ann(true)),
   def("go_hub_mimir_search_catalog", "Search live MIMIR catalog with Gate-before-Rating.", "searchCatalog", schema({ task: str, requestedResult: str, lensReference: str, workContext }, ["task", "requestedResult", "workContext"]), ann(true)),
+  def("go_hub_observer_latest", "Read latest sanitized Browser Observer evidence.", "observerLatest", schema({}), ann(true)),
+  def("go_hub_observer_screenshot", "Read one consented Browser Observer screenshot by ref.", "observerScreenshot", schema({ screenshotRef: str }, ["screenshotRef"]), ann(true)),
   def("go_hub_linear_list_projects", "List projects scoped to the configured Linear team.", "linearListProjects", schema({}), ann(true)),
   def("go_hub_linear_get_issue", "Read one Linear issue and enforce configured-team scope.", "linearGetIssue", schema({ identifier: str }, ["identifier"]), ann(true)),
   def("go_hub_linear_create_issue", "Create a Linear issue in the configured team.", "linearCreateIssue", schema({ title: str, description: nullableStr, projectId: nullableStr, priority, workContext }, ["title", "workContext"]), ann(false)),
