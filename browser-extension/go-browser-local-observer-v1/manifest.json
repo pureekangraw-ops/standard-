@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GO Browser Local Observer Eye",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read-only, owner-started, fail-closed local observer for GO Browser V1.",
   "permissions": ["activeTab"],
   "browser_specific_settings": {
