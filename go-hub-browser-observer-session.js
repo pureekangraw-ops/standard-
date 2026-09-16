@@ -1,6 +1,7 @@
 import { validateObserverPacket } from "./go-hub-browser-observer.js";
 
 const DEFAULT_TTL_MS = 10 * 60 * 1000;
+const MAX_SCREENSHOT_DATA_URL_CHARS = 1_500_000;
 const encoder = new TextEncoder();
 
 function clean(value) { return String(value == null ? "" : value).trim(); }
@@ -9,6 +10,7 @@ async function sha256(value) { const digest = await crypto.subtle.digest("SHA-25
 function constantTimeEqual(left, right) { const a = encoder.encode(String(left || "")); const b = encoder.encode(String(right || "")); let diff = a.length ^ b.length; const len = Math.max(a.length, b.length, 1); for (let i = 0; i < len; i += 1) diff |= (a[i % Math.max(a.length, 1)] || 0) ^ (b[i % Math.max(b.length, 1)] || 0); return diff === 0; }
 function defaultToken() { if (!globalThis.crypto?.getRandomValues) throw new Error("HUB_UNAVAILABLE"); const bytes = new Uint8Array(32); crypto.getRandomValues(bytes); return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join(""); }
 function publicSession(session) { if (!session) return null; const { tokenHash, ...safe } = session; return safe; }
+function validScreenshotDataUrl(value) { const text = String(value || ""); return text.length <= MAX_SCREENSHOT_DATA_URL_CHARS && /^data:image\/(?:jpeg|png);base64,[a-z0-9+/=]+$/i.test(text); }
 
 export function createObserverSessionService({ storage, now = () => Date.now(), randomUUID = () => crypto.randomUUID(), randomToken = defaultToken } = {}) {
   if (!storage || typeof storage.get !== "function" || typeof storage.put !== "function") throw new TypeError("Observer session storage required");
@@ -29,7 +31,7 @@ export function createObserverSessionService({ storage, now = () => Date.now(), 
       if (!Number.isFinite(ttl) || ttl <= 0 || ttl > DEFAULT_TTL_MS) return { ok: false, code: "SCHEMA_REJECTED" };
       const sessionId = clean(randomUUID()); const token = clean(randomToken()); const startedAt = Number(now());
       if (!sessionId || !token || !Number.isFinite(startedAt)) return { ok: false, code: "HUB_UNAVAILABLE" };
-      const session = { sessionId, tokenHash: await sha256(token), active: true, allowedOrigin, origin: null, pageFingerprint: null, startedAt, expiresAt: startedAt + ttl, screenshotConsent: false, latestScreenshotRef: null };
+      const session = { sessionId, tokenHash: await sha256(token), active: true, allowedOrigin, origin: null, pageFingerprint: null, startedAt, expiresAt: startedAt + ttl, screenshotConsent: false, pendingScreenshotRef: null, latestScreenshotRef: null };
       await storage.put(`session:${sessionId}`, session);
       return { ok: true, session_id: sessionId, session_token: token, expires_at: session.expiresAt, allowed_origin: allowedOrigin };
     },
@@ -40,8 +42,12 @@ export function createObserverSessionService({ storage, now = () => Date.now(), 
         if (clean(packet?.origin) !== clean(session.allowedOrigin)) return { ok: false, code: "HOST_BLOCKED" };
         session = { ...session, origin: clean(packet.origin), pageFingerprint: clean(packet.page_fingerprint) };
       }
-      const validated = validateObserverPacket(packet, session, { now: Number(now()) });
+      const screenshotRef = clean(packet?.optional_screenshot_ref);
+      if (screenshotRef && screenshotRef !== clean(session.pendingScreenshotRef)) return { ok: false, code: "SCREENSHOT_CONSENT_REQUIRED" };
+      const validationSession = screenshotRef ? { ...session, screenshotConsent: true } : session;
+      const validated = validateObserverPacket(packet, validationSession, { now: Number(now()) });
       if (!validated.ok) return validated;
+      if (screenshotRef) session = { ...session, screenshotConsent: false, pendingScreenshotRef: null, latestScreenshotRef: screenshotRef };
       await storage.put(`session:${session.sessionId}`, session);
       await storage.put(`latest:${session.sessionId}`, packet);
       await storage.put("latest-session-id", session.sessionId);
@@ -53,12 +59,12 @@ export function createObserverSessionService({ storage, now = () => Date.now(), 
     },
     async stop({ sessionId, sessionToken } = {}) {
       const auth = await authorize(sessionId, sessionToken); if (!auth.ok) return auth;
-      await storage.put(`session:${auth.session.sessionId}`, { ...auth.session, active: false, screenshotConsent: false });
+      await storage.put(`session:${auth.session.sessionId}`, { ...auth.session, active: false, screenshotConsent: false, pendingScreenshotRef: null });
       return { ok: true, code: null };
     },
     async grantScreenshot({ sessionId, sessionToken } = {}) {
       const auth = await authorize(sessionId, sessionToken); if (!auth.ok) return auth;
-      await storage.put(`session:${auth.session.sessionId}`, { ...auth.session, screenshotConsent: true });
+      await storage.put(`session:${auth.session.sessionId}`, { ...auth.session, screenshotConsent: true, pendingScreenshotRef: null });
       return { ok: true, code: null };
     },
     async consumeScreenshot({ sessionId, sessionToken } = {}) {
@@ -67,12 +73,27 @@ export function createObserverSessionService({ storage, now = () => Date.now(), 
       await storage.put(`session:${auth.session.sessionId}`, { ...auth.session, screenshotConsent: false });
       return { allowed: true, code: null };
     },
+    async storeScreenshot({ sessionId, sessionToken, dataUrl, pageFingerprint } = {}) {
+      const auth = await authorize(sessionId, sessionToken); if (!auth.ok) return auth;
+      if (auth.session.screenshotConsent !== true) return { ok: false, code: "SCREENSHOT_CONSENT_REQUIRED" };
+      if (!auth.session.pageFingerprint || clean(pageFingerprint) !== clean(auth.session.pageFingerprint)) return { ok: false, code: "STALE_PAGE" };
+      if (!validScreenshotDataUrl(dataUrl)) return { ok: false, code: "SCHEMA_REJECTED" };
+      const ref = `shot:${clean(randomUUID())}`;
+      if (!clean(ref) || ref === "shot:") return { ok: false, code: "HUB_UNAVAILABLE" };
+      await storage.put(`screenshot:${ref}`, { ref, sessionId: auth.session.sessionId, pageFingerprint: auth.session.pageFingerprint, capturedAt: Number(now()), dataUrl: String(dataUrl) });
+      await storage.put(`session:${auth.session.sessionId}`, { ...auth.session, screenshotConsent: false, pendingScreenshotRef: ref });
+      return { ok: true, code: null, screenshot_ref: ref };
+    },
     async latest() {
       const sessionId = await storage.get("latest-session-id");
       if (!sessionId) return { ok: false, code: "SESSION_INACTIVE" };
       const session = await load(sessionId); const latest = await storage.get(`latest:${sessionId}`) || null;
       if (!session || session.active !== true || Number(now()) >= Number(session.expiresAt)) return { ok: false, code: session ? "SESSION_EXPIRED" : "SESSION_INACTIVE" };
       return { ok: true, session: publicSession(session), latest };
+    },
+    async screenshot({ screenshotRef } = {}) {
+      const value = await storage.get(`screenshot:${clean(screenshotRef)}`);
+      return value ? { ok: true, screenshot: value } : { ok: false, code: "SCHEMA_REJECTED" };
     },
   });
 }
@@ -86,7 +107,9 @@ export class ObserverSessionRegistry {
   async stop(input) { return this.service().stop(input); }
   async grantScreenshot(input) { return this.service().grantScreenshot(input); }
   async consumeScreenshot(input) { return this.service().consumeScreenshot(input); }
+  async storeScreenshot(input) { return this.service().storeScreenshot(input); }
   async latest() { return this.service().latest(); }
+  async screenshot(input) { return this.service().screenshot(input); }
 }
 
-export { DEFAULT_TTL_MS };
+export { DEFAULT_TTL_MS, MAX_SCREENSHOT_DATA_URL_CHARS };
