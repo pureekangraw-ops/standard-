@@ -7,7 +7,9 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "go-browser-local-observer-v1@pureekangraw.local",
-      "data_collection_permissions": { "required": ["none"] }
+      "data_collection_permissions": {
+        "required": ["websiteActivity", "websiteContent"]
+      }
     },
     "gecko_android": {}
   },
