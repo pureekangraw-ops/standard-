@@ -6,22 +6,26 @@ const { pathToFileURL } = require("node:url");
 
 const moduleUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-mimir-knowledge.js")).href;
 
+function value(overrides, key, fallback) {
+  return Object.hasOwn(overrides, key) ? overrides[key] : fallback;
+}
+
 function record(overrides = {}) {
   return {
-    id: overrides.id || "k-current",
-    Title: overrides.title || "Software quality model",
-    Topic: overrides.topic || "software quality",
-    Claim: overrides.claim || "Product quality must be evaluated against explicit quality characteristics.",
-    Summary: overrides.summary || "Use explicit quality characteristics as acceptance evidence.",
-    "Knowledge Status": overrides.status || "CURRENT",
-    "Verification State": overrides.verification || "VERIFIED",
-    "Source ID": overrides.sourceId || "ISO-25010",
-    "Source URL": overrides.sourceUrl || "https://example.test/iso-25010",
-    Evidence: overrides.evidence || "Primary standard reviewed",
-    "Verified Date": overrides.verifiedAt || "2026-09-16",
-    "Review By": overrides.reviewBy || "2026-12-31",
-    Rating: overrides.rating || "3.0",
-    Tags: overrides.tags || "quality acceptance standard",
+    id: value(overrides, "id", "k-current"),
+    Title: value(overrides, "title", "Software quality model"),
+    Topic: value(overrides, "topic", "software quality"),
+    Claim: value(overrides, "claim", "Product quality must be evaluated against explicit quality characteristics."),
+    Summary: value(overrides, "summary", "Use explicit quality characteristics as acceptance evidence."),
+    "Knowledge Status": value(overrides, "status", "CURRENT"),
+    "Verification State": value(overrides, "verification", "VERIFIED"),
+    "Source ID": value(overrides, "sourceId", "ISO-25010"),
+    "Source URL": value(overrides, "sourceUrl", "https://example.test/iso-25010"),
+    Evidence: value(overrides, "evidence", "Primary standard reviewed"),
+    "Verified Date": value(overrides, "verifiedAt", "2026-09-16"),
+    "Review By": value(overrides, "reviewBy", "2026-12-31"),
+    Rating: value(overrides, "rating", "3.0"),
+    Tags: value(overrides, "tags", "quality acceptance standard"),
   };
 }
 
