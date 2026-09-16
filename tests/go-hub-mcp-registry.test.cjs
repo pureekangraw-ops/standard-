@@ -30,12 +30,13 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_open_pull_request", "go_hub_get_pull_request", "go_hub_get_ci",
     "go_hub_get_failure_evidence", "go_hub_rerun_failed_jobs", "go_hub_factory_foreman",
     "go_hub_merge_pull_request", "go_hub_get_workflow_runs", "go_hub_mimir_search_catalog",
-    "go_hub_linear_list_projects", "go_hub_linear_get_issue",
+    "go_hub_mimir_search_knowledge", "go_hub_linear_list_projects", "go_hub_linear_get_issue",
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_factory_foreman").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_merge_pull_request").annotations.destructiveHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_mimir_search_knowledge").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_list_projects").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_get_issue").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_create_issue").annotations.readOnlyHint, false);
@@ -45,7 +46,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   for (const name of [
     "go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file",
     "go_hub_open_pull_request", "go_hub_rerun_failed_jobs",
-    "go_hub_merge_pull_request", "go_hub_mimir_search_catalog",
+    "go_hub_merge_pull_request", "go_hub_mimir_search_catalog", "go_hub_mimir_search_knowledge",
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
   ]) {
     assert.equal(tools.find(tool => tool.name === name).inputSchema.required.includes("workContext"), true, `${name} must require city work context`);
@@ -84,6 +85,9 @@ test("city lifecycle tools require exact Centre identity and correct destination
   await assert.rejects(registry.callTool("go_hub_mimir_search_catalog", {
     task: "Find Factory", requestedResult: "Route evidence", workContext: factoryWorkContext,
   }), /destination/i);
+  await assert.rejects(registry.callTool("go_hub_mimir_search_knowledge", {
+    task: "Find knowledge", requestedResult: "Evidence", workContext: factoryWorkContext,
+  }), /destination/i);
   await assert.rejects(registry.callTool("go_hub_factory_foreman", {
     action: "request", repository: "pureekangraw-ops/standard-", slot: "assembly", goId: "go-a", jobId: "job-a",
   }), /workContext/);
@@ -95,6 +99,12 @@ test("city lifecycle tools require exact Centre identity and correct destination
     task: "Find Factory", requestedResult: "Route evidence", lensReference: "lens://city", workContext: mimirWorkContext,
   });
   assert.equal(calls.at(-1).name, "searchCatalog");
+  assert.deepEqual(calls.at(-1).input.workContext, mimirWorkContext);
+
+  await registry.callTool("go_hub_mimir_search_knowledge", {
+    task: "Find software quality knowledge", requestedResult: "Evidence", lensReference: "lens://knowledge", workContext: mimirWorkContext,
+  });
+  assert.equal(calls.at(-1).name, "searchKnowledge");
   assert.deepEqual(calls.at(-1).input.workContext, mimirWorkContext);
 
   await registry.callTool("go_hub_linear_create_issue", {
