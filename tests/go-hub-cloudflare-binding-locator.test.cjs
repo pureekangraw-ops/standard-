@@ -11,6 +11,7 @@ test("Cloudflare preflight locates misplaced Linear bindings without exposing va
   assert.match(workflow, /accounts\/\$\{CLOUDFLARE_ACCOUNT_ID\}\/workers\/scripts/);
   assert.match(workflow, /candidate Worker/);
   assert.match(workflow, /LINEAR_API_KEY/);
+  assert.match(workflow, /linear-API/);
   assert.match(workflow, /LINEAR_TEAM_KEY/);
   assert.doesNotMatch(workflow, /LINEAR_TEAM_ID/);
   assert.match(workflow, /binding\.name/);
