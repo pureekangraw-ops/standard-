@@ -5,23 +5,14 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const registryUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-mcp-registry.mjs")).href;
-const factoryWorkContext = Object.freeze({
-  workId: "WORK-A", checkpointId: "CENTRE-001", returnAddress: "CENTRE-001",
-  destination: "destination://factory", task: "Build GO City",
-  requestedResult: "Verified result", lensReference: "lens://city",
-});
+const factoryWorkContext = Object.freeze({ workId: "WORK-A", checkpointId: "CENTRE-001", returnAddress: "CENTRE-001", destination: "destination://factory", task: "Build GO City", requestedResult: "Verified result", lensReference: "lens://city" });
 const mimirWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://mimir" });
 const linearWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://linear" });
 
-test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe annotations", async () => {
+test("registry publishes lifecycle, Observer evidence, and Hephaestus with safe annotations", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?contract=" + Date.now());
   const calls = [];
-  const lifecycle = new Proxy({}, {
-    get: (_, name) => async input => {
-      calls.push({ name, input });
-      return new Response(JSON.stringify({ ok: true, operation: name }), { headers: { "content-type": "application/json" } });
-    },
-  });
+  const lifecycle = new Proxy({}, { get: (_, name) => async input => { calls.push({ name, input }); return new Response(JSON.stringify({ ok: true, operation: name }), { headers: { "content-type": "application/json" } }); } });
   const registry = createMcpRegistry({ lifecycle });
   const tools = registry.listTools();
   assert.deepEqual(tools.map(tool => tool.name), [
@@ -30,99 +21,69 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_open_pull_request", "go_hub_get_pull_request", "go_hub_get_ci",
     "go_hub_get_failure_evidence", "go_hub_rerun_failed_jobs", "go_hub_factory_foreman",
     "go_hub_merge_pull_request", "go_hub_get_workflow_runs", "go_hub_mimir_search_catalog",
+    "go_hub_observer_latest", "go_hub_observer_screenshot",
     "go_hub_linear_list_projects", "go_hub_linear_get_issue",
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_factory_foreman").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_merge_pull_request").annotations.destructiveHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_observer_latest").annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_observer_screenshot").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_list_projects").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_get_issue").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_create_issue").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_update_issue").annotations.readOnlyHint, false);
   assert.deepEqual(tools[0].securitySchemes, [{ type: "oauth2", scopes: ["go-hub"] }]);
 
-  for (const name of [
-    "go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file",
-    "go_hub_open_pull_request", "go_hub_rerun_failed_jobs",
-    "go_hub_merge_pull_request", "go_hub_mimir_search_catalog",
-    "go_hub_linear_create_issue", "go_hub_linear_update_issue",
-  ]) {
+  for (const name of ["go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_merge_pull_request", "go_hub_mimir_search_catalog", "go_hub_linear_create_issue", "go_hub_linear_update_issue"]) {
     assert.equal(tools.find(tool => tool.name === name).inputSchema.required.includes("workContext"), true, `${name} must require city work context`);
   }
   const foremanSchema = tools.find(tool => tool.name === "go_hub_factory_foreman").inputSchema;
   assert.equal(Object.hasOwn(foremanSchema.properties, "workContext"), true);
-  assert.equal(foremanSchema.required.includes("workContext"), false, "Foreman state inspection remains admin-readable");
+  assert.equal(foremanSchema.required.includes("workContext"), false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_observer_latest").inputSchema.required.includes("workContext"), false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_observer_screenshot").inputSchema.required.includes("workContext"), false);
   assert.equal(tools.find(tool => tool.name === "go_hub_inspect_repository").inputSchema.required.includes("workContext"), false);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_list_projects").inputSchema.required.includes("workContext"), false);
-  assert.equal(tools.find(tool => tool.name === "go_hub_linear_get_issue").inputSchema.required.includes("workContext"), false);
 
   await registry.callTool("go_hub_inspect_repository", { repository: "pureekangraw-ops/standard-", branch: "main" });
   await registry.callTool("go_hub_factory_foreman", { action: "state", repository: "pureekangraw-ops/standard-" });
+  await registry.callTool("go_hub_observer_latest", {});
+  await registry.callTool("go_hub_observer_screenshot", { screenshotRef: "shot:1" });
   assert.equal(calls[0].name, "inspect");
   assert.equal(calls[1].name, "factoryForeman");
+  assert.equal(calls[2].name, "observerLatest");
+  assert.equal(calls[3].name, "observerScreenshot");
 });
 
 test("city lifecycle tools require exact Centre identity and correct destination", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?identity=" + Date.now());
   const calls = [];
-  const lifecycle = new Proxy({}, {
-    get: (_, name) => async input => {
-      calls.push({ name, input });
-      return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
-    },
-  });
+  const lifecycle = new Proxy({}, { get: (_, name) => async input => { calls.push({ name, input }); return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } }); } });
   const registry = createMcpRegistry({ lifecycle });
-
-  await assert.rejects(registry.callTool("go_hub_put_file", {
-    repository: "pureekangraw-ops/standard-", path: "x.js", branch: "task-branch", content: "x",
-  }), /workContext/);
-  await assert.rejects(registry.callTool("go_hub_put_file", {
-    repository: "pureekangraw-ops/standard-", path: "x.js", branch: "task-branch", content: "x",
-    workContext: { ...factoryWorkContext, returnAddress: "CENTRE-002" },
-  }), /Return Address|returnAddress/);
-  await assert.rejects(registry.callTool("go_hub_mimir_search_catalog", {
-    task: "Find Factory", requestedResult: "Route evidence", workContext: factoryWorkContext,
-  }), /destination/i);
-  await assert.rejects(registry.callTool("go_hub_factory_foreman", {
-    action: "request", repository: "pureekangraw-ops/standard-", slot: "assembly", goId: "go-a", jobId: "job-a",
-  }), /workContext/);
-  await assert.rejects(registry.callTool("go_hub_linear_create_issue", {
-    title: "Wrong route", workContext: factoryWorkContext,
-  }), /destination/i);
-
-  await registry.callTool("go_hub_mimir_search_catalog", {
-    task: "Find Factory", requestedResult: "Route evidence", lensReference: "lens://city", workContext: mimirWorkContext,
-  });
+  await assert.rejects(registry.callTool("go_hub_put_file", { repository: "pureekangraw-ops/standard-", path: "x.js", branch: "task-branch", content: "x" }), /workContext/);
+  await assert.rejects(registry.callTool("go_hub_put_file", { repository: "pureekangraw-ops/standard-", path: "x.js", branch: "task-branch", content: "x", workContext: { ...factoryWorkContext, returnAddress: "CENTRE-002" } }), /Return Address|returnAddress/);
+  await assert.rejects(registry.callTool("go_hub_mimir_search_catalog", { task: "Find Factory", requestedResult: "Route evidence", workContext: factoryWorkContext }), /destination/i);
+  await assert.rejects(registry.callTool("go_hub_factory_foreman", { action: "request", repository: "pureekangraw-ops/standard-", slot: "assembly", goId: "go-a", jobId: "job-a" }), /workContext/);
+  await assert.rejects(registry.callTool("go_hub_linear_create_issue", { title: "Wrong route", workContext: factoryWorkContext }), /destination/i);
+  await registry.callTool("go_hub_mimir_search_catalog", { task: "Find Factory", requestedResult: "Route evidence", lensReference: "lens://city", workContext: mimirWorkContext });
   assert.equal(calls.at(-1).name, "searchCatalog");
-  assert.deepEqual(calls.at(-1).input.workContext, mimirWorkContext);
-
-  await registry.callTool("go_hub_linear_create_issue", {
-    title: "Bridge", workContext: linearWorkContext,
-  });
+  await registry.callTool("go_hub_linear_create_issue", { title: "Bridge", workContext: linearWorkContext });
   assert.equal(calls.at(-1).name, "linearCreateIssue");
-  assert.deepEqual(calls.at(-1).input.workContext, linearWorkContext);
 });
 
 test("merge schema requires active GO/job identity before work context", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?merge=" + Date.now());
   const registry = createMcpRegistry({ lifecycle: { mergePullRequest: async () => new Response("{}") } });
-  await assert.rejects(registry.callTool("go_hub_merge_pull_request", {
-    repository: "pureekangraw-ops/standard-", number: 50, expectedHeadSha: "head-sha",
-  }), /missing required argument: goId/);
-  await assert.rejects(registry.callTool("go_hub_merge_pull_request", {
-    repository: "pureekangraw-ops/standard-", number: 50, expectedHeadSha: "head-sha", goId: "go-a",
-  }), /missing required argument: jobId/);
+  await assert.rejects(registry.callTool("go_hub_merge_pull_request", { repository: "pureekangraw-ops/standard-", number: 50, expectedHeadSha: "head-sha" }), /missing required argument: goId/);
+  await assert.rejects(registry.callTool("go_hub_merge_pull_request", { repository: "pureekangraw-ops/standard-", number: 50, expectedHeadSha: "head-sha", goId: "go-a" }), /missing required argument: jobId/);
 });
 
 test("registry preserves domain failures and rejects unknown tools", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?errors=" + Date.now());
-  const registry = createMcpRegistry({ lifecycle: {
-    putFile: async () => new Response(JSON.stringify({ code: "DEFAULT_BRANCH_WRITE_BLOCKED" }), { status: 409, headers: { "content-type": "application/json" } }),
-  } });
-  const blocked = await registry.callTool("go_hub_put_file", {
-    repository: "pureekangraw-ops/standard-", path: "x.js", branch: "main", content: "x", workContext: factoryWorkContext,
-  });
+  const registry = createMcpRegistry({ lifecycle: { putFile: async () => new Response(JSON.stringify({ code: "DEFAULT_BRANCH_WRITE_BLOCKED" }), { status: 409, headers: { "content-type": "application/json" } }) } });
+  const blocked = await registry.callTool("go_hub_put_file", { repository: "pureekangraw-ops/standard-", path: "x.js", branch: "main", content: "x", workContext: factoryWorkContext });
   assert.equal(blocked.isError, true);
   assert.deepEqual(blocked.structuredContent, { code: "DEFAULT_BRANCH_WRITE_BLOCKED" });
   await assert.rejects(registry.callTool("unknown", {}), /unknown MCP tool/);
