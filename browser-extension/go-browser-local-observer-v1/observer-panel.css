@@ -1,0 +1,29 @@
+#go-observer-root {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2147483647;
+  display: grid;
+  gap: 6px;
+  width: min(320px, calc(100vw - 24px));
+  padding: 10px;
+  border: 1px solid currentColor;
+  border-radius: 10px;
+  background: Canvas;
+  color: CanvasText;
+  font: 13px/1.35 system-ui, sans-serif;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
+}
+
+#go-observer-root .go-observer-status {
+  font-weight: 700;
+}
+
+#go-observer-root .go-observer-message {
+  overflow-wrap: anywhere;
+}
+
+#go-observer-root .go-observer-button {
+  min-height: 38px;
+  font: inherit;
+}
