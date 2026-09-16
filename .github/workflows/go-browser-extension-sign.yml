@@ -2,6 +2,11 @@ name: GO Browser Extension Sign
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feat/go-browser-local-observer-eye-v1-r2
+    paths:
+      - '.github/workflows/go-browser-extension-sign.yml'
 
 permissions:
   contents: read
