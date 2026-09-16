@@ -27,7 +27,42 @@ export function createFactoryGuardedLifecycle({ lifecycle, factory } = {}) {
       if (!ownership.ok) return ownership;
       const proof = await ownership.json().catch(() => ({ active: false }));
       if (proof.active !== true) return json({ code: "FACTORY_MERGE_SLOT_REQUIRED" }, 409);
-      return lifecycle.mergePullRequest(input);
+
+      const merged = await lifecycle.mergePullRequest(input);
+      if (!merged.ok) return merged;
+      const payload = await merged.clone().json().catch(() => ({}));
+      if (payload.merged !== true || !String(payload.mergeSha || "").trim() || !String(payload.headSha || "").trim()) {
+        return json({ code: "FACTORY_MERGE_RESULT_INVALID" }, 502);
+      }
+      if (typeof factory.recordMergeResult !== "function") {
+        return json({
+          code: "FACTORY_MERGE_RESULT_NOT_RECORDED",
+          merged: true,
+          mergeSha: payload.mergeSha,
+          headSha: payload.headSha,
+          factoryCode: "FACTORY_RECORD_MERGE_UNAVAILABLE",
+        }, 502);
+      }
+      const recorded = await factory.recordMergeResult({
+        repository: input.repository,
+        goId: input.goId,
+        jobId: input.jobId,
+        workContext: input.workContext,
+        pullRequestNumber: Number(input.number),
+        headSha: String(payload.headSha),
+        mergeSha: String(payload.mergeSha),
+      });
+      if (!recorded.ok) {
+        const detail = await recorded.json().catch(() => ({}));
+        return json({
+          code: "FACTORY_MERGE_RESULT_NOT_RECORDED",
+          merged: true,
+          mergeSha: payload.mergeSha,
+          headSha: payload.headSha,
+          factoryCode: detail.code || "FACTORY_RECORD_MERGE_FAILED",
+        }, 502);
+      }
+      return merged;
     },
   });
 }
