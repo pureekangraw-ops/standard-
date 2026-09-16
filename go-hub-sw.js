@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "go-hub-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v7-route-optician-gate`;
+const CACHE_NAME = `${CACHE_PREFIX}v6-centre-live-checkpoint`;
 const APP_SHELL = [
   "./",
   "./index.html",
