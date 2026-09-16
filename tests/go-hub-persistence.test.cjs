@@ -9,6 +9,18 @@ const assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "..");
 const modulePath = path.join(root, "go-hub-persistence.js");
 
+function advanceProductionToWrite(task, { repository, baseSha, blueprintRef, planRef }) {
+  return task
+    .recordProductionStep({ step: "INSPECT_REALITY", evidence: { repository, headSha: baseSha } })
+    .recordProductionStep({ step: "BASELINE", evidence: { baseSha } })
+    .recordProductionStep({ step: "TRACE", evidence: { summary: "trace before edit" } })
+    .recordProductionStep({ step: "PLAN", evidence: { blueprintRef, planRef } });
+}
+
+function localVerify(task, headSha) {
+  return task.recordProductionStep({ step: "LOCAL_VERIFY", evidence: { status: "pass", headSha, checks: { test: "pass" } } });
+}
+
 test("GO Hub persistence mechanics stay neutral and identity-free", () => {
   assert.equal(fs.existsSync(modulePath), true);
   const source = fs.readFileSync(modulePath, "utf8");
@@ -138,18 +150,21 @@ test("Code task session restores exact Engine 2 production truth at Ready Gate",
   task = task.setWorkPackage({
     id: "wp-1", title: "Production Line", purpose: "seal one piece", blueprintRef: "spec.md",
     inputs: ["truth"], expectedOutputs: ["piece"], dependencies: [], assemblyTarget: "future assembly",
-  }).recordPiece({
-    id: "piece-1", workPackageId: "wp-1", repository: "repo", branch: "engine-2",
-    headSha: "head-1", changedPaths: ["piece.js"], outputs: ["piece"],
-  }).addEvidence({
-    id: "ev-1", scope: "piece", claim: "purpose-correct", kind: "test", headSha: "head-1",
-  }).recordPieceQc({
-    status: "pass", checkedHeadSha: "head-1", checks: { purpose: true, behavior: true, interface: true, evidence: true },
-    evidenceIds: ["ev-1"], checkedAt: "2026-09-14T12:00:00.000Z",
-  }).recordGateHandoff({
-    status: "READY_FOR_ASSEMBLY", pieceId: "piece-1", workPackageId: "wp-1",
-    blueprintRef: "spec.md", headSha: "head-1", evidenceIds: ["ev-1"],
   });
+  task = advanceProductionToWrite(task, { repository: "repo", baseSha: "base-1", blueprintRef: "spec.md", planRef: "plan://engine-2-resume" })
+    .recordPiece({
+      id: "piece-1", workPackageId: "wp-1", repository: "repo", branch: "engine-2",
+      headSha: "head-1", changedPaths: ["piece.js"], outputs: ["piece"],
+    });
+  task = localVerify(task, "head-1")
+    .addEvidence({ id: "ev-1", scope: "piece", claim: "purpose-correct", kind: "test", headSha: "head-1" })
+    .recordPieceQc({
+      status: "pass", checkedHeadSha: "head-1", checks: { purpose: true, behavior: true, interface: true, evidence: true },
+      evidenceIds: ["ev-1"], checkedAt: "2026-09-14T12:00:00.000Z",
+    }).recordGateHandoff({
+      status: "READY_FOR_ASSEMBLY", pieceId: "piece-1", workPackageId: "wp-1",
+      blueprintRef: "spec.md", headSha: "head-1", evidenceIds: ["ev-1"],
+    });
 
   await session.save(task);
   const restored = (await session.load()).snapshot();
@@ -158,6 +173,7 @@ test("Code task session restores exact Engine 2 production truth at Ready Gate",
   assert.equal(restored.piece.headSha, "head-1");
   assert.deepEqual(restored.pieceQc.evidenceIds, ["ev-1"]);
   assert.deepEqual(restored.gateHandoff.evidenceIds, ["ev-1"]);
+  assert.deepEqual(restored.productionTrace.map(item => item.step), ["INSPECT_REALITY", "BASELINE", "TRACE", "PLAN", "WRITE", "LOCAL_VERIFY"]);
   assert.equal(createWorkbenchView(restored).status, "READY_GATE");
 });
 
@@ -180,6 +196,9 @@ test("one Work Package travels from mounted Blueprint to a resumable Ready Gate"
     id: "wp-production-line", title: "Production Line", purpose: "produce and seal one bounded piece",
     blueprintRef, inputs: ["Engine 1 CodeTask truth"], expectedOutputs: ["Ready Gate handoff"],
     dependencies: ["Engine 1 accepted main"], assemblyTarget: "Engine 3 Assembly input",
+  });
+  task = advanceProductionToWrite(task, {
+    repository: "pureekangraw-ops/standard-", baseSha: "engine-2-base", blueprintRef, planRef: "plan://engine-2-functional",
   }).recordPiece({
     id: "piece-production-line", workPackageId: "wp-production-line",
     repository: "pureekangraw-ops/standard-", branch: "go-hub-factory-engine-2-production-line",
@@ -187,6 +206,7 @@ test("one Work Package travels from mounted Blueprint to a resumable Ready Gate"
     changedPaths: ["go-hub-code-task.js", "go-hub-evidence-ledger.js", "go-hub-piece-qc.js", "go-hub-ready-gate.js"],
     outputs: ["Piece Controller", "Evidence Ledger", "Piece QC", "Ready Gate"],
   });
+  task = localVerify(task, "engine-2-functional-head");
   for (const [id, claim] of [
     ["ev-purpose", "purpose-correct"],
     ["ev-behavior", "behavior-correct"],
@@ -239,8 +259,11 @@ test("Engine 3 assembles a Ready Gate Piece into a resumable verified Product", 
 
   let task = createCodeTask({ id: "engine-3-functional", repository: "pureekangraw-ops/standard-" })
     .setWorkbenchTruth({ mission: { summary: "Build Engine 3", outcome: "Verified Product" }, blueprint })
-    .setWorkPackage({ id: "wp-3", title: "Assembly & Product", purpose: "assemble and verify", blueprintRef, inputs: ["Piece"], expectedOutputs: ["Product"], dependencies: [], assemblyTarget: "Product" })
-    .recordPiece({ id: "piece-3", workPackageId: "wp-3", repository: "pureekangraw-ops/standard-", branch: "engine-3", headSha: "piece-head", changedPaths: ["piece.js"], outputs: ["piece"] });
+    .setWorkPackage({ id: "wp-3", title: "Assembly & Product", purpose: "assemble and verify", blueprintRef, inputs: ["Piece"], expectedOutputs: ["Product"], dependencies: [], assemblyTarget: "Product" });
+  task = advanceProductionToWrite(task, {
+    repository: "pureekangraw-ops/standard-", baseSha: "engine-3-base", blueprintRef, planRef: "plan://engine-3-functional",
+  }).recordPiece({ id: "piece-3", workPackageId: "wp-3", repository: "pureekangraw-ops/standard-", branch: "engine-3", headSha: "piece-head", changedPaths: ["piece.js"], outputs: ["piece"] });
+  task = localVerify(task, "piece-head");
   for (const [id, claim] of [["piece-purpose", "purpose-correct"], ["piece-behavior", "behavior-correct"], ["piece-interface", "interface-correct"]]) {
     task = task.addEvidence({ id, scope: "piece", claim, kind: "functional-test", headSha: "piece-head" });
   }
