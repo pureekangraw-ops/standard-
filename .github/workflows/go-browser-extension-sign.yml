@@ -1,5 +1,6 @@
 name: GO Browser Extension Sign
 
+# Observer fallback: this file-only push lane exists solely for branch reality signing when workflow_dispatch UI is unavailable.
 on:
   workflow_dispatch:
   push:
