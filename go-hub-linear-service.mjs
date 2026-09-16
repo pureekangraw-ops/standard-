@@ -43,6 +43,29 @@ function issueInScope(issue, teamId) {
   return String(issue?.team?.id || "") === String(teamId || "");
 }
 
+function validPriority(value) {
+  return Number.isInteger(value) && value >= 0 && value <= 4;
+}
+
+function optionalId(value) {
+  if (value === null) return { ok: true, value: null };
+  if (typeof value !== "string" || !value.trim()) return { ok: false };
+  return { ok: true, value: value.trim() };
+}
+
+const ISSUE_SELECTION = `
+  id
+  identifier
+  title
+  description
+  url
+  updatedAt
+  priority
+  state { id name }
+  team { id }
+  project { id name }
+`;
+
 export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
   async function request(query, variables = {}) {
     if (!configured(token, teamId)) return { response: json({ code: "LINEAR_NOT_CONFIGURED" }, 503) };
@@ -74,6 +97,20 @@ export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
     return { data: payload.data };
   }
 
+  async function readIssue(identifier) {
+    return request(`query HubIssue($identifier: String!) {
+      issue(id: $identifier) {${ISSUE_SELECTION}}
+    }`, { identifier });
+  }
+
+  function scopedIssueResult(result) {
+    if (result.response) return result;
+    const issue = result.data?.issue;
+    if (!issue) return { response: json({ code: "LINEAR_ISSUE_NOT_FOUND" }, 404) };
+    if (!issueInScope(issue, teamId)) return { response: json({ code: "LINEAR_TEAM_SCOPE_VIOLATION" }, 403) };
+    return { issue };
+  }
+
   return Object.freeze({
     async listProjects() {
       const result = await request(`query TeamProjects($teamId: String!) {
@@ -88,30 +125,88 @@ export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
       const nodes = result.data?.team?.projects?.nodes || [];
       return json({ projects: nodes.map(normalizeProject) });
     },
+
     async getIssue(input = {}) {
       const identifier = typeof input?.identifier === "string" ? input.identifier.trim() : "";
       if (!identifier) return json({ code: "LINEAR_INVALID_INPUT" }, 400);
-      const result = await request(`query HubIssue($identifier: String!) {
-        issue(id: $identifier) {
-          id
-          identifier
-          title
-          description
-          url
-          updatedAt
-          priority
-          state { id name }
-          team { id }
-          project { id name }
-        }
-      }`, { identifier });
-      if (result.response) return result.response;
-      const issue = result.data?.issue;
-      if (!issue) return json({ code: "LINEAR_ISSUE_NOT_FOUND" }, 404);
-      if (!issueInScope(issue, teamId)) return json({ code: "LINEAR_TEAM_SCOPE_VIOLATION" }, 403);
-      return json({ issue: normalizeIssue(issue) });
+      const scoped = scopedIssueResult(await readIssue(identifier));
+      if (scoped.response) return scoped.response;
+      return json({ issue: normalizeIssue(scoped.issue) });
     },
-    async createIssue() { return json({ code: "LINEAR_INVALID_INPUT" }, 400); },
-    async updateIssue() { return json({ code: "LINEAR_INVALID_INPUT" }, 400); },
+
+    async createIssue(input = {}) {
+      const title = typeof input?.title === "string" ? input.title.trim() : "";
+      if (!title) return json({ code: "LINEAR_INVALID_INPUT" }, 400);
+
+      const mutationInput = { teamId: String(teamId || ""), title };
+      if (Object.hasOwn(input, "description")) {
+        if (input.description !== null && typeof input.description !== "string") return json({ code: "LINEAR_INVALID_INPUT" }, 400);
+        mutationInput.description = input.description;
+      }
+      if (Object.hasOwn(input, "priority")) {
+        if (!validPriority(input.priority)) return json({ code: "LINEAR_INVALID_INPUT" }, 400);
+        mutationInput.priority = input.priority;
+      }
+      if (Object.hasOwn(input, "projectId")) {
+        const projectId = optionalId(input.projectId);
+        if (!projectId.ok) return json({ code: "LINEAR_INVALID_INPUT" }, 400);
+        mutationInput.projectId = projectId.value;
+      }
+
+      const result = await request(`mutation HubIssueCreate($input: IssueCreateInput!) {
+        issueCreate(input: $input) {
+          success
+          issue {${ISSUE_SELECTION}}
+        }
+      }`, { input: mutationInput });
+      if (result.response) return result.response;
+      const payload = result.data?.issueCreate;
+      if (!payload?.success || !payload.issue) return json({ code: "LINEAR_UPSTREAM_ERROR", category: "MUTATION_FAILED" }, 502);
+      if (!issueInScope(payload.issue, teamId)) return json({ code: "LINEAR_UPSTREAM_ERROR", category: "TEAM_SCOPE_MISMATCH" }, 502);
+      return json({ issue: normalizeIssue(payload.issue) });
+    },
+
+    async updateIssue(input = {}) {
+      const identifier = typeof input?.identifier === "string" ? input.identifier.trim() : "";
+      const patchFields = ["title", "description", "priority", "stateId", "projectId"];
+      if (!identifier || !patchFields.some(field => Object.hasOwn(input, field))) {
+        return json({ code: "LINEAR_INVALID_INPUT" }, 400);
+      }
+
+      const mutationInput = {};
+      if (Object.hasOwn(input, "title")) {
+        if (typeof input.title !== "string" || !input.title.trim()) return json({ code: "LINEAR_INVALID_INPUT" }, 400);
+        mutationInput.title = input.title.trim();
+      }
+      if (Object.hasOwn(input, "description")) {
+        if (input.description !== null && typeof input.description !== "string") return json({ code: "LINEAR_INVALID_INPUT" }, 400);
+        mutationInput.description = input.description;
+      }
+      if (Object.hasOwn(input, "priority")) {
+        if (!validPriority(input.priority)) return json({ code: "LINEAR_INVALID_INPUT" }, 400);
+        mutationInput.priority = input.priority;
+      }
+      for (const field of ["stateId", "projectId"]) {
+        if (!Object.hasOwn(input, field)) continue;
+        const parsed = optionalId(input[field]);
+        if (!parsed.ok) return json({ code: "LINEAR_INVALID_INPUT" }, 400);
+        mutationInput[field] = parsed.value;
+      }
+
+      const scoped = scopedIssueResult(await readIssue(identifier));
+      if (scoped.response) return scoped.response;
+
+      const result = await request(`mutation HubIssueUpdate($issueId: String!, $input: IssueUpdateInput!) {
+        issueUpdate(id: $issueId, input: $input) {
+          success
+          issue {${ISSUE_SELECTION}}
+        }
+      }`, { issueId: scoped.issue.id, input: mutationInput });
+      if (result.response) return result.response;
+      const payload = result.data?.issueUpdate;
+      if (!payload?.success || !payload.issue) return json({ code: "LINEAR_UPSTREAM_ERROR", category: "MUTATION_FAILED" }, 502);
+      if (!issueInScope(payload.issue, teamId)) return json({ code: "LINEAR_UPSTREAM_ERROR", category: "TEAM_SCOPE_MISMATCH" }, 502);
+      return json({ issue: normalizeIssue(payload.issue) });
+    },
   });
 }
