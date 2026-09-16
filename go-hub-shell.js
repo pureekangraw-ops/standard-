@@ -4,6 +4,8 @@ import { createLocalStorageKeyValueStore, createStatePersistence } from "./go-hu
 import { createGitHubWorkspace } from "./go-hub-github-workspace.js";
 import { createWorkbenchView } from "./go-hub-workbench-model.js";
 import { createFactoryRealityReturn, createFactoryWorkContext } from "./go-hub-factory-return.js";
+import { createCityRoute, routeInbound } from "./go-hub-city-route.js";
+import { fitWork } from "./go-hub-optician.js";
 import {
   CENTRE_STATES,
   admitDestination,
@@ -12,6 +14,7 @@ import {
 } from "./go-hub-centre.js";
 
 const FACTORY_DESTINATION = "destination://factory";
+const cityRoute = createCityRoute();
 const runtime = createHubRuntime();
 const workspace = createGitHubWorkspace({
   gatewayBase: "/hub/api/github-workspace",
@@ -66,6 +69,31 @@ function createFactoryAccess() {
     destination: FACTORY_DESTINATION,
     capability: baseCodeCapability,
   });
+}
+
+function fitFactoryRoute() {
+  const destination = String(field("destination")?.value || "").trim();
+  const canonicalFactory = cityRoute.destinations.factory;
+  if (destination !== FACTORY_DESTINATION || destination !== canonicalFactory.route) {
+    throw new Error("Factory destination does not match canonical city route");
+  }
+  const fit = fitWork({
+    context: {
+      purpose: centreWork.task,
+      successCondition: centreWork.requestedResult,
+    },
+    reality: task.snapshot(),
+    lens: { reference: centreWork.lens?.lensReference },
+    destination: canonicalFactory,
+  });
+  if (fit.gate !== "PASS") {
+    throw new Error(`Optician gate did not pass: ${fit.missing?.join(", ") || "UNKNOWN"}`);
+  }
+  const route = routeInbound({ fit });
+  if (route.destination !== "go-work-loop" || route.workRoute !== destination) {
+    throw new Error("Canonical city route did not admit Factory destination");
+  }
+  return Object.freeze({ fit, route, destination });
 }
 
 function syncFactoryAccess() {
@@ -175,8 +203,9 @@ centreForm?.addEventListener("submit", async event => {
       });
       await centreSession.save(centreWork, "FIT_LENS");
     } else if (centreWork.status === CENTRE_STATES.READY) {
+      const route = fitFactoryRoute();
       centreWork = centre.leave(centreWork, {
-        destination: field("destination").value,
+        destination: route.destination,
       }).work;
       await centreSession.save(centreWork, "LEAVE_CENTRE");
     } else if (centreWork.status === CENTRE_STATES.AWAY) {
