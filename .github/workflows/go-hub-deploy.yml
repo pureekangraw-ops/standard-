@@ -56,7 +56,7 @@ jobs:
             const byName = new Map(bindings.map(binding => [binding.name, binding.type]));
             const expected = new Map([
               ["LINEAR_API_KEY", "secret_text"],
-              ["LINEAR_TEAM_ID", "plain_text"],
+              ["LINEAR_TEAM_KEY", "plain_text"],
             ]);
             const missing = [];
             for (const [name, type] of expected) {
@@ -87,7 +87,7 @@ jobs:
               candidates += 1;
               console.error(`::error::candidate Worker ${workerName}: ${matches.map(binding => `${binding.name}(${binding.type})`).join(", ")}`);
             }
-            if (!candidates) console.error("::error::No candidate Worker contains LINEAR_API_KEY or LINEAR_TEAM_ID bindings.");
+            if (!candidates) console.error("::error::No candidate Worker contains LINEAR_API_KEY or LINEAR_TEAM_KEY bindings.");
             process.exit(1);
           })().catch(error => {
             console.error(`::error::Cloudflare binding locator failed: ${error?.message || "unknown error"}`);
