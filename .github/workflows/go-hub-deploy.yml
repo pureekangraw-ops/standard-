@@ -54,25 +54,26 @@ jobs:
             const scripts = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
             const bindings = settings?.result?.bindings || [];
             const byName = new Map(bindings.map(binding => [binding.name, binding.type]));
-            const expected = new Map([
-              ["LINEAR_API_KEY", "secret_text"],
-              ["LINEAR_TEAM_KEY", "plain_text"],
-            ]);
+            const apiSecretNames = ["LINEAR_API_KEY", "linear-API"];
+            const apiSecretName = apiSecretNames.find(name => byName.get(name) === "secret_text");
+            const teamKeyType = byName.get("LINEAR_TEAM_KEY");
             const missing = [];
-            for (const [name, type] of expected) {
-              const actual = byName.get(name);
-              if (actual !== type) {
-                console.error(`::error::Cloudflare binding missing or wrong type: ${name} expected ${type}, got ${actual || "MISSING"}`);
-                missing.push(name);
-              }
+            if (!apiSecretName) {
+              console.error("::error::Cloudflare binding missing or wrong type: LINEAR_API_KEY or linear-API expected secret_text, got MISSING");
+              missing.push("LINEAR_API_KEY or linear-API");
+            }
+            if (teamKeyType !== "plain_text") {
+              console.error(`::error::Cloudflare binding missing or wrong type: LINEAR_TEAM_KEY expected plain_text, got ${teamKeyType || "MISSING"}`);
+              missing.push("LINEAR_TEAM_KEY");
             }
             if (!missing.length) {
-              console.log("Cloudflare Linear binding preflight passed: required names/types are present.");
+              console.log(`Cloudflare Linear binding preflight passed using API secret binding ${apiSecretName}.`);
               return;
             }
 
             console.error("::error::Locate misplaced Linear bindings across Cloudflare Workers.");
             let candidates = 0;
+            const trackedNames = new Set([...apiSecretNames, "LINEAR_TEAM_KEY"]);
             const workerNames = (scripts?.result || []).map(worker => worker.id).filter(Boolean);
             for (const workerName of workerNames) {
               if (workerName === "go-hub") continue;
@@ -82,12 +83,12 @@ jobs:
               });
               if (!response.ok) continue;
               const payload = await response.json();
-              const matches = (payload?.result?.bindings || []).filter(binding => expected.has(binding.name));
+              const matches = (payload?.result?.bindings || []).filter(binding => trackedNames.has(binding.name));
               if (!matches.length) continue;
               candidates += 1;
               console.error(`::error::candidate Worker ${workerName}: ${matches.map(binding => `${binding.name}(${binding.type})`).join(", ")}`);
             }
-            if (!candidates) console.error("::error::No candidate Worker contains LINEAR_API_KEY or LINEAR_TEAM_KEY bindings.");
+            if (!candidates) console.error("::error::No candidate Worker contains LINEAR_API_KEY, linear-API, or LINEAR_TEAM_KEY bindings.");
             process.exit(1);
           })().catch(error => {
             console.error(`::error::Cloudflare binding locator failed: ${error?.message || "unknown error"}`);

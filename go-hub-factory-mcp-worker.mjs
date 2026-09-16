@@ -57,7 +57,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       });
       const linear = createLinearService({
         fetchImpl,
-        token: env?.LINEAR_API_KEY,
+        token: env?.LINEAR_API_KEY || env?.["linear-API"],
         teamId: env?.LINEAR_TEAM_ID,
         teamKey: env?.LINEAR_TEAM_KEY,
       });

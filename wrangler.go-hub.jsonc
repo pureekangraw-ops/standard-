@@ -4,9 +4,6 @@
   "main": "go-hub-edge-worker.mjs",
   "compatibility_date": "2026-09-14",
   "keep_vars": true,
-  "secrets": {
-    "required": ["LINEAR_API_KEY"]
-  },
   "browser": {
     "binding": "BROWSER"
   },
