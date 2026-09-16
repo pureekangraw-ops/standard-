@@ -175,3 +175,174 @@ test("Linear service validates issue identifier before upstream call", async () 
   }
   assert.equal(calls, 0);
 });
+
+test("Linear service creates an issue in the configured team and normalizes the result", async () => {
+  const { createLinearService } = await loadService("issue-create");
+  let capturedBody;
+  const fetchImpl = async (_url, init) => {
+    capturedBody = JSON.parse(init.body);
+    return new Response(JSON.stringify({
+      data: {
+        issueCreate: {
+          success: true,
+          issue: {
+            id: "issue-new",
+            identifier: "PUR-6",
+            title: "New bridge work",
+            description: "details",
+            url: "https://linear.app/x/issue/PUR-6",
+            updatedAt: "2026-09-16T01:00:00.000Z",
+            priority: 1,
+            state: { id: "state-todo", name: "Todo" },
+            team: { id: "team-a" },
+            project: { id: "project-a", name: "Alpha" },
+          },
+        },
+      },
+    }), { headers: { "content-type": "application/json" } });
+  };
+  const service = createLinearService({ fetchImpl, token: "token-a", teamId: "team-a" });
+  const response = await service.createIssue({
+    title: "  New bridge work  ",
+    description: "details",
+    projectId: "project-a",
+    priority: 1,
+  });
+  assert.equal(response.status, 200);
+  assert.equal(capturedBody.variables.input.teamId, "team-a");
+  assert.equal(capturedBody.variables.input.title, "New bridge work");
+  assert.equal(capturedBody.variables.input.projectId, "project-a");
+  assert.equal(capturedBody.variables.input.priority, 1);
+  assert.deepEqual((await response.json()).issue, {
+    id: "issue-new",
+    identifier: "PUR-6",
+    title: "New bridge work",
+    description: "details",
+    status: { id: "state-todo", name: "Todo" },
+    priority: 1,
+    project: { id: "project-a", name: "Alpha" },
+    url: "https://linear.app/x/issue/PUR-6",
+    updatedAt: "2026-09-16T01:00:00.000Z",
+  });
+});
+
+test("Linear service validates createIssue before upstream call", async () => {
+  const { createLinearService } = await loadService("issue-create-invalid");
+  let calls = 0;
+  const fetchImpl = async () => { calls += 1; throw new Error("must not call upstream"); };
+  const service = createLinearService({ fetchImpl, token: "token-a", teamId: "team-a" });
+  for (const input of [undefined, {}, { title: "" }, { title: "   " }]) {
+    const response = await service.createIssue(input);
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { code: "LINEAR_INVALID_INPUT" });
+  }
+  assert.equal(calls, 0);
+});
+
+test("Linear service updates only an issue that belongs to the configured team", async () => {
+  const { createLinearService } = await loadService("issue-update");
+  const requests = [];
+  const fetchImpl = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    requests.push(body);
+    if (requests.length === 1) {
+      return new Response(JSON.stringify({
+        data: {
+          issue: {
+            id: "issue-a",
+            identifier: "PUR-5",
+            title: "Bridge",
+            description: "desc",
+            url: "https://linear.app/x/issue/PUR-5",
+            updatedAt: "2026-09-16T00:00:00.000Z",
+            priority: 2,
+            state: { id: "state-a", name: "In Progress" },
+            team: { id: "team-a" },
+            project: { id: "project-a", name: "Alpha" },
+          },
+        },
+      }), { headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({
+      data: {
+        issueUpdate: {
+          success: true,
+          issue: {
+            id: "issue-a",
+            identifier: "PUR-5",
+            title: "Bridge updated",
+            description: null,
+            url: "https://linear.app/x/issue/PUR-5",
+            updatedAt: "2026-09-16T02:00:00.000Z",
+            priority: 3,
+            state: { id: "state-done", name: "Done" },
+            team: { id: "team-a" },
+            project: null,
+          },
+        },
+      },
+    }), { headers: { "content-type": "application/json" } });
+  };
+  const service = createLinearService({ fetchImpl, token: "token-a", teamId: "team-a" });
+  const response = await service.updateIssue({
+    identifier: "PUR-5",
+    title: "Bridge updated",
+    description: null,
+    priority: 3,
+    stateId: "state-done",
+    projectId: null,
+  });
+  assert.equal(response.status, 200);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].variables.issueId, "issue-a");
+  assert.deepEqual(requests[1].variables.input, {
+    title: "Bridge updated",
+    description: null,
+    priority: 3,
+    stateId: "state-done",
+    projectId: null,
+  });
+  assert.equal((await response.json()).issue.status.name, "Done");
+});
+
+test("Linear service blocks update after an out-of-team preflight", async () => {
+  const { createLinearService } = await loadService("issue-update-scope");
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return new Response(JSON.stringify({
+      data: {
+        issue: {
+          id: "issue-b",
+          identifier: "OTHER-1",
+          title: "Other",
+          description: null,
+          url: null,
+          updatedAt: null,
+          priority: 0,
+          state: null,
+          team: { id: "team-b" },
+          project: null,
+        },
+      },
+    }), { headers: { "content-type": "application/json" } });
+  };
+  const service = createLinearService({ fetchImpl, token: "token-a", teamId: "team-a" });
+  const response = await service.updateIssue({ identifier: "OTHER-1", title: "must not write" });
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { code: "LINEAR_TEAM_SCOPE_VIOLATION" });
+  assert.equal(calls, 1);
+});
+
+test("Linear service validates updateIssue patch before upstream call", async () => {
+  const { createLinearService } = await loadService("issue-update-invalid");
+  let calls = 0;
+  const fetchImpl = async () => { calls += 1; throw new Error("must not call upstream"); };
+  const service = createLinearService({ fetchImpl, token: "token-a", teamId: "team-a" });
+  for (const input of [undefined, {}, { identifier: "PUR-5" }, { identifier: "", title: "x" }]) {
+    const response = await service.updateIssue(input);
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { code: "LINEAR_INVALID_INPUT" });
+  }
+  assert.equal(calls, 0);
+});
