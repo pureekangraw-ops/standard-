@@ -23,6 +23,9 @@ function request(overrides = {}) {
     applicationId: "com.yggdrasil.lighthouse",
     versionName: "1.0.0-owner.1",
     versionCode: 1006,
+    unsignedArtifactId: "unsigned-apk",
+    unsignedArtifactRef: "artifact://unsigned.apk",
+    unsignedApkSha256: UNSIGNED_DIGEST,
     signingProfileId: "lighthouse-production",
     requester: "GO",
     ownerAuthorityState: "APPROVED",
@@ -78,7 +81,9 @@ test("Signing Gate accepts only exact Build APK source digest identity and autho
   assert.equal(ready.sourceSha, SOURCE_SHA);
   assert.equal(ready.signingProfileId, "lighthouse-production");
 
-  assert.equal(evaluateApkSigningGate(request(), gateContext({ buildArtifact: buildArtifact({ digest: "9".repeat(64) }) })).state, "SIGNING_GATE_BLOCKED");
+  const digestMismatch = evaluateApkSigningGate(request(), gateContext({ buildArtifact: buildArtifact({ digest: "9".repeat(64) }) }));
+  assert.equal(digestMismatch.state, "SIGNING_GATE_BLOCKED");
+  assert.equal(digestMismatch.code, "BUILD_ARTIFACT_DIGEST_MISMATCH");
   assert.equal(evaluateApkSigningGate(request(), gateContext({ buildArtifact: buildArtifact({ applicationId: "com.example.wrong" }) })).code, "APK_IDENTITY_MISMATCH");
   assert.equal(evaluateApkSigningGate(request({ signingProfileId: "missing" }), gateContext()).code, "SIGNING_PROFILE_NOT_FOUND");
   assert.equal(evaluateApkSigningGate(request(), gateContext({ currentSourceSha: OTHER_SHA })).code, "SOURCE_HEAD_CHANGED");
@@ -119,6 +124,7 @@ test("signature verification binds signed APK to unsigned Build artifact and cer
     verifiedAt: "2026-09-16T00:00:00.000Z",
   });
   assert.equal(verified.artifact.id, "signed-apk");
+  assert.equal(verified.artifact.sourceArtifactId, "unsigned-apk");
   assert.equal(verified.artifact.digest, SIGNED_DIGEST);
   assert.equal(verified.artifact.status, "SIGNATURE_VERIFIED");
 });
