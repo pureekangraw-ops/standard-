@@ -6,7 +6,7 @@ function control({tagName="INPUT",type="text",label="",value="",checked=false,hi
 function documentWith(controls,title="Gumroad product"){return{title,querySelectorAll(selector){assert.match(selector,/input/);return controls},getElementById(){return null}}}
 function activeSession(observer,overrides={}){return observer.createObserverSession({sessionId:"session-1",startedAt:1000,ttlMs:60000,origin:"https://gumroad.com",...overrides})}
 function collect(observer,{controls=[],session=activeSession(observer),now=2000,href="https://gumroad.com/products/demo?token=secret#frag"}={}){return observer.collectObserverSnapshot({document:documentWith(controls),location:new URL(href),title:"Edit product",viewport:{width:390,height:844},session,now})}
-function bootstrap(overrides={}){return{ok:true,session_id:"session-1",session_token:"token-1",expires_at:601000,allowed_origin:"https://gumroad.com",hub_origin:"https://hub.example",...overrides}}
+function bootstrap(overrides={}){return{ok:true,session_id:"session-1",session_token:"token-1",expires_at:Date.now()+600000,allowed_origin:"https://gumroad.com",hub_origin:"https://hub.example",...overrides}}
 test("no active owner session blocks evidence",async()=>{const o=await load("inactive");assert.deepEqual(collect(o,{session:null}),{ok:false,code:"SESSION_INACTIVE"})});
 test("expired session blocks evidence",async()=>{const o=await load("expired");assert.deepEqual(collect(o,{session:activeSession(o,{startedAt:1000,ttlMs:500}),now:2000}),{ok:false,code:"SESSION_EXPIRED"})});
 test("host outside Gumroad allowlist is blocked",async()=>{const o=await load("host");assert.deepEqual(collect(o,{href:"https://example.com/product"}),{ok:false,code:"HOST_BLOCKED"})});
