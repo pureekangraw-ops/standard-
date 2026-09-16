@@ -101,7 +101,6 @@ jobs:
           apiSecret: ${{ secrets.AMO_SIGN_SECRET }}
 
       - name: Create Reality manifest and digest
-        id: manifest
         shell: bash
         env:
           REALITY_ORIGIN: ${{ steps.origin.outputs.origin }}
@@ -111,37 +110,6 @@ jobs:
           signed_name="$(basename "${SIGNED_TARGET}")"
           signed_sha256="$(sha256sum "${SIGNED_TARGET}" | awk '{print $1}')"
           cp "${SIGNED_TARGET}" "reality-package/${signed_name}"
-          node - <<'NODE'
-          const fs = require("fs");
-          const path = require("path");
-          const manifest = {
-            schema_version: "go-browser-observer-reality-v1",
-            exact_commit: process.env.GITHUB_SHA,
-            branch: process.env.GITHUB_REF_NAME,
-            preview_worker: process.env.REALITY_WORKER_NAME,
-            preview_origin: process.env.REALITY_ORIGIN,
-            observer_owner_url: `${process.env.REALITY_ORIGIN}/hub/observer`,
-            signed_xpi_filename: path.basename(process.env.SIGNED_TARGET),
-            signed_xpi_sha256: process.env.SIGNED_SHA256,
-            firefox_android_reality: "PENDING_OWNER_DEVICE",
-            merge_status: "NOT_MERGED",
-          };
-          fs.writeFileSync("reality-package/observer-reality-manifest.json", JSON.stringify(manifest, null, 2) + "\n");
-          NODE
-          echo "signed_sha256=${signed_sha256}" >> "$GITHUB_OUTPUT"
-          echo "Signed XPI SHA-256: ${signed_sha256}"
-        env:
-          REALITY_ORIGIN: ${{ steps.origin.outputs.origin }}
-          SIGNED_TARGET: ${{ steps.sign.outputs.target }}
-          SIGNED_SHA256: ${{ steps.manifest.outputs.signed_sha256 }}
-
-      - name: Rebuild manifest with computed digest
-        shell: bash
-        env:
-          REALITY_ORIGIN: ${{ steps.origin.outputs.origin }}
-          SIGNED_TARGET: ${{ steps.sign.outputs.target }}
-        run: |
-          signed_sha256="$(sha256sum "${SIGNED_TARGET}" | awk '{print $1}')"
           SIGNED_SHA256="${signed_sha256}" node - <<'NODE'
           const fs = require("fs");
           const path = require("path");
@@ -159,13 +127,12 @@ jobs:
           };
           fs.writeFileSync("reality-package/observer-reality-manifest.json", JSON.stringify(manifest, null, 2) + "\n");
           NODE
+          echo "Signed XPI SHA-256: ${signed_sha256}"
 
       - name: Upload Observer Reality package
         uses: actions/upload-artifact@v4
         with:
           name: go-browser-observer-reality-${{ github.sha }}
-          path: |
-            reality-package/observer-reality-manifest.json
-            ${{ steps.sign.outputs.target }}
+          path: reality-package/
           if-no-files-found: error
           retention-days: 7
