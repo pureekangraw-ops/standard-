@@ -11,6 +11,7 @@ const factoryWorkContext = Object.freeze({
   requestedResult: "Verified result", lensReference: "lens://city",
 });
 const mimirWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://mimir" });
+const linearWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://linear" });
 
 test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe annotations", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?contract=" + Date.now());
@@ -29,16 +30,23 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_open_pull_request", "go_hub_get_pull_request", "go_hub_get_ci",
     "go_hub_get_failure_evidence", "go_hub_rerun_failed_jobs", "go_hub_factory_foreman",
     "go_hub_merge_pull_request", "go_hub_get_workflow_runs", "go_hub_mimir_search_catalog",
+    "go_hub_linear_list_projects", "go_hub_linear_get_issue",
+    "go_hub_linear_create_issue", "go_hub_linear_update_issue",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_factory_foreman").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_merge_pull_request").annotations.destructiveHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_linear_list_projects").annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_linear_get_issue").annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_linear_create_issue").annotations.readOnlyHint, false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_linear_update_issue").annotations.readOnlyHint, false);
   assert.deepEqual(tools[0].securitySchemes, [{ type: "oauth2", scopes: ["go-hub"] }]);
 
   for (const name of [
     "go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file",
     "go_hub_open_pull_request", "go_hub_rerun_failed_jobs",
     "go_hub_merge_pull_request", "go_hub_mimir_search_catalog",
+    "go_hub_linear_create_issue", "go_hub_linear_update_issue",
   ]) {
     assert.equal(tools.find(tool => tool.name === name).inputSchema.required.includes("workContext"), true, `${name} must require city work context`);
   }
@@ -46,6 +54,8 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(Object.hasOwn(foremanSchema.properties, "workContext"), true);
   assert.equal(foremanSchema.required.includes("workContext"), false, "Foreman state inspection remains admin-readable");
   assert.equal(tools.find(tool => tool.name === "go_hub_inspect_repository").inputSchema.required.includes("workContext"), false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_linear_list_projects").inputSchema.required.includes("workContext"), false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_linear_get_issue").inputSchema.required.includes("workContext"), false);
 
   await registry.callTool("go_hub_inspect_repository", { repository: "pureekangraw-ops/standard-", branch: "main" });
   await registry.callTool("go_hub_factory_foreman", { action: "state", repository: "pureekangraw-ops/standard-" });
@@ -77,12 +87,21 @@ test("city lifecycle tools require exact Centre identity and correct destination
   await assert.rejects(registry.callTool("go_hub_factory_foreman", {
     action: "request", repository: "pureekangraw-ops/standard-", slot: "assembly", goId: "go-a", jobId: "job-a",
   }), /workContext/);
+  await assert.rejects(registry.callTool("go_hub_linear_create_issue", {
+    title: "Wrong route", workContext: factoryWorkContext,
+  }), /destination/i);
 
   await registry.callTool("go_hub_mimir_search_catalog", {
     task: "Find Factory", requestedResult: "Route evidence", lensReference: "lens://city", workContext: mimirWorkContext,
   });
   assert.equal(calls.at(-1).name, "searchCatalog");
   assert.deepEqual(calls.at(-1).input.workContext, mimirWorkContext);
+
+  await registry.callTool("go_hub_linear_create_issue", {
+    title: "Bridge", workContext: linearWorkContext,
+  });
+  assert.equal(calls.at(-1).name, "linearCreateIssue");
+  assert.deepEqual(calls.at(-1).input.workContext, linearWorkContext);
 });
 
 test("merge schema requires active GO/job identity before work context", async () => {

@@ -1,8 +1,11 @@
 const str = { type: "string", minLength: 1 };
 const int = { type: "integer", minimum: 1 };
 const obj = { type: "object" };
+const priority = { type: "integer", minimum: 0, maximum: 4 };
+const nullableStr = { anyOf: [{ type: "string" }, { type: "null" }] };
 const FACTORY = "destination://factory";
 const MIMIR = "destination://mimir";
+const LINEAR = "destination://linear";
 const workContext = {
   type: "object",
   properties: {
@@ -36,9 +39,14 @@ const definitions = [
   def("go_hub_merge_pull_request", "Merge with Foreman ownership and exact-head CI.", "mergePullRequest", schema({ repository: str, number: int, expectedHeadSha: str, goId: str, jobId: str, method: { type: "string", enum: ["merge", "squash", "rebase"] }, workContext }, ["repository", "number", "expectedHeadSha", "goId", "jobId", "workContext"]), ann(false, true)),
   def("go_hub_get_workflow_runs", "Observe workflow and deployment runs.", "getWorkflowRuns", schema({ repository: str, sha: str }, ["repository", "sha"]), ann(true)),
   def("go_hub_mimir_search_catalog", "Search live MIMIR catalog with Gate-before-Rating.", "searchCatalog", schema({ task: str, requestedResult: str, lensReference: str, workContext }, ["task", "requestedResult", "workContext"]), ann(true)),
+  def("go_hub_linear_list_projects", "List projects scoped to the configured Linear team.", "linearListProjects", schema({}), ann(true)),
+  def("go_hub_linear_get_issue", "Read one Linear issue and enforce configured-team scope.", "linearGetIssue", schema({ identifier: str }, ["identifier"]), ann(true)),
+  def("go_hub_linear_create_issue", "Create a Linear issue in the configured team.", "linearCreateIssue", schema({ title: str, description: nullableStr, projectId: nullableStr, priority, workContext }, ["title", "workContext"]), ann(false)),
+  def("go_hub_linear_update_issue", "Update an in-team Linear issue after a scoped read.", "linearUpdateIssue", schema({ identifier: str, title: str, description: nullableStr, priority, stateId: nullableStr, projectId: nullableStr, workContext }, ["identifier", "workContext"]), ann(false)),
 ];
 
 const factoryTools = new Set(["go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_merge_pull_request"]);
+const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linear_update_issue"]);
 
 function assertArgs(definition, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("invalid MCP tool arguments");
@@ -58,6 +66,7 @@ function assertWork(value, destination) {
 
 function assertLifecycle(name, args) {
   if (factoryTools.has(name)) assertWork(args.workContext, FACTORY);
+  if (linearMutationTools.has(name)) assertWork(args.workContext, LINEAR);
   if (name === "go_hub_mimir_search_catalog") assertWork(args.workContext, MIMIR);
   if (name === "go_hub_factory_foreman" && args.action !== "state") assertWork(args.workContext, FACTORY);
 }

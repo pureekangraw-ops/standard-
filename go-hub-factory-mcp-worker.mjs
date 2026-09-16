@@ -2,6 +2,7 @@ import { verifyAccessToken } from "./go-hub-oauth.mjs";
 import { createMcpRegistry } from "./go-hub-mcp-registry.mjs";
 import { createMcpHandler } from "./go-hub-mcp.mjs";
 import { createNotionCatalogService } from "./go-hub-notion-catalog.mjs";
+import { createLinearService } from "./go-hub-linear-service.mjs";
 import { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createFactoryControllerService } from "./go-hub-factory-controller.mjs";
 
@@ -54,10 +55,19 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         token: env?.NOTION_TOKEN,
         dataSourceId: env?.NOTION_CATALOG_DATA_SOURCE_ID,
       });
+      const linear = createLinearService({
+        fetchImpl,
+        token: env?.LINEAR_API_KEY,
+        teamId: env?.LINEAR_TEAM_ID,
+      });
       const registry = createMcpRegistry({
         lifecycle: Object.freeze({
           ...lifecycle,
           searchCatalog: input => catalog.searchCatalog(input),
+          linearListProjects: input => linear.listProjects(input),
+          linearGetIssue: input => linear.getIssue(input),
+          linearCreateIssue: input => linear.createIssue(input),
+          linearUpdateIssue: input => linear.updateIssue(input),
         }),
       });
 
