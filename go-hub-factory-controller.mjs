@@ -1,4 +1,4 @@
-import { createHephaestusState, evaluateFactoryAdmission, requestFactorySlot } from "./go-hub-hephaestus.js";
+import { createHephaestusState, createMergeAdmissionTruth, evaluateFactoryAdmission, requestFactorySlot } from "./go-hub-hephaestus.js";
 import { admitQueuedFactorySlot, releaseFactorySlot } from "./go-hub-hephaestus-queue.js";
 import { completeMergeAndReturn } from "./go-hub-hephaestus-return.js";
 
@@ -37,10 +37,13 @@ export class HephaestusForeman {
   async getState() { return this.loadState(); }
 
   async requestSlot(input = {}) {
+    const slot = validSlot(input.slot);
+    const admission = evaluateFactoryAdmission(input);
     const request = {
-      repository: required(input.repository, "repository"), slot: validSlot(input.slot),
+      repository: required(input.repository, "repository"), slot,
       goId: required(input.goId, "goId"), jobId: required(input.jobId, "jobId"),
-      admission: evaluateFactoryAdmission(input), risk: input.risk || null,
+      admission, risk: input.risk || null,
+      mergeAdmission: slot === "merge" && admission.decision === "ADMIT" ? createMergeAdmissionTruth(input) : null,
       workContext: input.workContext == null ? null : structuredClone(input.workContext),
     };
     const current = await this.loadState();
@@ -50,6 +53,40 @@ export class HephaestusForeman {
     result = bindWorkContext(result, request);
     await this.saveState(result.state);
     return result;
+  }
+
+  async recordMergeResult(input = {}) {
+    const repository = required(input.repository, "repository");
+    const goId = required(input.goId, "goId");
+    const jobId = required(input.jobId, "jobId");
+    const pullRequestNumber = Number(input.pullRequestNumber || 0);
+    if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber <= 0) throw new Error("pullRequestNumber is required");
+    const headSha = required(input.headSha, "merge headSha");
+    const mergeSha = required(input.mergeSha, "mergeSha");
+    const current = await this.loadState();
+    const active = current?.repositories?.[repository]?.merge?.active;
+    if (!active || active.status !== "ACTIVE" || active.goId !== goId || active.jobId !== jobId) {
+      throw new Error("active merge slot owner does not match result");
+    }
+    if (input.workContext && !sameWork(active.workContext, input.workContext)) {
+      throw new Error("Factory work context does not match active merge slot");
+    }
+    const admission = active.mergeAdmission;
+    if (!admission || admission.pullRequestNumber !== pullRequestNumber || admission.pullRequestHeadSha !== headSha || admission.sourceHeadSha !== headSha) {
+      throw new Error("merge result does not match sealed admission truth");
+    }
+    const state = structuredClone(current);
+    state.repositories[repository].merge.active.mergeResult = {
+      pullRequestNumber,
+      headSha,
+      mergeSha,
+      recordedAt: new Date().toISOString(),
+    };
+    await this.saveState(state);
+    return Object.freeze({
+      state: Object.freeze(state),
+      outcome: Object.freeze({ status: "MERGE_RECORDED", mergeSha }),
+    });
   }
 
   async releaseSlot(input = {}) {
@@ -84,6 +121,7 @@ export class HephaestusForeman {
       const body = request.method === "GET" ? {} : await request.json().catch(() => null);
       if (request.method !== "GET" && (!body || typeof body !== "object" || Array.isArray(body))) return json({ code: "INVALID_JSON" }, 400);
       if (request.method === "POST" && url.pathname === "/request") return json(await this.requestSlot(body));
+      if (request.method === "POST" && url.pathname === "/record-merge") return json(await this.recordMergeResult(body));
       if (request.method === "POST" && url.pathname === "/release") return json(await this.releaseSlot(body));
       if (request.method === "POST" && url.pathname === "/assert-merge") return json({ active: await this.assertActiveMerge(body) });
       if (request.method === "GET" && url.pathname === "/state") return json(await this.getState());
@@ -116,6 +154,9 @@ export function createFactoryControllerService({ namespace } = {}) {
       if (input.action === "release") return call(namespace, "/release", input);
       if (input.action === "state") return call(namespace, "/state", null, "GET");
       return Promise.resolve(json({ code: "unsupported Factory foreman action" }, 400));
+    },
+    recordMergeResult(input = {}) {
+      return String(input.repository || "").trim() ? call(namespace, "/record-merge", input) : Promise.resolve(json({ code: "repository is required" }, 400));
     },
     getState(input = {}) {
       return String(input.repository || "").trim() ? call(namespace, "/state", null, "GET") : Promise.resolve(json({ code: "repository is required" }, 400));
