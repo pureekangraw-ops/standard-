@@ -43,12 +43,18 @@ export function mountObserverPanel({ observer, document: documentObject = global
   observe.addEventListener("click", async () => { await sendSnapshot(); });
   screenshot.addEventListener("click", async () => {
     const observed = await sendSnapshot(); if (!observed.ok) return;
-    if ((observed.packet.redaction_report?.sensitive_blocked || 0) > 0) { message.textContent = "SENSITIVE_CONTENT_BLOCKED"; return; }
+    const safety = observer.assessScreenshotSafety({ document: documentObject, snapshot: observed.packet });
+    if (!safety.safe) { message.textContent = safety.code || "SENSITIVE_CONTENT_BLOCKED"; return; }
     const remoteConsent = await transport.grantScreenshotConsent(); if (!remoteConsent.ok) { message.textContent = remoteConsent.code; return; }
     session = observer.grantScreenshotConsent(session, now()); const consent = observer.consumeScreenshotConsent(session, now()); session = consent.session;
     if (!consent.allowed) { message.textContent = consent.code; return; }
-    const result = await runtime.sendMessage({ type: "GO_OBSERVER_SCREENSHOT", consentGranted: true, safeToCapture: true, pageFingerprint: lastPacket?.page_fingerprint || null });
-    message.textContent = result?.ok ? "One screenshot captured locally · upload gate next" : (result?.code || "SENSITIVE_CONTENT_BLOCKED");
+    const capture = await runtime.sendMessage({ type: "GO_OBSERVER_SCREENSHOT", consentGranted: true, safeToCapture: true, pageFingerprint: lastPacket?.page_fingerprint || null });
+    if (!capture?.ok) { message.textContent = capture?.code || "SENSITIVE_CONTENT_BLOCKED"; return; }
+    const upload = await transport.uploadScreenshot({ dataUrl: capture.dataUrl, pageFingerprint: observed.packet.page_fingerprint });
+    if (!upload.ok || !upload.screenshot_ref) { message.textContent = upload.code || "HUB_UNAVAILABLE"; return; }
+    const packetWithScreenshot = { ...observed.packet, captured_at: new Date(Number(now())).toISOString(), optional_screenshot_ref: upload.screenshot_ref };
+    const confirmed = await transport.sendSnapshot(packetWithScreenshot);
+    message.textContent = confirmed.ok ? "One screenshot sent to GO Hub" : (confirmed.code || "HUB_UNAVAILABLE");
   });
   root.append(title, status, message, bootstrapLabel, start, stop, observe, screenshot); documentObject.body.append(root);
   return Object.freeze({ root, getState: () => state });
