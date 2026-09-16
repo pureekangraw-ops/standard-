@@ -37,29 +37,62 @@ jobs:
         shell: bash
         run: |
           settings_file="${RUNNER_TEMP}/go-hub-settings.json"
+          scripts_file="${RUNNER_TEMP}/workers-scripts.json"
           curl --fail-with-body --silent --show-error \
             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/go-hub/settings" \
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             > "${settings_file}"
-          node - "${settings_file}" <<'NODE'
+          curl --fail-with-body --silent --show-error \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            > "${scripts_file}"
+          node - "${settings_file}" "${scripts_file}" <<'NODE'
           const fs = require("node:fs");
-          const settings = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-          const bindings = settings?.result?.bindings || [];
-          const byName = new Map(bindings.map(binding => [binding.name, binding.type]));
-          const expected = new Map([
-            ["LINEAR_API_KEY", "secret_text"],
-            ["LINEAR_TEAM_ID", "plain_text"],
-          ]);
-          let failed = false;
-          for (const [name, type] of expected) {
-            const actual = byName.get(name);
-            if (actual !== type) {
-              console.error(`::error::Cloudflare binding missing or wrong type: ${name} expected ${type}, got ${actual || "MISSING"}`);
-              failed = true;
+
+          (async () => {
+            const settings = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+            const scripts = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+            const bindings = settings?.result?.bindings || [];
+            const byName = new Map(bindings.map(binding => [binding.name, binding.type]));
+            const expected = new Map([
+              ["LINEAR_API_KEY", "secret_text"],
+              ["LINEAR_TEAM_ID", "plain_text"],
+            ]);
+            const missing = [];
+            for (const [name, type] of expected) {
+              const actual = byName.get(name);
+              if (actual !== type) {
+                console.error(`::error::Cloudflare binding missing or wrong type: ${name} expected ${type}, got ${actual || "MISSING"}`);
+                missing.push(name);
+              }
             }
-          }
-          if (failed) process.exit(1);
-          console.log("Cloudflare Linear binding preflight passed: required names/types are present.");
+            if (!missing.length) {
+              console.log("Cloudflare Linear binding preflight passed: required names/types are present.");
+              return;
+            }
+
+            console.error("::error::Locate misplaced Linear bindings across Cloudflare Workers.");
+            let candidates = 0;
+            const workerNames = (scripts?.result || []).map(worker => worker.id).filter(Boolean);
+            for (const workerName of workerNames) {
+              if (workerName === "go-hub") continue;
+              const url = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${encodeURIComponent(workerName)}/settings`;
+              const response = await fetch(url, {
+                headers: { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
+              });
+              if (!response.ok) continue;
+              const payload = await response.json();
+              const matches = (payload?.result?.bindings || []).filter(binding => expected.has(binding.name));
+              if (!matches.length) continue;
+              candidates += 1;
+              console.error(`::error::candidate Worker ${workerName}: ${matches.map(binding => `${binding.name}(${binding.type})`).join(", ")}`);
+            }
+            if (!candidates) console.error("::error::No candidate Worker contains LINEAR_API_KEY or LINEAR_TEAM_ID bindings.");
+            process.exit(1);
+          })().catch(error => {
+            console.error(`::error::Cloudflare binding locator failed: ${error?.message || "unknown error"}`);
+            process.exit(1);
+          });
           NODE
 
       - name: Deploy GO Hub Worker
