@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "GO Browser Local Observer Eye",
+  "version": "0.1.0",
+  "description": "Read-only, owner-started, fail-closed local observer for GO Browser V1.",
+  "permissions": [
+    "activeTab"
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "go-browser-local-observer-v1@pureekangraw.local",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    },
+    "gecko_android": {}
+  },
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://gumroad.com/*",
+        "*://*.gumroad.com/*"
+      ],
+      "js": [
+        "content-script.js"
+      ],
+      "css": [
+        "observer-panel.css"
+      ],
+      "all_frames": false,
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "observer-panel.js",
+        "runtime/go-browser-local-observer.js"
+      ],
+      "matches": [
+        "*://gumroad.com/*",
+        "*://*.gumroad.com/*"
+      ]
+    }
+  ]
+}
