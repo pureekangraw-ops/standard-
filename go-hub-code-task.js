@@ -66,6 +66,7 @@ function normalizeInitial(initial = {}) {
     gateHandoff: null,
     assembly: null,
     assemblyQc: null,
+    mergeGate: null,
     buildArtifact: null,
     productQc: null,
     verificationScan: null,
@@ -178,6 +179,7 @@ function normalizeSnapshot(value) {
   state.gateHandoff = state.gateHandoff == null ? null : clone(state.gateHandoff);
   state.assembly = state.assembly == null ? null : clone(state.assembly);
   state.assemblyQc = state.assemblyQc == null ? null : clone(state.assemblyQc);
+  if (Object.hasOwn(state, "mergeGate")) state.mergeGate = state.mergeGate == null ? null : clone(state.mergeGate);
   state.buildArtifact = state.buildArtifact == null ? null : clone(state.buildArtifact);
   state.productQc = state.productQc == null ? null : clone(state.productQc);
   state.verificationScan = state.verificationScan == null ? null : clone(state.verificationScan);
@@ -320,6 +322,7 @@ function recordAssemblyState(current, input = {}) {
   };
   next.factoryStage = "ASSEMBLY";
   next.assemblyQc = null;
+  next.mergeGate = null;
   next.buildArtifact = null;
   next.productQc = null;
   next.verificationScan = null;
@@ -342,6 +345,7 @@ function recordAssemblyQcState(current, input = {}) {
   const next = clone(current);
   next.assemblyQc = clone(input);
   next.factoryStage = "ASSEMBLY_QC";
+  next.mergeGate = null;
   next.buildArtifact = null;
   next.productQc = null;
   next.verificationScan = null;
@@ -351,17 +355,71 @@ function recordAssemblyQcState(current, input = {}) {
   return next;
 }
 
+function recordMergeGateState(current, input = {}) {
+  if (current.assemblyQc?.status !== "pass" || current.assemblyQc.checkedHeadSha !== current.assembly?.integrationHeadSha) {
+    throw new Error("passed Assembly QC for the current head is required before Merge Gate");
+  }
+  if (input.status !== "MERGED_VERIFIED" || input.assemblyId !== current.assembly?.id ||
+      input.sourceHeadSha !== current.assembly?.integrationHeadSha) {
+    throw new Error("Merge Gate must match the accepted Assembly");
+  }
+  const pullRequest = input.pullRequest || {};
+  const ci = input.ci || {};
+  const merge = input.merge || {};
+  const verification = input.postMergeVerification || {};
+  const assemblyHead = current.assembly.integrationHeadSha;
+  const prNumber = Number(pullRequest.number || 0);
+  const prHead = requiredString(pullRequest.headSha, "Merge Gate pull request head");
+  const ciHead = requiredString(ci.headSha, "Merge Gate CI head");
+  const mergeHead = requiredString(merge.headSha, "Merge Gate merge head");
+  const mergeSha = requiredString(merge.mergeSha, "Merge Gate merge SHA");
+  const mainSha = requiredString(verification.mainSha, "Merge Gate main SHA");
+  if (!prNumber || prHead !== assemblyHead || ci.status !== "success" || ciHead !== prHead ||
+      mergeHead !== prHead || Number(merge.pullRequestNumber || 0) !== prNumber ||
+      verification.status !== "pass" || mainSha !== mergeSha || !String(verification.checkedAt || "").trim()) {
+    throw new Error("Merge Gate requires exact PR CI merge and post-merge verification truth");
+  }
+  const next = clone(current);
+  next.pullRequest = clone(pullRequest);
+  next.ci = clone(ci);
+  next.merge = clone(merge);
+  next.mergeGate = {
+    status: "MERGED_VERIFIED",
+    assemblyId: current.assembly.id,
+    sourceHeadSha: assemblyHead,
+    pullRequestNumber: prNumber,
+    pullRequestHeadSha: prHead,
+    ciHeadSha: ciHead,
+    mergeSha,
+    mainSha,
+    checkedAt: String(verification.checkedAt),
+  };
+  next.factoryStage = "MERGE_GATE";
+  next.buildArtifact = null;
+  next.productQc = null;
+  next.verificationScan = null;
+  next.closeout = null;
+  next.lessons = [];
+  next.audit.push({ at: now(), event: "MERGE_GATE_RECORDED", pullRequestNumber: prNumber, mainSha });
+  return next;
+}
+
 function recordBuildArtifactState(current, input = {}) {
   if (current.assemblyQc?.status !== "pass" || current.assemblyQc.checkedHeadSha !== current.assembly?.integrationHeadSha) {
     throw new Error("passed Assembly QC for the current head is required before Build");
   }
+  if (current.mergeGate?.status !== "MERGED_VERIFIED" || current.mergeGate.assemblyId !== current.assembly?.id ||
+      current.mergeGate.sourceHeadSha !== current.assembly?.integrationHeadSha) {
+    throw new Error("verified Merge Gate for the current Assembly is required before Build");
+  }
   if (input.status !== "BUILT" || input.assemblyId !== current.assembly.id ||
-      input.sourceHeadSha !== current.assembly.integrationHeadSha || input.blueprintRef !== current.blueprint?.ref) {
-    throw new Error("Build Artifact must match the accepted Assembly and mounted Blueprint");
+      input.sourceHeadSha !== current.mergeGate.mainSha || input.blueprintRef !== current.blueprint?.ref) {
+    throw new Error("Build Artifact must match the verified Merge Gate and mounted Blueprint");
   }
   const next = clone(current);
   next.buildArtifact = {
     ...clone(input), id: requiredString(input.id, "Artifact id"), kind: requiredString(input.kind, "Artifact kind"),
+    assemblyHeadSha: current.assembly.integrationHeadSha,
     digest: requiredString(input.digest, "Artifact digest"), location: requiredString(input.location, "Artifact location"),
     builtAt: requiredString(input.builtAt, "Artifact builtAt"),
   };
@@ -491,6 +549,9 @@ function wrap(state) {
     },
     recordAssemblyQc(input = {}) {
       return wrap(recordAssemblyQcState(state, input));
+    },
+    recordMergeGate(input = {}) {
+      return wrap(recordMergeGateState(state, input));
     },
     recordBuildArtifact(input = {}) {
       return wrap(recordBuildArtifactState(state, input));
