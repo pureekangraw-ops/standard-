@@ -7,8 +7,8 @@ function json(payload, status = 200) {
   });
 }
 
-function configured(token, teamId) {
-  return Boolean(String(token || "").trim() && String(teamId || "").trim());
+function configured(token, teamId, teamKey) {
+  return Boolean(String(token || "").trim() && (String(teamId || "").trim() || String(teamKey || "").trim()));
 }
 
 function sanitizeCategory(errors) {
@@ -39,8 +39,8 @@ function normalizeIssue(issue) {
   };
 }
 
-function issueInScope(issue, teamId) {
-  return String(issue?.team?.id || "") === String(teamId || "");
+function issueInScope(issue, expectedTeamId) {
+  return String(issue?.team?.id || "") === String(expectedTeamId || "");
 }
 
 function validPriority(value) {
@@ -66,9 +66,13 @@ const ISSUE_SELECTION = `
   project { id name }
 `;
 
-export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
+export function createLinearService({ fetchImpl = fetch, token, teamId, teamKey } = {}) {
+  const fixedTeamId = String(teamId || "").trim();
+  const fixedTeamKey = String(teamKey || "").trim().toUpperCase();
+  let resolvedTeamPromise = null;
+
   async function request(query, variables = {}) {
-    if (!configured(token, teamId)) return { response: json({ code: "LINEAR_NOT_CONFIGURED" }, 503) };
+    if (!configured(token, fixedTeamId, fixedTeamKey)) return { response: json({ code: "LINEAR_NOT_CONFIGURED" }, 503) };
     let upstream;
     try {
       upstream = await fetchImpl(LINEAR_API_ROOT, {
@@ -97,22 +101,43 @@ export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
     return { data: payload.data };
   }
 
+  async function resolveTeamId() {
+    if (fixedTeamId) return { teamId: fixedTeamId };
+    if (!resolvedTeamPromise) {
+      resolvedTeamPromise = (async () => {
+        const result = await request(`query HubResolveTeamKey {
+          teams(first: 100) {
+            nodes { id key name }
+          }
+        }`);
+        if (result.response) return result;
+        const nodes = result.data?.teams?.nodes || [];
+        const match = nodes.find(team => String(team?.key || "").trim().toUpperCase() === fixedTeamKey);
+        if (!match?.id) return { response: json({ code: "LINEAR_TEAM_NOT_FOUND" }, 503) };
+        return { teamId: match.id };
+      })();
+    }
+    return resolvedTeamPromise;
+  }
+
   async function readIssue(identifier) {
     return request(`query HubIssue($identifier: String!) {
       issue(id: $identifier) {${ISSUE_SELECTION}}
     }`, { identifier });
   }
 
-  function scopedIssueResult(result) {
+  function scopedIssueResult(result, expectedTeamId) {
     if (result.response) return result;
     const issue = result.data?.issue;
     if (!issue) return { response: json({ code: "LINEAR_ISSUE_NOT_FOUND" }, 404) };
-    if (!issueInScope(issue, teamId)) return { response: json({ code: "LINEAR_TEAM_SCOPE_VIOLATION" }, 403) };
+    if (!issueInScope(issue, expectedTeamId)) return { response: json({ code: "LINEAR_TEAM_SCOPE_VIOLATION" }, 403) };
     return { issue };
   }
 
   return Object.freeze({
     async listProjects() {
+      const team = await resolveTeamId();
+      if (team.response) return team.response;
       const result = await request(`query TeamProjects($teamId: String!) {
         team(id: $teamId) {
           id
@@ -120,7 +145,7 @@ export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
             nodes { id name url status { name } }
           }
         }
-      }`, { teamId: String(teamId || "") });
+      }`, { teamId: team.teamId });
       if (result.response) return result.response;
       const nodes = result.data?.team?.projects?.nodes || [];
       return json({ projects: nodes.map(normalizeProject) });
@@ -129,7 +154,9 @@ export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
     async getIssue(input = {}) {
       const identifier = typeof input?.identifier === "string" ? input.identifier.trim() : "";
       if (!identifier) return json({ code: "LINEAR_INVALID_INPUT" }, 400);
-      const scoped = scopedIssueResult(await readIssue(identifier));
+      const team = await resolveTeamId();
+      if (team.response) return team.response;
+      const scoped = scopedIssueResult(await readIssue(identifier), team.teamId);
       if (scoped.response) return scoped.response;
       return json({ issue: normalizeIssue(scoped.issue) });
     },
@@ -138,7 +165,9 @@ export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
       const title = typeof input?.title === "string" ? input.title.trim() : "";
       if (!title) return json({ code: "LINEAR_INVALID_INPUT" }, 400);
 
-      const mutationInput = { teamId: String(teamId || ""), title };
+      const team = await resolveTeamId();
+      if (team.response) return team.response;
+      const mutationInput = { teamId: team.teamId, title };
       if (Object.hasOwn(input, "description")) {
         if (input.description !== null && typeof input.description !== "string") return json({ code: "LINEAR_INVALID_INPUT" }, 400);
         mutationInput.description = input.description;
@@ -162,7 +191,7 @@ export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
       if (result.response) return result.response;
       const payload = result.data?.issueCreate;
       if (!payload?.success || !payload.issue) return json({ code: "LINEAR_UPSTREAM_ERROR", category: "MUTATION_FAILED" }, 502);
-      if (!issueInScope(payload.issue, teamId)) return json({ code: "LINEAR_UPSTREAM_ERROR", category: "TEAM_SCOPE_MISMATCH" }, 502);
+      if (!issueInScope(payload.issue, team.teamId)) return json({ code: "LINEAR_UPSTREAM_ERROR", category: "TEAM_SCOPE_MISMATCH" }, 502);
       return json({ issue: normalizeIssue(payload.issue) });
     },
 
@@ -193,7 +222,9 @@ export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
         mutationInput[field] = parsed.value;
       }
 
-      const scoped = scopedIssueResult(await readIssue(identifier));
+      const team = await resolveTeamId();
+      if (team.response) return team.response;
+      const scoped = scopedIssueResult(await readIssue(identifier), team.teamId);
       if (scoped.response) return scoped.response;
 
       const result = await request(`mutation HubIssueUpdate($issueId: String!, $input: IssueUpdateInput!) {
@@ -205,7 +236,7 @@ export function createLinearService({ fetchImpl = fetch, token, teamId } = {}) {
       if (result.response) return result.response;
       const payload = result.data?.issueUpdate;
       if (!payload?.success || !payload.issue) return json({ code: "LINEAR_UPSTREAM_ERROR", category: "MUTATION_FAILED" }, 502);
-      if (!issueInScope(payload.issue, teamId)) return json({ code: "LINEAR_UPSTREAM_ERROR", category: "TEAM_SCOPE_MISMATCH" }, 502);
+      if (!issueInScope(payload.issue, team.teamId)) return json({ code: "LINEAR_UPSTREAM_ERROR", category: "TEAM_SCOPE_MISMATCH" }, 502);
       return json({ issue: normalizeIssue(payload.issue) });
     },
   });
