@@ -1,4 +1,5 @@
 import { appendEvidence } from "./go-hub-evidence-ledger.js";
+import { deriveFactoryNextAction } from "./go-hub-factory-authority.js";
 
 const NEXT_ACTION = Object.freeze({
   INSPECTING: "inspect",
@@ -28,6 +29,10 @@ function clone(value) {
 
 function now() {
   return new Date().toISOString();
+}
+
+function effectiveNextAction(state) {
+  return deriveFactoryNextAction(state) || NEXT_ACTION[state.state];
 }
 
 function normalizeInitial(initial = {}) {
@@ -160,9 +165,7 @@ function transitionState(current, nextState, evidence = {}) {
 function normalizeSnapshot(value) {
   const state = clone(value);
   if (!state || typeof state !== "object" || Array.isArray(state)) throw new Error("task snapshot is required");
-  if (!NEXT_ACTION[state.state] || state.nextAction !== NEXT_ACTION[state.state]) {
-    throw new Error("task snapshot state is invalid");
-  }
+  if (!NEXT_ACTION[state.state]) throw new Error("task snapshot state is invalid");
   if (!Array.isArray(state.audit)) throw new Error("task snapshot audit is required");
   state.mission = state.mission == null ? null : clone(state.mission);
   state.blueprint = state.blueprint == null ? null : clone(state.blueprint);
@@ -180,6 +183,10 @@ function normalizeSnapshot(value) {
   state.verificationScan = state.verificationScan == null ? null : clone(state.verificationScan);
   state.closeout = state.closeout == null ? null : clone(state.closeout);
   state.lessons = Array.isArray(state.lessons) ? clone(state.lessons) : [];
+  if (!state.factoryStage && state.nextAction !== NEXT_ACTION[state.state]) {
+    throw new Error("task snapshot state is invalid");
+  }
+  state.nextAction = effectiveNextAction(state);
   return state;
 }
 
@@ -324,7 +331,7 @@ function recordAssemblyState(current, input = {}) {
 
 function recordAssemblyQcState(current, input = {}) {
   if (!current.assembly) throw new Error("Assembly is required before Assembly QC");
-  if (!['pass', 'fail'].includes(input.status) || input.checkedHeadSha !== current.assembly.integrationHeadSha) {
+  if (!["pass", "fail"].includes(input.status) || input.checkedHeadSha !== current.assembly.integrationHeadSha) {
     throw new Error("Assembly QC must match the current Assembly head");
   }
   const evidenceIds = Array.isArray(input.evidenceIds) ? input.evidenceIds.map(String) : [];
@@ -368,7 +375,7 @@ function recordProductQcState(current, input = {}) {
   if (!current.buildArtifact || input.artifactId !== current.buildArtifact.id || input.artifactDigest !== current.buildArtifact.digest) {
     throw new Error("Product QC must match the current Artifact digest");
   }
-  if (!['pass', 'fail'].includes(input.status)) throw new Error("Product QC status must be pass or fail");
+  if (!["pass", "fail"].includes(input.status)) throw new Error("Product QC status must be pass or fail");
   const evidenceIds = Array.isArray(input.evidenceIds) ? input.evidenceIds.map(String) : [];
   if (input.status === "pass" && (!evidenceIds.length || evidenceIds.some(id => !current.evidence.some(item =>
     item?.id === id && item?.scope === "artifact" && item?.value?.digest === current.buildArtifact.digest)))) {
@@ -385,7 +392,7 @@ function recordProductQcState(current, input = {}) {
 }
 
 function recordVerificationScanState(current, input = {}) {
-  if (!['VERIFIED_CHAIN', 'FIRST_BROKEN_TRUTH'].includes(input.status)) throw new Error("unsupported verification scan status");
+  if (!["VERIFIED_CHAIN", "FIRST_BROKEN_TRUTH"].includes(input.status)) throw new Error("unsupported verification scan status");
   if (input.status === "VERIFIED_CHAIN" && (current.factoryStage !== "PRODUCT_VERIFIED" ||
       input.artifactId !== current.buildArtifact?.id || input.artifactDigest !== current.buildArtifact?.digest)) {
     throw new Error("verified scan must match the current PRODUCT_VERIFIED Artifact");
@@ -446,9 +453,14 @@ function appendAuditState(current, event, details = {}) {
 }
 
 function wrap(state) {
-  const snapshot = () => clone(state);
+  const snapshot = () => {
+    const next = clone(state);
+    next.nextAction = effectiveNextAction(next);
+    return next;
+  };
+  const current = snapshot();
   return Object.freeze({
-    ...snapshot(),
+    ...current,
     snapshot,
     transition(nextState, evidence = {}) {
       return wrap(transitionState(state, nextState, evidence));
