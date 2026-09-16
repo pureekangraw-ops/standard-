@@ -11,13 +11,14 @@
     "provider-neutral Code capability",
     "GitHub-backed Code workspace through trusted same-origin gateway",
     "durable CENTRE checkpoint before destination access",
+    "canonical Optician and City Route gate before Factory handoff",
     "single CENTRE entry and return passage for GO"
   ],
   "serviceWorker": {
     "file": "go-hub-sw.js",
     "mode": "go-hub-exclusive",
     "cachePrefix": "go-hub-app-",
-    "cacheGeneration": "v6-centre-live-checkpoint",
+    "cacheGeneration": "v7-route-optician-gate",
     "autoActivate": true
   },
   "validation": {
@@ -30,10 +31,11 @@
       "syntax",
       "utf8",
       "no executable ride references",
-      "CENTRE checkpoint identity and destination gate"
+      "CENTRE checkpoint identity and destination gate",
+      "Optician and canonical City Route before Factory handoff"
     ]
   },
-  "note": "GO Hub owns the active root. GO must review and fit at a durable CENTRE checkpoint before Code/Factory capability access, then return through the same checkpoint. Repository credentials remain server-side.",
+  "note": "GO Hub owns the active root. GO must review at CENTRE, pass the canonical Optician/City Route gate before Code/Factory capability access, then return through the same checkpoint. Heimdall remains the outbound safety/exit gate. Repository credentials remain server-side.",
   "productionFiles": [
     {
       "path": "index.html"
@@ -55,6 +57,12 @@
     },
     {
       "path": "go-hub-centre.js"
+    },
+    {
+      "path": "go-hub-city-route.js"
+    },
+    {
+      "path": "go-hub-optician.js"
     },
     {
       "path": "go-hub-factory-return.js"
