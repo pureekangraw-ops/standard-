@@ -23,6 +23,14 @@ const NEXT_ACTION = Object.freeze({
   ROLLBACK_IN_PROGRESS: "continue-rollback",
 });
 
+const PRODUCTION_ADVANCE = Object.freeze({
+  INSPECT_REALITY: "BASELINE",
+  BASELINE: "TRACE",
+  TRACE: "PLAN",
+  PLAN: "WRITE",
+  LOCAL_VERIFY: "PIECE_READY",
+});
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -180,6 +188,8 @@ function normalizeSnapshot(value) {
   state.assembly = state.assembly == null ? null : clone(state.assembly);
   state.assemblyQc = state.assemblyQc == null ? null : clone(state.assemblyQc);
   if (Object.hasOwn(state, "mergeGate")) state.mergeGate = state.mergeGate == null ? null : clone(state.mergeGate);
+  if (Object.hasOwn(state, "productionPhase")) state.productionPhase = state.productionPhase == null ? null : String(state.productionPhase);
+  if (Object.hasOwn(state, "productionTrace")) state.productionTrace = Array.isArray(state.productionTrace) ? clone(state.productionTrace) : [];
   state.buildArtifact = state.buildArtifact == null ? null : clone(state.buildArtifact);
   state.productQc = state.productQc == null ? null : clone(state.productQc);
   state.verificationScan = state.verificationScan == null ? null : clone(state.verificationScan);
@@ -220,6 +230,8 @@ function setWorkPackageState(current, input = {}) {
     purpose: next.workPackage.purpose,
   };
   next.factoryStage = "PRODUCTION";
+  next.productionPhase = "INSPECT_REALITY";
+  next.productionTrace = [];
   next.piece = null;
   next.pieceQc = null;
   next.gateHandoff = null;
@@ -227,8 +239,53 @@ function setWorkPackageState(current, input = {}) {
   return next;
 }
 
+function recordProductionStepState(current, input = {}) {
+  if (current.factoryStage !== "PRODUCTION" || !current.workPackage) throw new Error("active Production work package is required");
+  const expected = String(current.productionPhase || "INSPECT_REALITY");
+  const step = requiredString(input.step, "Production step");
+  if (step !== expected) throw new Error(`Production sequence expected ${expected} before ${step}`);
+  const evidence = input.evidence && typeof input.evidence === "object" && !Array.isArray(input.evidence) ? clone(input.evidence) : {};
+
+  if (step === "INSPECT_REALITY") {
+    const repository = requiredString(evidence.repository, "Inspect Reality repository");
+    requiredString(evidence.headSha, "Inspect Reality headSha");
+    if (current.repository && repository !== current.repository) throw new Error("Inspect Reality repository must match the active task repository");
+  } else if (step === "BASELINE") {
+    const baseSha = requiredString(evidence.baseSha, "Baseline baseSha");
+    const inspectHead = current.productionTrace?.find(item => item.step === "INSPECT_REALITY")?.evidence?.headSha;
+    if (inspectHead && baseSha !== inspectHead) throw new Error("Baseline must match the inspected Reality head");
+  } else if (step === "TRACE") {
+    requiredString(evidence.summary, "Trace summary");
+  } else if (step === "PLAN") {
+    if (requiredString(evidence.blueprintRef, "Plan blueprintRef") !== current.blueprint?.ref) {
+      throw new Error("Plan must match the mounted Blueprint");
+    }
+    requiredString(evidence.planRef, "Plan planRef");
+  } else if (step === "LOCAL_VERIFY") {
+    if (!current.piece) throw new Error("active Piece is required before Local Verify");
+    if (evidence.status !== "pass") throw new Error("Local Verify pass is required before Piece QC");
+    if (String(evidence.headSha || "") !== current.piece.headSha) throw new Error("Local Verify must match the active Piece head");
+  } else if (step === "WRITE") {
+    throw new Error("WRITE is completed by recording the Piece");
+  } else {
+    throw new Error(`unsupported Production step: ${step}`);
+  }
+
+  const nextPhase = PRODUCTION_ADVANCE[step];
+  if (!nextPhase) throw new Error(`Production step cannot advance: ${step}`);
+  const next = clone(current);
+  next.productionTrace = Array.isArray(next.productionTrace) ? next.productionTrace : [];
+  next.productionTrace.push({ step, evidence, recordedAt: now() });
+  next.productionPhase = nextPhase;
+  next.audit.push({ at: now(), event: "PRODUCTION_STEP_RECORDED", step, nextPhase });
+  return next;
+}
+
 function recordPieceState(current, input = {}) {
   if (!current.workPackage) throw new Error("active work package is required");
+  if (current.factoryStage !== "PRODUCTION" || current.productionPhase !== "WRITE") {
+    throw new Error("Production sequence requires WRITE before recording the Piece");
+  }
   const workPackageId = requiredString(input.workPackageId, "piece workPackageId");
   if (workPackageId !== current.workPackage.id) throw new Error("piece must match the active work package");
   const next = clone(current);
@@ -242,6 +299,9 @@ function recordPieceState(current, input = {}) {
     outputs: Array.isArray(input.outputs) ? clone(input.outputs) : [],
   };
   next.factoryStage = "PRODUCTION";
+  next.productionPhase = "LOCAL_VERIFY";
+  next.productionTrace = Array.isArray(next.productionTrace) ? next.productionTrace : [];
+  next.productionTrace.push({ step: "WRITE", evidence: { repository: next.piece.repository, branch: next.piece.branch, headSha: next.piece.headSha, changedPaths: clone(next.piece.changedPaths) }, recordedAt: now() });
   next.pieceQc = null;
   next.gateHandoff = null;
   next.audit.push({ at: now(), event: "PIECE_RECORDED", pieceId: next.piece.id, headSha: next.piece.headSha });
@@ -250,6 +310,7 @@ function recordPieceState(current, input = {}) {
 
 function recordPieceQcState(current, input = {}) {
   if (!current.piece) throw new Error("active Piece is required before Piece QC");
+  if (current.productionPhase !== "PIECE_READY") throw new Error("Local Verify pass is required before Piece QC");
   const status = String(input.status || "");
   if (status !== "pass" && status !== "fail") throw new Error("Piece QC status must be pass or fail");
   if (String(input.checkedHeadSha || "") !== current.piece.headSha) {
@@ -297,10 +358,7 @@ function addEvidenceState(current, input = {}) {
   const next = clone(current);
   next.evidence = appendEvidence(next.evidence, input);
   const entry = next.evidence.at(-1);
-  next.audit.push({
-    at: now(), event: "EVIDENCE_RECORDED", evidenceId: entry.id,
-    claim: entry.claim, headSha: entry.headSha,
-  });
+  next.audit.push({ at: now(), event: "EVIDENCE_RECORDED", evidenceId: entry.id, claim: entry.claim, headSha: entry.headSha });
   return next;
 }
 
@@ -359,8 +417,7 @@ function recordMergeGateState(current, input = {}) {
   if (current.assemblyQc?.status !== "pass" || current.assemblyQc.checkedHeadSha !== current.assembly?.integrationHeadSha) {
     throw new Error("passed Assembly QC for the current head is required before Merge Gate");
   }
-  if (input.status !== "MERGED_VERIFIED" || input.assemblyId !== current.assembly?.id ||
-      input.sourceHeadSha !== current.assembly?.integrationHeadSha) {
+  if (input.status !== "MERGED_VERIFIED" || input.assemblyId !== current.assembly?.id || input.sourceHeadSha !== current.assembly?.integrationHeadSha) {
     throw new Error("Merge Gate must match the accepted Assembly");
   }
   const pullRequest = input.pullRequest || {};
@@ -408,12 +465,10 @@ function recordBuildArtifactState(current, input = {}) {
   if (current.assemblyQc?.status !== "pass" || current.assemblyQc.checkedHeadSha !== current.assembly?.integrationHeadSha) {
     throw new Error("passed Assembly QC for the current head is required before Build");
   }
-  if (current.mergeGate?.status !== "MERGED_VERIFIED" || current.mergeGate.assemblyId !== current.assembly?.id ||
-      current.mergeGate.sourceHeadSha !== current.assembly?.integrationHeadSha) {
+  if (current.mergeGate?.status !== "MERGED_VERIFIED" || current.mergeGate.assemblyId !== current.assembly?.id || current.mergeGate.sourceHeadSha !== current.assembly?.integrationHeadSha) {
     throw new Error("verified Merge Gate for the current Assembly is required before Build");
   }
-  if (input.status !== "BUILT" || input.assemblyId !== current.assembly.id ||
-      input.sourceHeadSha !== current.mergeGate.mainSha || input.blueprintRef !== current.blueprint?.ref) {
+  if (input.status !== "BUILT" || input.assemblyId !== current.assembly.id || input.sourceHeadSha !== current.mergeGate.mainSha || input.blueprintRef !== current.blueprint?.ref) {
     throw new Error("Build Artifact must match the verified Merge Gate and mounted Blueprint");
   }
   const next = clone(current);
@@ -435,8 +490,7 @@ function recordProductQcState(current, input = {}) {
   }
   if (!["pass", "fail"].includes(input.status)) throw new Error("Product QC status must be pass or fail");
   const evidenceIds = Array.isArray(input.evidenceIds) ? input.evidenceIds.map(String) : [];
-  if (input.status === "pass" && (!evidenceIds.length || evidenceIds.some(id => !current.evidence.some(item =>
-    item?.id === id && item?.scope === "artifact" && item?.value?.digest === current.buildArtifact.digest)))) {
+  if (input.status === "pass" && (!evidenceIds.length || evidenceIds.some(id => !current.evidence.some(item => item?.id === id && item?.scope === "artifact" && item?.value?.digest === current.buildArtifact.digest)))) {
     throw new Error("Product QC pass requires exact-digest evidence");
   }
   const next = clone(current);
@@ -451,8 +505,7 @@ function recordProductQcState(current, input = {}) {
 
 function recordVerificationScanState(current, input = {}) {
   if (!["VERIFIED_CHAIN", "FIRST_BROKEN_TRUTH"].includes(input.status)) throw new Error("unsupported verification scan status");
-  if (input.status === "VERIFIED_CHAIN" && (current.factoryStage !== "PRODUCT_VERIFIED" ||
-      input.artifactId !== current.buildArtifact?.id || input.artifactDigest !== current.buildArtifact?.digest)) {
+  if (input.status === "VERIFIED_CHAIN" && (current.factoryStage !== "PRODUCT_VERIFIED" || input.artifactId !== current.buildArtifact?.id || input.artifactDigest !== current.buildArtifact?.digest)) {
     throw new Error("verified scan must match the current PRODUCT_VERIFIED Artifact");
   }
   const next = clone(current);
@@ -466,8 +519,7 @@ function recordVerificationScanState(current, input = {}) {
 
 function recordCloseoutState(current, input = {}) {
   const artifact = current.buildArtifact;
-  if (current.verificationScan?.status !== "VERIFIED_CHAIN" || input.status !== "CLOSEOUT_READY" ||
-      input.taskId !== current.id || input.finalArtifact?.id !== artifact?.id || input.finalArtifact?.digest !== artifact?.digest) {
+  if (current.verificationScan?.status !== "VERIFIED_CHAIN" || input.status !== "CLOSEOUT_READY" || input.taskId !== current.id || input.finalArtifact?.id !== artifact?.id || input.finalArtifact?.digest !== artifact?.digest) {
     throw new Error("closeout must match the current verified chain and Artifact");
   }
   const next = clone(current);
@@ -479,8 +531,7 @@ function recordCloseoutState(current, input = {}) {
 }
 
 function recordLessonState(current, input = {}) {
-  if (current.closeout?.status !== "CLOSEOUT_READY" || input.status !== "RECORDED" ||
-      input.sourceTaskId !== current.id || input.sourceArtifactDigest !== current.buildArtifact?.digest) {
+  if (current.closeout?.status !== "CLOSEOUT_READY" || input.status !== "RECORDED" || input.sourceTaskId !== current.id || input.sourceArtifactDigest !== current.buildArtifact?.digest) {
     throw new Error("lesson must match the current Artifact and closed task");
   }
   const id = requiredString(input.id, "lesson id");
@@ -520,54 +571,23 @@ function wrap(state) {
   return Object.freeze({
     ...current,
     snapshot,
-    transition(nextState, evidence = {}) {
-      return wrap(transitionState(state, nextState, evidence));
-    },
-    appendAudit(event, details = {}) {
-      return wrap(appendAuditState(state, event, details));
-    },
-    setWorkbenchTruth(input = {}) {
-      return wrap(setWorkbenchTruthState(state, input));
-    },
-    setWorkPackage(input = {}) {
-      return wrap(setWorkPackageState(state, input));
-    },
-    recordPiece(input = {}) {
-      return wrap(recordPieceState(state, input));
-    },
-    recordPieceQc(input = {}) {
-      return wrap(recordPieceQcState(state, input));
-    },
-    recordGateHandoff(input = {}) {
-      return wrap(recordGateHandoffState(state, input));
-    },
-    addEvidence(input = {}) {
-      return wrap(addEvidenceState(state, input));
-    },
-    recordAssembly(input = {}) {
-      return wrap(recordAssemblyState(state, input));
-    },
-    recordAssemblyQc(input = {}) {
-      return wrap(recordAssemblyQcState(state, input));
-    },
-    recordMergeGate(input = {}) {
-      return wrap(recordMergeGateState(state, input));
-    },
-    recordBuildArtifact(input = {}) {
-      return wrap(recordBuildArtifactState(state, input));
-    },
-    recordProductQc(input = {}) {
-      return wrap(recordProductQcState(state, input));
-    },
-    recordVerificationScan(input = {}) {
-      return wrap(recordVerificationScanState(state, input));
-    },
-    recordCloseout(input = {}) {
-      return wrap(recordCloseoutState(state, input));
-    },
-    recordLesson(input = {}) {
-      return wrap(recordLessonState(state, input));
-    },
+    transition(nextState, evidence = {}) { return wrap(transitionState(state, nextState, evidence)); },
+    appendAudit(event, details = {}) { return wrap(appendAuditState(state, event, details)); },
+    setWorkbenchTruth(input = {}) { return wrap(setWorkbenchTruthState(state, input)); },
+    setWorkPackage(input = {}) { return wrap(setWorkPackageState(state, input)); },
+    recordProductionStep(input = {}) { return wrap(recordProductionStepState(state, input)); },
+    recordPiece(input = {}) { return wrap(recordPieceState(state, input)); },
+    recordPieceQc(input = {}) { return wrap(recordPieceQcState(state, input)); },
+    recordGateHandoff(input = {}) { return wrap(recordGateHandoffState(state, input)); },
+    addEvidence(input = {}) { return wrap(addEvidenceState(state, input)); },
+    recordAssembly(input = {}) { return wrap(recordAssemblyState(state, input)); },
+    recordAssemblyQc(input = {}) { return wrap(recordAssemblyQcState(state, input)); },
+    recordMergeGate(input = {}) { return wrap(recordMergeGateState(state, input)); },
+    recordBuildArtifact(input = {}) { return wrap(recordBuildArtifactState(state, input)); },
+    recordProductQc(input = {}) { return wrap(recordProductQcState(state, input)); },
+    recordVerificationScan(input = {}) { return wrap(recordVerificationScanState(state, input)); },
+    recordCloseout(input = {}) { return wrap(recordCloseoutState(state, input)); },
+    recordLesson(input = {}) { return wrap(recordLessonState(state, input)); },
   });
 }
 
