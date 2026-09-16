@@ -1,0 +1,93 @@
+"use strict";
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const path = require("node:path");
+const { pathToFileURL } = require("node:url");
+
+const root = path.resolve(__dirname, "..");
+const productQcUrl = pathToFileURL(path.join(root, "go-hub-product-qc.js")).href;
+const scannerUrl = pathToFileURL(path.join(root, "go-hub-verification-scanner.js")).href;
+
+const SIGNED_DIGEST = "2".repeat(64);
+const UNSIGNED_DIGEST = "1".repeat(64);
+const CERT = "3".repeat(64);
+
+function signedArtifact() {
+  return {
+    id: "signed-apk",
+    kind: "apk",
+    sourceArtifactId: "unsigned-apk",
+    sourceHeadSha: "main-head",
+    blueprintRef: "spec.md",
+    digest: SIGNED_DIGEST,
+    location: "artifact://signed.apk",
+    applicationId: "com.yggdrasil.lighthouse",
+    versionName: "1.0.0-owner.1",
+    versionCode: 1006,
+    certificateSha256: CERT,
+    signingProfileId: "lighthouse-production",
+    workflowRunId: "run-42",
+    verifiedAt: "now",
+    status: "SIGNATURE_VERIFIED",
+  };
+}
+
+function signedEvidence() {
+  return [
+    { id: "load", scope: "artifact", claim: "artifact-loads", value: { digest: SIGNED_DIGEST } },
+    { id: "flow", scope: "artifact", claim: "core-flow-correct", value: { digest: SIGNED_DIGEST } },
+    { id: "outcome", scope: "artifact", claim: "blueprint-outcome-correct", value: { digest: SIGNED_DIGEST } },
+  ];
+}
+
+test("Product QC accepts the signature-verified APK, not only raw BUILT artifacts", async () => {
+  const { evaluateProductQc } = await import(`${productQcUrl}?apk=${Date.now()}`);
+  const result = evaluateProductQc({
+    artifact: signedArtifact(),
+    blueprint: { ref: "spec.md" },
+    evidence: signedEvidence(),
+  });
+  assert.equal(result.status, "pass");
+  assert.equal(result.artifactId, "signed-apk");
+  assert.equal(result.artifactDigest, SIGNED_DIGEST);
+  assert.deepEqual(result.evidenceIds, ["load", "flow", "outcome"]);
+});
+
+test("Verification Scanner requires APK Signing Gate and verifies the signed digest as final product", async () => {
+  const { scanFactoryTruth } = await import(`${scannerUrl}?apk=${Date.now()}`);
+  const truth = {
+    blueprint: { ref: "spec.md", status: "approved" },
+    piece: { id: "p", headSha: "piece-head" },
+    pieceQc: { status: "pass", checkedHeadSha: "piece-head" },
+    gateHandoff: { status: "READY_FOR_ASSEMBLY", headSha: "piece-head", blueprintRef: "spec.md" },
+    assembly: { id: "assembly", status: "ASSEMBLED", integrationHeadSha: "assembly-head", blueprintRef: "spec.md" },
+    assemblyQc: { status: "pass", checkedHeadSha: "assembly-head" },
+    mergeGate: {
+      status: "MERGED_VERIFIED", assemblyId: "assembly", sourceHeadSha: "assembly-head",
+      pullRequestHeadSha: "assembly-head", ciHeadSha: "assembly-head", mergeSha: "main-head", mainSha: "main-head",
+    },
+    buildArtifact: {
+      id: "unsigned-apk", kind: "apk", status: "BUILT", digest: UNSIGNED_DIGEST,
+      sourceHeadSha: "main-head", assemblyHeadSha: "assembly-head", blueprintRef: "spec.md",
+    },
+    signingGate: {
+      state: "SIGNING_GATE_READY", sourceArtifactId: "unsigned-apk", unsignedApkSha256: UNSIGNED_DIGEST,
+      sourceSha: "main-head", signingProfileId: "lighthouse-production", expectedCertificateSha256: CERT,
+    },
+    signedArtifact: signedArtifact(),
+    productQc: { status: "pass", artifactId: "signed-apk", artifactDigest: SIGNED_DIGEST },
+    factoryStage: "PRODUCT_VERIFIED",
+  };
+  const result = scanFactoryTruth(truth);
+  assert.equal(result.status, "VERIFIED_CHAIN");
+  assert.equal(result.artifactId, "signed-apk");
+  assert.equal(result.artifactDigest, SIGNED_DIGEST);
+  assert.deepEqual(result.checkedStations, [
+    "blueprint", "piece-qc", "ready-gate", "assembly-qc", "merge-gate", "artifact", "signing-gate", "product-qc",
+  ]);
+
+  truth.signingGate = null;
+  const broken = scanFactoryTruth(truth);
+  assert.equal(broken.status, "FIRST_BROKEN_TRUTH");
+  assert.equal(broken.station, "signing-gate");
+});
