@@ -13,6 +13,47 @@ function json(payload, status = 200) {
   });
 }
 
+function observerStatus(code) {
+  if (code === "SCHEMA_REJECTED") return 400;
+  if (code === "SESSION_EXPIRED") return 410;
+  if (code === "STALE_PAGE") return 409;
+  if (code === "HUB_UNAVAILABLE") return 503;
+  return 403;
+}
+
+export function createObserverEvidenceService({ namespace } = {}) {
+  function stub() {
+    if (!namespace || typeof namespace.getByName !== "function") return null;
+    return namespace.getByName("go-browser-observer-v1");
+  }
+  return Object.freeze({
+    async latest() {
+      const current = stub();
+      if (!current || typeof current.latest !== "function") return json({ code: "HUB_UNAVAILABLE" }, 503);
+      try {
+        const result = await current.latest();
+        if (!result?.ok) return json({ code: result?.code || "HUB_UNAVAILABLE" }, observerStatus(result?.code));
+        return json(result, 200);
+      } catch {
+        return json({ code: "HUB_UNAVAILABLE" }, 503);
+      }
+    },
+    async screenshot({ screenshotRef } = {}) {
+      const ref = String(screenshotRef || "").trim();
+      if (!ref) return json({ code: "SCHEMA_REJECTED" }, 400);
+      const current = stub();
+      if (!current || typeof current.screenshot !== "function") return json({ code: "HUB_UNAVAILABLE" }, 503);
+      try {
+        const result = await current.screenshot({ screenshotRef: ref });
+        if (!result?.ok) return json({ code: result?.code || "HUB_UNAVAILABLE" }, observerStatus(result?.code));
+        return json(result, 200);
+      } catch {
+        return json({ code: "HUB_UNAVAILABLE" }, 503);
+      }
+    },
+  });
+}
+
 export function createFactoryGuardedLifecycle({ lifecycle, factory } = {}) {
   if (!lifecycle) throw new Error("GitHub lifecycle service is required");
   if (!factory) throw new Error("Factory controller service is required");
@@ -60,10 +101,13 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         token: env?.LINEAR_API_KEY,
         teamId: env?.LINEAR_TEAM_ID,
       });
+      const observer = createObserverEvidenceService({ namespace: env?.OBSERVER_SESSIONS });
       const registry = createMcpRegistry({
         lifecycle: Object.freeze({
           ...lifecycle,
           searchCatalog: input => catalog.searchCatalog(input),
+          observerLatest: () => observer.latest(),
+          observerScreenshot: input => observer.screenshot(input),
           linearListProjects: input => linear.listProjects(input),
           linearGetIssue: input => linear.getIssue(input),
           linearCreateIssue: input => linear.createIssue(input),
