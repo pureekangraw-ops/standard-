@@ -3,7 +3,7 @@ browser.runtime.onMessage.addListener(async message => {
   if (message.consentGranted !== true) return { ok: false, code: "SCREENSHOT_CONSENT_REQUIRED" };
   if (message.safeToCapture !== true) return { ok: false, code: "SENSITIVE_CONTENT_BLOCKED" };
   try {
-    const dataUrl = await browser.tabs.captureVisibleTab(undefined, { format: "png" });
+    const dataUrl = await browser.tabs.captureVisibleTab(undefined, { format: "jpeg", quality: 65 });
     return { ok: true, code: null, dataUrl };
   } catch {
     return { ok: false, code: "SENSITIVE_CONTENT_BLOCKED" };
