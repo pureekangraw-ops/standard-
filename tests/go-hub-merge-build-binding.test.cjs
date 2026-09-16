@@ -23,6 +23,16 @@ const mergeGate = {
   checkedAt: "now",
 };
 
+function productionToPiece(task) {
+  return task
+    .recordProductionStep({ step: "INSPECT_REALITY", evidence: { repository: "repo", headSha: "base-head" } })
+    .recordProductionStep({ step: "BASELINE", evidence: { baseSha: "base-head" } })
+    .recordProductionStep({ step: "TRACE", evidence: { summary: "trace before build" } })
+    .recordProductionStep({ step: "PLAN", evidence: { blueprintRef: "spec.md", planRef: "plan://merge-task" } })
+    .recordPiece({ id: "p", workPackageId: "wp", repository: "repo", branch: "b", headSha: "piece-head" })
+    .recordProductionStep({ step: "LOCAL_VERIFY", evidence: { status: "pass", headSha: "piece-head", checks: { test: "pass" } } });
+}
+
 test("Build requires a verified Merge Gate and binds Artifact to verified main SHA", async () => {
   const { createBuildArtifact } = await import(`${artifactUrl}?merge=${Date.now()}`);
   assert.throws(() => createBuildArtifact({
@@ -48,8 +58,8 @@ test("CodeTask cannot enter Build until PR CI merge and post-merge main truth ar
   const { createCodeTask } = await import(`${taskUrl}?merge=${Date.now()}`);
   let task = createCodeTask({ id: "merge-task", repository: "repo" })
     .setWorkbenchTruth({ blueprint: { ref: "spec.md" } })
-    .setWorkPackage({ id: "wp", title: "piece", purpose: "build", blueprintRef: "spec.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "app" })
-    .recordPiece({ id: "p", workPackageId: "wp", repository: "repo", branch: "b", headSha: "piece-head" })
+    .setWorkPackage({ id: "wp", title: "piece", purpose: "build", blueprintRef: "spec.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "app" });
+  task = productionToPiece(task)
     .addEvidence({ id: "pev", scope: "piece", claim: "piece-correct", kind: "test", headSha: "piece-head" })
     .recordPieceQc({ status: "pass", checkedHeadSha: "piece-head", checks: {}, evidenceIds: ["pev"], checkedAt: "now" })
     .recordGateHandoff({ status: "READY_FOR_ASSEMBLY", pieceId: "p", workPackageId: "wp", blueprintRef: "spec.md", headSha: "piece-head", evidenceIds: ["pev"] })
