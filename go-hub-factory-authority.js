@@ -1,10 +1,24 @@
+const PRODUCTION_NEXT = Object.freeze({
+  INSPECT_REALITY: "inspect-reality",
+  BASELINE: "capture-baseline",
+  TRACE: "trace-system",
+  PLAN: "plan-change",
+  WRITE: "write",
+  LOCAL_VERIFY: "local-verify",
+  PIECE_READY: "piece-qc",
+});
+
 export function deriveFactoryNextAction(snapshot = {}) {
   const stage = String(snapshot.factoryStage || "").trim();
   if (!stage) return null;
 
   switch (stage) {
-    case "PRODUCTION":
-      return snapshot.piece ? "piece-qc" : "record-piece";
+    case "PRODUCTION": {
+      const phase = String(snapshot.productionPhase || "INSPECT_REALITY");
+      const next = PRODUCTION_NEXT[phase];
+      if (!next) throw new Error(`unsupported production phase: ${phase}`);
+      return next;
+    }
     case "PIECE_QC":
       return snapshot.pieceQc?.status === "pass" ? "ready-gate" : "fix-piece";
     case "READY_GATE":
