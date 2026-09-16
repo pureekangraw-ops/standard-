@@ -123,11 +123,14 @@ test("panel controller is read-only on create, Scan, value edit, and guard previ
   assert.equal(controller.getState().phase, "RECEIPT");
 });
 
-test("Mozilla signing is manual-only, unlisted, secret-backed, and pinned to a reviewed action commit", () => {
+test("Mozilla signing keeps Safe Fill manual-only while Observer fallback is branch-and-path scoped, unlisted, secret-backed, and pinned", () => {
   const workflow = fs.readFileSync(signingWorkflowPath, "utf8");
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /pull_request:/);
-  assert.doesNotMatch(workflow, /\n\s*push:/);
+  assert.match(workflow, /push:\s*\n\s*branches:\s*\n\s*-\s*feat\/go-browser-local-observer-eye-v1-r2/);
+  assert.match(workflow, /paths:\s*\n\s*-\s*['\"]?\.github\/workflows\/go-browser-extension-sign\.yml['\"]?/);
+  assert.doesNotMatch(workflow, /branches:\s*\n\s*-\s*main/);
+  assert.match(workflow, /safe-fill-sign:\s*\n\s*if:\s*\$\{\{\s*!startsWith\(github\.ref_name, 'feat\/go-browser-local-observer-eye-v1'\)\s*\}\}/);
   assert.match(workflow, /secrets\.AMO_SIGN_KEY/);
   assert.match(workflow, /secrets\.AMO_SIGN_SECRET/);
   assert.match(workflow, /channel:\s*unlisted/);
