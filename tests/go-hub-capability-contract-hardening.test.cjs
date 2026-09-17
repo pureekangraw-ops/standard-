@@ -37,7 +37,8 @@ test("Code full readiness requires recursive inspect and delete contracts", asyn
   assert.equal(missingInspectAndDelete.canDelete, false);
 
   const full = createCodeCapability({
-    workspace: lifecycleWorkspace({ inspect() {}, listTree() {}, deletePath() {} }),
+    workspace: lifecycleWorkspace({ inspect() {}, listTree() {}, deletePath() {}, factoryAction() {} }),
+    controllerReady: true,
   });
   assert.equal(full.canInspect, true);
   assert.equal(full.canDelete, true);
