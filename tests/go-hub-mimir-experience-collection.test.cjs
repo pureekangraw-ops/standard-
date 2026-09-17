@@ -52,3 +52,40 @@ test("MIMIR Experience source failure fails closed as SOURCE_UNAVAILABLE", async
   assert.equal(result.waitReason, "SOURCE_UNAVAILABLE");
   assert.deepEqual(result.records, []);
 });
+
+test("MIMIR Experience never selects an OUTDATED lesson over a usable RECORDED lesson", async () => {
+  const module = await import(libraryUrl + "?experience-outdated=" + Date.now());
+  const searchExperience = module.createMimirExperienceSearchPort({
+    readExperience: async () => [
+      {
+        id: "lesson-outdated",
+        context: "runtime differs from repository state",
+        action: "old action",
+        finding: "old finding",
+        resolution: "old resolution",
+        reusableWhen: "runtime differs from repository state",
+        sourceTaskId: "task-old",
+        sourceArtifactDigest: "sha256:old",
+        recordedAt: "2026-09-10T00:00:00Z",
+        status: "OUTDATED",
+      },
+      {
+        id: "lesson-current",
+        context: "runtime repository",
+        action: "verify current source",
+        finding: "runtime differs",
+        resolution: "compare repository state",
+        reusableWhen: "state differs",
+        sourceTaskId: "task-current",
+        sourceArtifactDigest: "sha256:current",
+        recordedAt: "2026-09-17T00:00:00Z",
+        status: "RECORDED",
+      },
+    ],
+  });
+
+  const result = await searchExperience({ task: "runtime differs from repository state" });
+
+  assert.equal(result.status, "PASS");
+  assert.equal(result.records[0].id, "lesson-current");
+});
