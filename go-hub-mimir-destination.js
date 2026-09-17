@@ -1,3 +1,4 @@
+export { createMimirDirectoryResolver } from "./go-hub-mimir-directory.js";
 import { createReturnPacket } from "./go-hub-centre.js";
 
 export const MIMIR_DESTINATION = "destination://mimir";
