@@ -1,3 +1,5 @@
+import { CITY_DESTINATIONS, assertCityWorkContext } from "./go-hub-route-contract.js";
+
 function normalizeBase(value) {
   const base = String(value || "").trim();
   if (!base.startsWith("/")) throw new Error("gatewayBase must be same-origin");
@@ -70,12 +72,21 @@ export function createGitHubWorkspace({
   gatewayBase,
   repository,
   fetchImpl = fetch,
+  workContext = null,
 } = {}) {
   const base = normalizeBase(gatewayBase);
   const repo = assertRepository(repository);
+  const routedContext = workContext == null
+    ? null
+    : assertCityWorkContext(workContext, CITY_DESTINATIONS.factory.route);
 
   if (typeof fetchImpl !== "function") {
     throw new Error("fetchImpl is required");
+  }
+
+  function mutationContext() {
+    if (!routedContext) throw new Error("Factory workContext is required for mutation");
+    return structuredClone(routedContext);
   }
 
   const request = async (path, init = {}) => {
@@ -93,6 +104,7 @@ export function createGitHubWorkspace({
 
   return Object.freeze({
     repository: repo,
+    workContext: routedContext,
 
     async inspect({ branch } = {}) {
       const branchQuery = branch
@@ -136,6 +148,7 @@ export function createGitHubWorkspace({
           repository: repo,
           name: assertRef(name, "branch"),
           fromSha: assertRef(fromSha, "sha"),
+          workContext: mutationContext(),
         }),
       });
     },
@@ -146,6 +159,7 @@ export function createGitHubWorkspace({
         path: assertSafePath(path),
         content: String(content ?? ""),
         branch: assertRef(branch, "branch"),
+        workContext: mutationContext(),
       };
       if (expectedSha != null) body.expectedSha = assertRef(expectedSha, "sha");
       return request("/file", {
@@ -162,6 +176,7 @@ export function createGitHubWorkspace({
           path: assertSafePath(path),
           branch: assertRef(branch, "branch"),
           expectedSha: assertRef(expectedSha, "sha"),
+          workContext: mutationContext(),
         }),
       });
     },
@@ -183,6 +198,7 @@ export function createGitHubWorkspace({
           base: assertRef(baseRef, "base"),
           title: safeTitle,
           body: String(body),
+          workContext: mutationContext(),
         }),
       });
     },
@@ -211,22 +227,7 @@ export function createGitHubWorkspace({
         body: JSON.stringify({
           repository: repo,
           runId: assertPositiveInteger(runId, "run id"),
-        }),
-      });
-    },
-
-    async mergePullRequest({ number, expectedHeadSha, method = "squash" } = {}) {
-      const mergeMethod = String(method);
-      if (!["merge", "squash", "rebase"].includes(mergeMethod)) {
-        throw new Error("invalid merge method");
-      }
-      return request("/pull-request/merge", {
-        method: "POST",
-        body: JSON.stringify({
-          repository: repo,
-          number: assertPositiveInteger(number, "pull request number"),
-          expectedHeadSha: assertRef(expectedHeadSha, "expected head sha"),
-          method: mergeMethod,
+          workContext: mutationContext(),
         }),
       });
     },
