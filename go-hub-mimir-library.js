@@ -1,5 +1,5 @@
 export { createMimirMemorySearchPort } from "./go-hub-mimir-memory.js";
-export { createMimirExperienceSearchPort } from "./go-hub-mimir-experience.js";
+export { createMimirExperienceSearchPort, proposeKnowledgeCandidateFromExperience } from "./go-hub-mimir-experience.js";
 
 function wait(reason, directory = null) {
   return Object.freeze({
