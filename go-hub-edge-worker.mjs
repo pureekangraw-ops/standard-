@@ -1,6 +1,7 @@
 import githubWorker from "./go-hub-worker.mjs";
 import { createBrowserInterface } from "./go-hub-browser-interface.js";
 import { createFactoryMcpWorker } from "./go-hub-factory-mcp-worker.mjs";
+import { CITY_DESTINATIONS, assertCityWorkContext } from "./go-hub-route-contract.js";
 export { HephaestusForeman } from "./go-hub-factory-controller.mjs";
 
 const BROWSER_API_ROOT = "/hub/api/browser";
@@ -89,6 +90,11 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
       const body = await request.json().catch(() => null);
       if (!body || typeof body !== "object" || Array.isArray(body)) {
         return json({ code: "INVALID_JSON" }, 400);
+      }
+      try {
+        assertCityWorkContext(body.workContext, CITY_DESTINATIONS.browser.route);
+      } catch {
+        return json({ code: "INVALID_BROWSER_WORK_CONTEXT" }, 400);
       }
 
       return createBrowserInterface({ browser: env?.BROWSER }).readPage({
