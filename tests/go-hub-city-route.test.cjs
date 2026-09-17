@@ -8,7 +8,7 @@ const { pathToFileURL } = require("node:url");
 const moduleUrl = pathToFileURL(path.resolve(__dirname, "../go-hub-city-route.js")).href;
 const load = () => import(`${moduleUrl}?${Date.now()}-${Math.random()}`);
 
-test("GO City exposes Bifrost transport, Optician entry, and Heimdall exit guardian", async () => {
+test("GO City exposes Bifrost transport, Optician entry, Heimdall exit, and every current destination", async () => {
   const { createCityRoute } = await load();
   const city = createCityRoute();
 
@@ -21,15 +21,26 @@ test("GO City exposes Bifrost transport, Optician entry, and Heimdall exit guard
   assert.equal(city.exit.id, "heimdall");
   assert.equal(city.loop.id, "go-work-loop");
   assert.equal(city.information.id, "mimir");
-  assert.equal(city.destinations.factory.role, "building-entry");
+
+  assert.deepEqual(Object.keys(city.destinations).sort(), ["browser", "factory", "linear", "mimir"]);
+  assert.deepEqual(city.destinations.factory, {
+    id: "factory", role: "building-entry", route: "destination://factory",
+  });
+  assert.deepEqual(city.destinations.mimir, {
+    id: "mimir", role: "information-entry", route: "destination://mimir",
+  });
+  assert.deepEqual(city.destinations.linear, {
+    id: "linear", role: "work-tracking-entry", route: "destination://linear",
+  });
+  assert.deepEqual(city.destinations.browser, {
+    id: "browser", role: "reality-entry", route: "destination://browser",
+  });
 });
 
-test("inbound passage requires Optician fit and does not invent an Heimdall entry gate", async () => {
+test("inbound passage requires Optician fit and only admits a canonical destination pair", async () => {
   const { routeInbound } = await load();
 
-  assert.deepEqual(routeInbound({
-    fit: { gate: "WAIT" },
-  }), {
+  assert.deepEqual(routeInbound({ fit: { gate: "WAIT" } }), {
     destination: "optician",
     reason: "FIT_NOT_READY",
   });
@@ -41,6 +52,29 @@ test("inbound passage requires Optician fit and does not invent an Heimdall entr
     via: "optician",
     workRoute: "destination://factory",
     destinationId: "factory",
+  });
+
+  assert.deepEqual(routeInbound({
+    fit: { gate: "PASS", route: "destination://mimir", destinationId: "mimir" },
+  }), {
+    destination: "go-work-loop",
+    via: "optician",
+    workRoute: "destination://mimir",
+    destinationId: "mimir",
+  });
+
+  assert.deepEqual(routeInbound({
+    fit: { gate: "PASS", route: "destination://mimir", destinationId: "linear" },
+  }), {
+    destination: "optician",
+    reason: "DESTINATION_NOT_CANONICAL",
+  });
+
+  assert.deepEqual(routeInbound({
+    fit: { gate: "PASS", route: "destination://unknown", destinationId: "unknown" },
+  }), {
+    destination: "optician",
+    reason: "DESTINATION_NOT_CANONICAL",
   });
 });
 
