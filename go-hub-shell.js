@@ -5,7 +5,8 @@ import { createGitHubWorkspace } from "./go-hub-github-workspace.js";
 import { createWorkbenchView } from "./go-hub-workbench-model.js";
 import { createFactoryRealityReturn, createFactoryWorkContext } from "./go-hub-factory-return.js";
 import { createCityRoute, routeInbound } from "./go-hub-city-route.js";
-import { fitWork } from "./go-hub-optician.js";
+import { CITY_DESTINATIONS } from "./go-hub-route-contract.js";
+import { checkRound, fitWork } from "./go-hub-optician.js";
 import {
   CENTRE_STATES,
   admitDestination,
@@ -13,7 +14,7 @@ import {
   createCentreSession,
 } from "./go-hub-centre.js";
 
-const FACTORY_DESTINATION = "destination://factory";
+const FACTORY_DESTINATION = CITY_DESTINATIONS.factory.route;
 const cityRoute = createCityRoute();
 const runtime = createHubRuntime();
 const workspace = createGitHubWorkspace({
@@ -51,6 +52,8 @@ const centreSession = createCentreSession({
   passage: centre,
 });
 let centreWork = await centreSession.load();
+let activeFit = null;
+let lastRoundDecision = null;
 
 const status = document.querySelector("[data-hub-status]");
 const list = document.querySelector("[data-hub-capabilities]");
@@ -62,6 +65,13 @@ const centreError = document.querySelector("[data-centre-error]");
 
 function field(name) {
   return centreForm?.elements.namedItem(name) || null;
+}
+
+function currentRoundContext(work = centreWork) {
+  return {
+    purpose: work.task,
+    successCondition: work.requestedResult,
+  };
 }
 
 function createFactoryAccess() {
@@ -78,10 +88,7 @@ function fitFactoryRoute() {
     throw new Error("Factory destination does not match canonical city route");
   }
   const fit = fitWork({
-    context: {
-      purpose: centreWork.task,
-      successCondition: centreWork.requestedResult,
-    },
+    context: currentRoundContext(),
     reality: task.snapshot(),
     lens: { reference: centreWork.lens?.lensReference },
     destination: canonicalFactory,
@@ -102,6 +109,11 @@ function syncFactoryAccess() {
   if (shouldOpen && !runtime.get("Code")) {
     const access = createFactoryAccess();
     const workContext = createFactoryWorkContext(access, task.snapshot());
+    const workspace = createGitHubWorkspace({
+      gatewayBase: "/hub/api/github-workspace",
+      repository: "pureekangraw-ops/standard-",
+      workContext: access.envelope,
+    });
     runtime.register("Code", createCodeCapability({ workspace, task, workContext }));
   } else if (!shouldOpen && runtime.get("Code")) {
     runtime.unregister("Code");
@@ -165,9 +177,17 @@ function renderCentre() {
 function render() {
   syncFactoryAccess();
   const capabilities = runtime.list();
-  status.textContent = centreWork.status === CENTRE_STATES.AWAY
-    ? "GO is away from Centre."
-    : "GO is at Centre.";
+  if (centreWork.status === CENTRE_STATES.AWAY) {
+    status.textContent = "GO is away from Centre.";
+  } else if (centreWork.status === CENTRE_STATES.READY && lastRoundDecision === "REFIT") {
+    status.textContent = "GO returned. Reality changed; Optician refit required.";
+  } else if (centreWork.status === CENTRE_STATES.READY && lastRoundDecision === "REUSE_FIT") {
+    status.textContent = "GO returned. Reality is unchanged; fitted Lens may be reused.";
+  } else if (centreWork.status === CENTRE_STATES.RETURNED) {
+    status.textContent = "GO returned to Centre.";
+  } else {
+    status.textContent = "GO is at Centre.";
+  }
   empty.hidden = capabilities.length > 0;
   workbenchShell.hidden = !runtime.get("Code");
   list.replaceChildren(
@@ -201,20 +221,37 @@ centreForm?.addEventListener("submit", async event => {
         lensReference: field("lensReference").value,
         fittedView: field("fittedView").value,
       });
+      lastRoundDecision = null;
       await centreSession.save(centreWork, "FIT_LENS");
     } else if (centreWork.status === CENTRE_STATES.READY) {
       const route = fitFactoryRoute();
+      activeFit = route.fit;
       centreWork = centre.leave(centreWork, {
         destination: route.destination,
       }).work;
       await centreSession.save(centreWork, "LEAVE_CENTRE");
     } else if (centreWork.status === CENTRE_STATES.AWAY) {
       const access = createFactoryAccess();
-      centreWork = centre.return(
-        centreWork,
-        createFactoryRealityReturn(access, task.snapshot()),
-      );
-      await centreSession.save(centreWork, "RETURN_TO_CENTRE");
+      const reality = task.snapshot();
+      const returnedPacket = createFactoryRealityReturn(access, reality);
+      const returnedWork = centre.return(centreWork, returnedPacket);
+      const round = checkRound(activeFit, {
+        context: currentRoundContext(returnedWork),
+        reality,
+      });
+      lastRoundDecision = round.decision;
+      if (returnedPacket.payload?.status === "PASS") {
+        centreWork = returnedWork;
+        await centreSession.save(centreWork, "RETURN_TO_CENTRE");
+      } else {
+        centreWork = centre.resume(returnedWork, {
+          reuseFit: round.decision === "REUSE_FIT",
+        });
+        await centreSession.save(
+          centreWork,
+          round.decision === "REUSE_FIT" ? "RETURN_REUSE_FIT" : "RETURN_REFIT",
+        );
+      }
     }
     render();
   } catch (error) {
