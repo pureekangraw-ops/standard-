@@ -1,4 +1,6 @@
-export { createMimirStructuredRetriever } from "./go-hub-mimir-retriever.js";
+import { createMimirStructuredRetriever } from "./go-hub-mimir-retriever.js";
+export { createMimirStructuredRetriever };
+
 const PASS = "PASS";
 const WAIT = "WAIT";
 
@@ -112,37 +114,10 @@ export function gateKnowledgeRecord(record, { now = () => new Date() } = {}) {
   return Object.freeze({ status: PASS, reason: null });
 }
 
-function segmentWords(value) {
-  const source = String(value || "").toLocaleLowerCase();
-  const terms = new Set();
-  try {
-    const segmenter = new Intl.Segmenter(["th", "en"], { granularity: "word" });
-    for (const item of segmenter.segment(source)) {
-      const word = item.segment.trim();
-      if (item.isWordLike && word.length > 1) terms.add(word);
-    }
-  } catch {
-    for (const word of source.split(/[^\p{L}\p{N}]+/u)) {
-      if (word.length > 1) terms.add(word);
-    }
-  }
-  return [...terms];
-}
-
-function relevance(record, terms) {
-  const core = [record.title, record.topic, record.claim, record.summary]
-    .join(" ")
-    .toLocaleLowerCase();
-  const helper = record.tags.toLocaleLowerCase();
-  return terms.reduce((score, term) => ({
-    core: score.core + (core.includes(term) ? 1 : 0),
-    helper: score.helper + (helper.includes(term) ? 1 : 0),
-  }), { core: 0, helper: 0 });
-}
-
-function score(candidate) {
-  return candidate.relevance.core * 2 + candidate.relevance.helper;
-}
+const retrieveKnowledge = createMimirStructuredRetriever({
+  coreText: record => [record.title, record.topic, record.claim, record.summary].join(" "),
+  helperText: record => record.tags,
+});
 
 export function createMimirKnowledgeSearchPort({ readKnowledge, now = () => new Date() } = {}) {
   if (typeof readKnowledge !== "function") throw new TypeError("MIMIR knowledge reader is required");
@@ -152,14 +127,12 @@ export function createMimirKnowledgeSearchPort({ readKnowledge, now = () => new 
     const sourceRows = await readKnowledge();
     if (!Array.isArray(sourceRows)) throw new Error("MIMIR knowledge source must return an array");
     const records = sourceRows.map(normalizeKnowledgeRecord);
-    const terms = segmentWords([query.task, query.requestedResult, query.lensReference].map(text).join(" "));
-    const candidates = records
-      .map(record => ({
-        record,
-        relevance: relevance(record, terms),
-        gate: gateKnowledgeRecord(record, { now }),
-      }))
-      .filter(candidate => candidate.relevance.core > 0);
+    const queryText = [query.task, query.requestedResult, query.lensReference].map(text).join(" ");
+    const candidates = retrieveKnowledge({ records, query: queryText })
+      .map(candidate => ({
+        ...candidate,
+        gate: gateKnowledgeRecord(candidate.record, { now }),
+      }));
 
     if (!candidates.length) {
       return { status: WAIT, waitReason: "NO_MATCH", records: [], route: null, evidence: null };
@@ -167,10 +140,14 @@ export function createMimirKnowledgeSearchPort({ readKnowledge, now = () => new 
 
     const usable = candidates
       .filter(candidate => candidate.gate.status === PASS)
-      .sort((a, b) => score(b) - score(a) || numericRating(b.record.rating) - numericRating(a.record.rating) || a.record.title.localeCompare(b.record.title));
+      .sort((a, b) => a.score === b.score
+        ? numericRating(b.record.rating) - numericRating(a.record.rating) || a.record.title.localeCompare(b.record.title)
+        : b.score - a.score);
 
     const selected = usable[0] || candidates
-      .sort((a, b) => score(b) - score(a) || a.record.title.localeCompare(b.record.title))[0];
+      .sort((a, b) => a.score === b.score
+        ? a.record.title.localeCompare(b.record.title)
+        : b.score - a.score)[0];
 
     return {
       status: selected.gate.status,
