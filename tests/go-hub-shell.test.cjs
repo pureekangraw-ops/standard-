@@ -43,7 +43,6 @@ test("GO Hub shell bootstrap uses the neutral runtime registry", () => {
   assert.doesNotMatch(source, /metropolis-r5/i);
 });
 
-
 test("GO Hub shell restores the durable Code task before capability registration", () => {
   const source = read("go-hub-shell.js");
   assert.match(source, /go-hub-persistence\.js/);
@@ -72,7 +71,6 @@ test("GO Hub shell mounts the six truths from the restored Code task projection"
   });
 });
 
-
 test("CENTRE is the durable entry and exit gate before Code capability access", () => {
   const source = read("go-hub-shell.js");
   const htmlFiles = [read("index.html"), read("go-hub.html")];
@@ -81,7 +79,8 @@ test("CENTRE is the durable entry and exit gate before Code capability access", 
     "createCentreSession",
     "await centreSession.load()",
     "admitDestination",
-    "destination://factory",
+    "go-hub-route-contract.js",
+    "CITY_DESTINATIONS.factory.route",
     "createFactoryWorkContext",
     "runtime.register(\"Code\", createCodeCapability({ workspace, task, workContext }))",
     "runtime.unregister(\"Code\")",
