@@ -1,6 +1,6 @@
 import { createHephaestusState, evaluateFactoryAdmission, requestFactorySlot } from "./go-hub-hephaestus.js";
 import { admitQueuedFactorySlot, releaseFactorySlot } from "./go-hub-hephaestus-queue.js";
-import { completeMergeAndReturn } from "./go-hub-hephaestus-return.js";
+import { completeMergeAndReturn, parkMergedWork, completeWaitingRoomVerification } from "./go-hub-hephaestus-return.js";
 
 const STATE_KEY = "state";
 const FOREMAN_NAME = "factory";
@@ -52,6 +52,37 @@ export class HephaestusForeman {
     return result;
   }
 
+  async parkMerged(input = {}) {
+    const repository = required(input.repository, "repository");
+    const goId = required(input.goId, "goId");
+    const jobId = required(input.jobId, "jobId");
+    const current = await this.loadState();
+    const active = current?.repositories?.[repository]?.merge?.active;
+    if (input.workContext && (!active || !sameWork(active.workContext, input.workContext))) {
+      throw new Error("Factory work context does not match active slot");
+    }
+    const result = parkMergedWork(current, {
+      repository,
+      goId,
+      jobId,
+      mainSha: required(input.mainSha, "main sha"),
+      mergedAt: required(input.mergedAt, "merged at"),
+    });
+    await this.saveState(result.state);
+    return result;
+  }
+
+  async verifyWaitingRoom(input = {}) {
+    const result = completeWaitingRoomVerification(await this.loadState(), {
+      repository: required(input.repository, "repository"),
+      goId: required(input.goId, "goId"),
+      jobId: required(input.jobId, "jobId"),
+      postMergeVerification: input.postMergeVerification,
+    });
+    await this.saveState(result.state);
+    return result;
+  }
+
   async releaseSlot(input = {}) {
     const repository = required(input.repository, "repository");
     const slot = validSlot(input.slot);
@@ -84,6 +115,8 @@ export class HephaestusForeman {
       const body = request.method === "GET" ? {} : await request.json().catch(() => null);
       if (request.method !== "GET" && (!body || typeof body !== "object" || Array.isArray(body))) return json({ code: "INVALID_JSON" }, 400);
       if (request.method === "POST" && url.pathname === "/request") return json(await this.requestSlot(body));
+      if (request.method === "POST" && url.pathname === "/park") return json(await this.parkMerged(body));
+      if (request.method === "POST" && url.pathname === "/verify") return json(await this.verifyWaitingRoom(body));
       if (request.method === "POST" && url.pathname === "/release") return json(await this.releaseSlot(body));
       if (request.method === "POST" && url.pathname === "/assert-merge") return json({ active: await this.assertActiveMerge(body) });
       if (request.method === "GET" && url.pathname === "/state") return json(await this.getState());
@@ -113,6 +146,8 @@ export function createFactoryControllerService({ namespace } = {}) {
       const repository = String(input.repository || "").trim();
       if (!repository) return Promise.resolve(json({ code: "repository is required" }, 400));
       if (input.action === "request") return call(namespace, "/request", input);
+      if (input.action === "park") return call(namespace, "/park", input);
+      if (input.action === "verify") return call(namespace, "/verify", input);
       if (input.action === "release") return call(namespace, "/release", input);
       if (input.action === "state") return call(namespace, "/state", null, "GET");
       return Promise.resolve(json({ code: "unsupported Factory foreman action" }, 400));

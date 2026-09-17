@@ -28,7 +28,33 @@ export function createFactoryGuardedLifecycle({ lifecycle, factory } = {}) {
       if (!ownership.ok) return ownership;
       const proof = await ownership.json().catch(() => ({ active: false }));
       if (proof.active !== true) return json({ code: "FACTORY_MERGE_SLOT_REQUIRED" }, 409);
-      return lifecycle.mergePullRequest(input);
+
+      const merged = await lifecycle.mergePullRequest(input);
+      if (!merged.ok) return merged;
+      const mergeProof = await merged.clone().json().catch(() => null);
+      if (mergeProof?.merged !== true || !String(mergeProof.mergeSha || "").trim()) {
+        return json({ code: "MERGE_RESULT_MISSING_EVIDENCE" }, 500);
+      }
+
+      const parked = await factory.foreman({
+        action: "park",
+        repository: input.repository,
+        goId: input.goId,
+        jobId: input.jobId,
+        mainSha: mergeProof.mergeSha,
+        mergedAt: new Date().toISOString(),
+        workContext: input.workContext,
+      });
+      const parkProof = await parked.clone().json().catch(() => null);
+      if (!parked.ok || parkProof?.outcome?.status !== "PARKED_FOR_VERIFICATION") {
+        return json({
+          code: "MERGED_BUT_WAITING_ROOM_FAILED",
+          merged: true,
+          mergeSha: mergeProof.mergeSha,
+          waitingRoom: parkProof || null,
+        }, 500);
+      }
+      return merged;
     },
   });
 }
