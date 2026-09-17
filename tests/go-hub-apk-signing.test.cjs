@@ -138,7 +138,7 @@ test("APK CodeTask cannot Product QC unsigned build and advances through Signing
     blueprint: { ref: "spec.md", status: "approved" },
     factoryStage: "BUILD",
     buildArtifact: buildArtifact(),
-    evidence: [{ id: "unsigned-qc", scope: "artifact", claim: "artifact-loads", value: { digest: UNSIGNED_DIGEST } }],
+    evidence: [{ id: "unsigned-qc", scope: "artifact", claim: "artifact-loads", kind: "functional-test", value: { digest: UNSIGNED_DIGEST } }],
   });
   assert.equal(task.nextAction, "signing-gate");
   assert.throws(() => task.recordProductQc({
@@ -161,9 +161,9 @@ test("APK CodeTask cannot Product QC unsigned build and advances through Signing
   assert.equal(task.nextAction, "product-qc");
   assert.equal(task.signedArtifact.digest, SIGNED_DIGEST);
 
-  task = task.addEvidence({ id: "signed-load", scope: "artifact", claim: "artifact-loads", value: { digest: SIGNED_DIGEST } })
-    .addEvidence({ id: "signed-flow", scope: "artifact", claim: "core-flow-correct", value: { digest: SIGNED_DIGEST } })
-    .addEvidence({ id: "signed-outcome", scope: "artifact", claim: "blueprint-outcome-correct", value: { digest: SIGNED_DIGEST } })
+  task = task.addEvidence({ id: "signed-load", scope: "artifact", claim: "artifact-loads", kind: "functional-test", value: { digest: SIGNED_DIGEST } })
+    .addEvidence({ id: "signed-flow", scope: "artifact", claim: "core-flow-correct", kind: "functional-test", value: { digest: SIGNED_DIGEST } })
+    .addEvidence({ id: "signed-outcome", scope: "artifact", claim: "blueprint-outcome-correct", kind: "functional-test", value: { digest: SIGNED_DIGEST } })
     .recordProductQc({
       status: "pass", artifactId: "signed-apk", artifactDigest: SIGNED_DIGEST,
       checks: {}, evidenceIds: ["signed-load", "signed-flow", "signed-outcome"], checkedAt: "now",
