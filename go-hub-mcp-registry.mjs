@@ -1,11 +1,10 @@
+import { CITY_DESTINATIONS, assertCityWorkContext } from "./go-hub-route-contract.js";
+
 const str = { type: "string", minLength: 1 };
 const int = { type: "integer", minimum: 1 };
 const obj = { type: "object" };
 const priority = { type: "integer", minimum: 0, maximum: 4 };
 const nullableStr = { anyOf: [{ type: "string" }, { type: "null" }] };
-const FACTORY = "destination://factory";
-const MIMIR = "destination://mimir";
-const LINEAR = "destination://linear";
 const workContext = {
   type: "object",
   properties: {
@@ -58,19 +57,19 @@ function assertArgs(definition, args) {
   for (const key of Object.keys(args)) if (!Object.hasOwn(definition.inputSchema.properties, key)) throw new Error("unknown argument: " + key);
 }
 
-function assertWork(value, destination) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("workContext is required");
-  for (const field of workContext.required) if (!String(value[field] || "").trim()) throw new Error("workContext missing field: " + field);
-  for (const key of Object.keys(value)) if (!Object.hasOwn(workContext.properties, key)) throw new Error("unknown workContext field: " + key);
-  if (String(value.checkpointId) !== String(value.returnAddress)) throw new Error("workContext Return Address must match Checkpoint ID");
-  if (String(value.destination) !== destination) throw new Error("workContext destination must be " + destination);
-}
-
 function assertLifecycle(name, args) {
-  if (factoryTools.has(name)) assertWork(args.workContext, FACTORY);
-  if (linearMutationTools.has(name)) assertWork(args.workContext, LINEAR);
-  if (mimirTools.has(name)) assertWork(args.workContext, MIMIR);
-  if (name === "go_hub_factory_foreman" && args.action !== "state") assertWork(args.workContext, FACTORY);
+  if (factoryTools.has(name)) {
+    assertCityWorkContext(args.workContext, CITY_DESTINATIONS.factory.route);
+  }
+  if (linearMutationTools.has(name)) {
+    assertCityWorkContext(args.workContext, CITY_DESTINATIONS.linear.route);
+  }
+  if (mimirTools.has(name)) {
+    assertCityWorkContext(args.workContext, CITY_DESTINATIONS.mimir.route);
+  }
+  if (name === "go_hub_factory_foreman" && args.action !== "state") {
+    assertCityWorkContext(args.workContext, CITY_DESTINATIONS.factory.route);
+  }
 }
 
 async function toolResult(response) {
