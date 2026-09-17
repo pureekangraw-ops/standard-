@@ -4,7 +4,7 @@
 Owner-approved architecture direction. This document replaces the old mandatory rail/gate model as the target architecture for the next implementation round.
 
 ## Goal
-Make GO move directly between real work stations without a mandatory Optician, Centre, or Heimdall travel gate, while preserving work identity, Factory governance, source reality, and one explicit hard gate: Hephaestus for governed Factory actions.
+Make GO move directly between real work stations without a mandatory Optician, Centre, or Heimdall travel gate, while preserving work identity, Factory governance, source reality, and one explicit workflow hard gate: Hephaestus for governed Factory actions.
 
 The intended system law is:
 
@@ -17,11 +17,16 @@ Supporting systems observe and advise; they do not silently become route authori
 2. **Identity is not permission.** `workId` and work context travel with the work, but possessing or validating identity is not a reason to require Optician/Centre approval.
 3. **Station owns reality.** Each station owns its internal truth. Shared monitoring derives from station truth and does not become a second business state.
 4. **Soft checks stay soft.** Relevance/context checks may warn but must not block movement.
-5. **One explicit hard gate.** Hephaestus may block governed Factory actions that require Factory admission/ownership/evidence. Hephaestus does not own city travel.
+5. **One explicit workflow hard gate.** Hephaestus may block governed Factory actions that require Factory admission/ownership/evidence. Hephaestus does not own city travel.
 6. **Dashboard observes.** Dashboard is read-mostly monitoring and drill-down, not a route controller.
 7. **Optician advises.** Optician may report traffic/context mismatch/re-fit advice but cannot grant or deny travel.
 8. **Heimdall reports return state.** Heimdall summarizes the completed or current round for BIG/GO; it is not a permission/stop gate.
 9. **Core duty before improvement.** Preserve working governance and evidence boundaries before adding richer monitoring/UI.
+
+## Boundary failures are not city gates
+Real capability boundaries may still reject an invalid or impossible operation. Examples include authentication failure, disallowed browser host, wrong Linear team scope, malformed work identity on a governed mutation, or unavailable infrastructure.
+
+These are **boundary validations/failures**, not workflow travel gates. They may reject that specific action, but they must not turn Optician, Centre, Heimdall, Browser, Library, Linear, or Verification into a general permission authority for GO's movement between stations.
 
 ## Scope
 This design changes how these components relate:
@@ -45,6 +50,7 @@ It also defines how existing PR73 work should be treated. PR73 must not be merge
 - Forcing every station to expose identical internal detail schemas or identical UI.
 - Creating a new universal Context Gate.
 - Treating Notion internal zones as separate GO City stations.
+- Removing legitimate capability-boundary validation such as auth, host policy, team scope, or exact mutation identity.
 
 ## 1. Route Core
 
@@ -142,7 +148,7 @@ The search adapter may later change from regular Notion Search to Notion AI Sear
 GO must be able to enter/leave Factory without Optician travel permission or Centre `AWAY` being the travel authorization.
 
 ### Hephaestus hard-gate boundary
-Hephaestus is the only explicit architecture-level hard gate in this design. It may block only governed Factory actions whose contract requires ownership/evidence/slot/admission, such as governed assembly/merge paths as defined by Factory.
+Hephaestus is the only explicit architecture-level workflow hard gate in this design. It may block only governed Factory actions whose contract requires ownership/evidence/slot/admission, such as governed assembly/merge paths as defined by Factory.
 
 Hephaestus must not:
 - block GO from visiting Factory
@@ -314,6 +320,7 @@ No general step in these flows may silently reintroduce mandatory Optician/Centr
 
 - Unknown destination: return unresolved/unknown destination error; do not silently reroute through Optician.
 - Missing identity on actions that require governed identity: reject that action at its real boundary.
+- Authentication/host/team-scope/policy failure: reject only the affected capability action; do not convert it into a city travel gate.
 - Library relevance mismatch: warn only.
 - Traffic source unavailable/stale: expose `UNKNOWN`/`STALE`; do not fabricate normal status.
 - Verification cannot prove result: `UNKNOWN`, not guessed `PASS`.
@@ -353,6 +360,7 @@ The architecture is not complete until all of the following are proven:
 - Centre persists useful work/session identity but is not mandatory for every station hop.
 - Heimdall reports `READY/CAUTION/INCOMPLETE/UNKNOWN` without blocking return to BIG/GO.
 - Hephaestus still blocks governed Factory actions that lack required ownership/evidence.
+- Legitimate auth/host/team-scope/identity validation still rejects invalid capability actions without becoming city travel control.
 - Factory mutation governance and direct-REST-merge closure remain intact.
 - Verification reports `PASS/FAIL/UNKNOWN` with evidence and does not duplicate Factory QC.
 - Dashboard and Optician display the same Traffic Summary truth.
@@ -363,6 +371,6 @@ The architecture is not complete until all of the following are proven:
 
 ## Final architecture statement
 
-**Freedom of movement + context discipline + shared reality + one hard gate.**
+**Freedom of movement + context discipline + shared reality + one workflow hard gate.**
 
-GO drives. Route resolves. Stations own reality. Library guards context softly. Optician advises. Dashboard observes. Verification reports. Heimdall summarizes. Hephaestus alone may hard-block governed Factory actions.
+GO drives. Route resolves. Stations own reality. Library guards context softly. Optician advises. Dashboard observes. Verification reports. Heimdall summarizes. Hephaestus alone owns explicit workflow blocking for governed Factory actions.
