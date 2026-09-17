@@ -1,10 +1,12 @@
 "use strict";
+const fs = require("node:fs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-const registryUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-mcp-registry.mjs")).href;
+const root = path.resolve(__dirname, "..");
+const registryUrl = pathToFileURL(path.resolve(root, "go-hub-mcp-registry.mjs")).href;
 const factoryWorkContext = Object.freeze({
   workId: "WORK-A", checkpointId: "CENTRE-001", returnAddress: "CENTRE-001",
   destination: "destination://factory", task: "Build GO City",
@@ -12,6 +14,14 @@ const factoryWorkContext = Object.freeze({
 });
 const mimirWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://mimir" });
 const linearWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://linear" });
+
+test("MCP registry uses the shared City route contract instead of private destination rules", () => {
+  const source = fs.readFileSync(path.join(root, "go-hub-mcp-registry.mjs"), "utf8");
+  assert.match(source, /go-hub-route-contract\.js/);
+  assert.match(source, /assertCityWorkContext/);
+  assert.doesNotMatch(source, /const FACTORY = "destination:\/\/factory"/);
+  assert.doesNotMatch(source, /function assertWork\(/);
+});
 
 test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe annotations", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?contract=" + Date.now());
