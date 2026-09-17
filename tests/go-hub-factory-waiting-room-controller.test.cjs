@@ -24,8 +24,8 @@ function mergeRequest(overrides = {}) {
     slot: "merge",
     goId: "go-a",
     jobId: "job-merge",
-    assembly: { status: "ASSEMBLED", integrationHeadSha: "integration-head" },
-    assemblyQc: { status: "pass", checkedHeadSha: "integration-head" },
+    assembly: { id: "assembly-71", status: "ASSEMBLED", integrationHeadSha: "pr-head" },
+    assemblyQc: { status: "pass", checkedHeadSha: "pr-head" },
     pullRequest: { number: 71, headSha: "pr-head" },
     ci: { status: "success", headSha: "pr-head" },
     risk: { status: "SAFE", reasons: [] },
@@ -38,6 +38,15 @@ test("Foreman parks a merged job outside the merge lane and later verifies it fr
   const foreman = new HephaestusForeman(memoryContext(), {});
   const admitted = await foreman.requestSlot(mergeRequest());
   assert.equal(admitted.outcome.status, "ACTIVE");
+
+  await foreman.recordMergeResult({
+    repository: "pureekangraw-ops/standard-",
+    goId: "go-a",
+    jobId: "job-merge",
+    pullRequestNumber: 71,
+    headSha: "pr-head",
+    mergeSha: "main-after-merge",
+  });
 
   const parked = await foreman.parkMerged({
     repository: "pureekangraw-ops/standard-",
@@ -82,6 +91,11 @@ test("guarded merge automatically parks successful GitHub merge evidence in the 
   const factory = {
     async assertActiveMerge() {
       return new Response(JSON.stringify({ active: true }), { headers: { "content-type": "application/json" } });
+    },
+    async recordMergeResult() {
+      return new Response(JSON.stringify({ outcome: { status: "MERGE_RECORDED" } }), {
+        headers: { "content-type": "application/json" },
+      });
     },
     async foreman(input) {
       calls.push(structuredClone(input));
