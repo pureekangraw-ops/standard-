@@ -65,7 +65,7 @@ test("guarded GitHub merge seals the actual merge result back into Factory owner
       recorded = structuredClone(input);
       return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
     },
-    async foreman() { return new Response("{}", { headers: { "content-type": "application/json" } }); },
+    async foreman() { return new Response(JSON.stringify({ outcome: { status: "PARKED_FOR_VERIFICATION" } }), { headers: { "content-type": "application/json" } }); },
   };
   const guarded = createFactoryGuardedLifecycle({ lifecycle, factory });
   const input = {
