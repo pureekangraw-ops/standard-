@@ -1,5 +1,7 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const ACCESS_TOKEN_TTL_SECONDS = 3600;
+const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 function json(payload, status = 200, headers = {}) {
   return new Response(JSON.stringify(payload), {
@@ -115,7 +117,21 @@ export async function createTestAccessToken(config = {}) {
     sub: "big",
     scope: "go-hub",
     iat: issuedAt,
-    exp: config.expiresAt ?? issuedAt + 3600,
+    exp: config.expiresAt ?? issuedAt + ACCESS_TOKEN_TTL_SECONDS,
+  }, config.signingKey);
+}
+
+export async function createTestRefreshToken(config = {}) {
+  const issuedAt = nowSeconds(config);
+  return signEnvelope({
+    type: "refresh",
+    iss: config.issuer,
+    aud: config.clientId,
+    sub: "big",
+    resource: config.resource || config.issuer + "/mcp",
+    scope: "go-hub",
+    iat: issuedAt,
+    exp: config.expiresAt ?? issuedAt + REFRESH_TOKEN_TTL_SECONDS,
   }, config.signingKey);
 }
 
@@ -139,7 +155,7 @@ function metadata(config, path) {
       authorization_endpoint: config.issuer + "/oauth/authorize",
       token_endpoint: config.issuer + "/oauth/token",
       response_types_supported: ["code"],
-      grant_types_supported: ["authorization_code"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
       code_challenge_methods_supported: ["S256"],
       token_endpoint_auth_methods_supported: ["client_secret_basic"],
       authorization_response_iss_parameter_supported: true,
@@ -174,6 +190,14 @@ function readBasic(request) {
   } catch {
     return null;
   }
+}
+
+function validRefreshToken(payload, config, resource, current) {
+  return Boolean(
+    payload && payload.type === "refresh" && payload.iss === config.issuer &&
+    payload.aud === config.clientId && payload.sub === "big" && payload.scope === "go-hub" &&
+    payload.resource === resource && Number.isFinite(payload.exp) && payload.exp > current,
+  );
 }
 
 export function createOAuthHandler(config = {}) {
@@ -223,10 +247,35 @@ export function createOAuthHandler(config = {}) {
             !timingSafeEqual(credentials[1], config.clientSecret)) {
           return json({ error: "invalid_client" }, 401);
         }
+
         const form = await request.formData();
         const resource = String(form.get("resource") || "");
-        if (form.get("grant_type") !== "authorization_code" || form.get("redirect_uri") !== config.redirectUri ||
-            resource !== config.issuer + "/mcp") {
+        const grantType = String(form.get("grant_type") || "");
+        const expectedResource = config.issuer + "/mcp";
+        if (resource !== expectedResource) return json({ error: "invalid_grant" }, 400);
+
+        if (grantType === "refresh_token") {
+          const refreshToken = String(form.get("refresh_token") || "");
+          if (!refreshToken) return json({ error: "invalid_grant" }, 400);
+          let refresh;
+          try {
+            refresh = await verifyEnvelope(refreshToken, config.signingKey);
+          } catch {
+            return json({ error: "invalid_grant" }, 400);
+          }
+          if (!validRefreshToken(refresh, config, resource, nowSeconds(config))) {
+            return json({ error: "invalid_grant" }, 400);
+          }
+          return json({
+            access_token: await createTestAccessToken({ ...config, resource }),
+            token_type: "Bearer",
+            expires_in: ACCESS_TOKEN_TTL_SECONDS,
+            refresh_token: refreshToken,
+            scope: "go-hub",
+          }, 200, { "cache-control": "no-store" });
+        }
+
+        if (grantType !== "authorization_code" || form.get("redirect_uri") !== config.redirectUri) {
           return json({ error: "invalid_grant" }, 400);
         }
         const code = await verifyEnvelope(String(form.get("code") || ""), config.signingKey);
@@ -243,7 +292,8 @@ export function createOAuthHandler(config = {}) {
         return json({
           access_token: await createTestAccessToken({ ...config, resource }),
           token_type: "Bearer",
-          expires_in: 3600,
+          expires_in: ACCESS_TOKEN_TTL_SECONDS,
+          refresh_token: await createTestRefreshToken({ ...config, resource }),
           scope: "go-hub",
         }, 200, { "cache-control": "no-store" });
       }
