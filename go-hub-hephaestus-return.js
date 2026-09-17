@@ -139,11 +139,24 @@ export function completeWaitingRoomVerification(current, input = {}) {
 }
 
 export function completeMergeAndReturn(current, input = {}) {
+  const repository = required(input.repository, "repository");
+  const goId = required(input.goId, "goId");
+  const jobId = required(input.jobId, "jobId");
+  const mergeGate = sealedMergeGate(current, repository, goId, jobId);
+
   const verification = input.postMergeVerification;
+  if (verification?.status !== "pass" || !String(verification.mainSha || "").trim() ||
+      !String(verification.checkedAt || "").trim()) {
+    throw new Error("passed post-merge verification is required");
+  }
+  if (String(verification.mainSha) !== String(mergeGate.merge.mergeSha)) {
+    throw new Error("post-merge main SHA does not match sealed merge result");
+  }
+
   const parked = parkMergedWork(current, {
-    repository: input.repository,
-    goId: input.goId,
-    jobId: input.jobId,
+    repository,
+    goId,
+    jobId,
     mainSha: verification.mainSha,
     mergedAt: verification.checkedAt,
   });
