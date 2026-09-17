@@ -113,10 +113,10 @@ test("Code capability can expose a Centre-bound work context without changing re
     repository: "pureekangraw-ops/standard-",
     listFiles() {}, readText() {}, inspect() {}, listTree() {}, writeText() {}, deletePath() {},
     createBranch() {}, compare() {}, openPullRequest() {}, getPullRequest() {}, getCI() {},
-    rerunFailed() {}, mergePullRequest() {}, getWorkflowRuns() {},
+    rerunFailed() {}, mergePullRequest() {}, getWorkflowRuns() {}, factoryAction() {},
   };
   const context = createFactoryWorkContext(access, taskSnapshot);
-  const capability = createCodeCapability({ workspace, task: taskSnapshot, workContext: context });
+  const capability = createCodeCapability({ workspace, task: taskSnapshot, workContext: context, controllerReady: true });
 
   assert.equal(capability.status, "ready");
   assert.equal(capability.repository, "pureekangraw-ops/standard-");
