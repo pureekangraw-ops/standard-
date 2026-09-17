@@ -5,6 +5,10 @@ const retrieveExperience = createMimirStructuredRetriever({
   helperText: record => [record.sourceTaskId, record.sourceArtifactDigest].join(" "),
 });
 
+function wait(reason) {
+  return Object.freeze({ status: "WAIT", waitReason: reason, records: Object.freeze([]), route: null, evidence: null });
+}
+
 function normalizeExperienceRecord(record = {}) {
   return Object.freeze({
     id: String(record.id || "").trim(),
@@ -26,16 +30,19 @@ export function createMimirExperienceSearchPort({ readExperience } = {}) {
   if (typeof readExperience !== "function") throw new TypeError("MIMIR experience reader is required");
 
   return async function searchExperience(query = {}) {
-    const rows = await readExperience();
-    if (!Array.isArray(rows)) throw new Error("MIMIR experience source must return an array");
+    let rows;
+    try {
+      rows = await readExperience();
+    } catch {
+      return wait("SOURCE_UNAVAILABLE");
+    }
+    if (!Array.isArray(rows)) return wait("SOURCE_UNAVAILABLE");
     const records = rows.map(normalizeExperienceRecord);
     const queryText = [query.task, query.requestedResult, query.lensReference]
       .map(value => String(value || ""))
       .join(" ");
     const candidates = retrieveExperience({ records, query: queryText });
-    if (!candidates.length) {
-      return Object.freeze({ status: "WAIT", waitReason: "NO_MATCH", records: Object.freeze([]), route: null, evidence: null });
-    }
+    if (!candidates.length) return wait("NO_MATCH");
     const selected = candidates[0].record;
     return Object.freeze({
       status: "PASS",
