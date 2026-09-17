@@ -147,7 +147,7 @@ test("Code capability does not claim full readiness when PR, CI, merge, or deplo
     mergePullRequest() {}, getWorkflowRuns() {}, factoryAction() {},
   };
   const raw = createCodeCapability({ workspace: fullWorkspace });
-  assert.equal(raw.status, "raw-lifecycle");
+  assert.equal(raw.status, "sync-required");
   const governed = createCodeCapability({ workspace: { ...fullWorkspace, factoryAction() {} }, controllerReady: true });
   assert.equal(governed.status, "ready");
   assert.equal(governed.canPullRequest, true);
