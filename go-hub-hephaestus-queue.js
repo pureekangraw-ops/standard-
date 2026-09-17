@@ -73,6 +73,11 @@ export function admitQueuedFactorySlot(current, input = {}) {
   }
   const job = target.queue.shift();
   job.status = "ACTIVE";
+  if (input.risk) job.risk = clone(input.risk);
+  if (slot === "merge") {
+    if (input.mergeAdmission) job.mergeAdmission = clone(input.mergeAdmission);
+    job.mergeResult = null;
+  }
   target.active = job;
   return Object.freeze({ state: Object.freeze(state), outcome: Object.freeze({ status: "ACTIVE", rechecked: true }) });
 }

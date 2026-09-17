@@ -88,11 +88,13 @@ export function evaluateFactoryAdmission(input = {}) {
 
   const assemblyHead = String(input.assembly?.integrationHeadSha || "");
   if (input.assembly?.status !== "ASSEMBLED" || !assemblyHead) return wait("ASSEMBLY_REQUIRED");
+  if (!String(input.assembly?.id || "").trim()) return wait("ASSEMBLY_ID_REQUIRED");
   if (input.assemblyQc?.status !== "pass") return wait("ASSEMBLY_QC_REQUIRED");
   if (String(input.assemblyQc.checkedHeadSha || "") !== assemblyHead) return wait("ASSEMBLY_QC_STALE_HEAD");
 
   const prHead = String(input.pullRequest?.headSha || "");
   if (!input.pullRequest?.number || !prHead) return wait("PULL_REQUEST_REQUIRED");
+  if (prHead !== assemblyHead) return wait("PULL_REQUEST_STALE_HEAD");
   if (input.ci?.status !== "success") return wait("CI_GREEN_REQUIRED");
   if (String(input.ci.headSha || "") !== prHead) return wait("CI_STALE_HEAD");
 
@@ -105,6 +107,28 @@ export function evaluateFactoryAdmission(input = {}) {
     return Object.freeze({ decision: "WAIT", reasons: Object.freeze(riskReasons.length ? riskReasons : ["QUEUE_RISK_RECHECK"]) });
   }
   return Object.freeze({ decision: "ADMIT", reasons: Object.freeze([]) });
+}
+
+export function createMergeAdmissionTruth(input = {}) {
+  const assemblyId = required(input.assembly?.id, "merge admission assembly id");
+  const sourceHeadSha = required(input.assembly?.integrationHeadSha, "merge admission assembly head");
+  const pullRequestNumber = Number(input.pullRequest?.number || 0);
+  if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber <= 0) throw new Error("merge admission pull request number is required");
+  const pullRequestHeadSha = required(input.pullRequest?.headSha, "merge admission pull request head");
+  const ciHeadSha = required(input.ci?.headSha, "merge admission CI head");
+  if (input.assembly?.status !== "ASSEMBLED" || input.assemblyQc?.status !== "pass" ||
+      input.assemblyQc?.checkedHeadSha !== sourceHeadSha || pullRequestHeadSha !== sourceHeadSha ||
+      input.ci?.status !== "success" || ciHeadSha !== pullRequestHeadSha) {
+    throw new Error("merge admission truth is not exact-head safe");
+  }
+  return Object.freeze({
+    assemblyId,
+    sourceHeadSha,
+    pullRequestNumber,
+    pullRequestHeadSha,
+    ciHeadSha,
+    ciStatus: "success",
+  });
 }
 
 export function requestFactorySlot(current, request = {}) {
@@ -156,6 +180,8 @@ export function requestFactorySlot(current, request = {}) {
     jobId,
     status: target.active || hasWaitingQueue ? "QUEUED" : "ACTIVE",
     risk: request.risk ? clone(request.risk) : null,
+    mergeAdmission: slot === "merge" && request.mergeAdmission ? clone(request.mergeAdmission) : null,
+    mergeResult: null,
   };
   if (!target.active && !hasWaitingQueue) {
     target.active = job;
