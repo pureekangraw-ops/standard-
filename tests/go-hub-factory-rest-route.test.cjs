@@ -7,7 +7,8 @@ const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
 const workspaceUrl = pathToFileURL(path.join(root, "go-hub-github-workspace.js")).href;
-const workerUrl = pathToFileURL(path.join(root, "go-hub-worker.mjs")).href;
+const edgeUrl = pathToFileURL(path.join(root, "go-hub-edge-worker.mjs")).href;
+const codeUrl = pathToFileURL(path.join(root, "go-hub-code-module.js")).href;
 const repository = "pureekangraw-ops/standard-";
 
 function factoryWorkContext(overrides = {}) {
@@ -79,17 +80,17 @@ test("browser workspace keeps observation open but requires Factory context for 
   }
 });
 
-test("Factory REST mutation endpoints reject missing or wrong City context before GitHub upstream", async () => {
-  const upstream = [];
-  const fetchImpl = async (url, init = {}) => {
-    upstream.push({ url: String(url), init });
-    if (String(url) === `https://api.github.com/repos/${repository}/git/refs`) {
-      return response({ ref: "refs/heads/feature-a", object: { sha: "base" } }, 201);
-    }
-    throw new Error(`unexpected upstream ${url}`);
+test("production edge rejects Factory REST mutations without exact City context before delegate", async () => {
+  const delegated = [];
+  const delegate = {
+    async fetch(request) {
+      delegated.push(request);
+      return response({ ok: true }, 201);
+    },
   };
-  const { createWorkerHandler } = await import(`${workerUrl}?factory-route=${Date.now()}`);
-  const handler = createWorkerHandler({ fetchImpl });
+  const factoryMcp = { async fetch() { return response({ ok: true }); } };
+  const { createEdgeWorkerHandler } = await import(`${edgeUrl}?factory-route=${Date.now()}`);
+  const handler = createEdgeWorkerHandler({ delegate, factoryMcp });
 
   for (const workContext of [
     undefined,
@@ -102,25 +103,27 @@ test("Factory REST mutation endpoints reject missing or wrong City context befor
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-    }), { GITHUB_TOKEN: "token" });
+    }), {});
     assert.equal(result.status, 400);
     assert.deepEqual(await result.json(), { code: "INVALID_FACTORY_WORK_CONTEXT" });
   }
-  assert.equal(upstream.length, 0);
+  assert.equal(delegated.length, 0);
 
   const accepted = await handler.fetch(new Request("https://hub.example/hub/api/github-workspace/branch", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ repository, name: "feature-a", fromSha: "base", workContext: factoryWorkContext() }),
-  }), { GITHUB_TOKEN: "token" });
+  }), {});
   assert.equal(accepted.status, 201);
-  assert.equal(upstream.length, 1);
+  assert.equal(delegated.length, 1);
 });
 
-test("direct browser REST merge is closed even with valid Factory context", async () => {
-  let upstreamCalls = 0;
-  const { createWorkerHandler } = await import(`${workerUrl}?merge-closed=${Date.now()}`);
-  const handler = createWorkerHandler({ fetchImpl: async () => { upstreamCalls += 1; return response({}); } });
+test("production edge closes direct browser REST merge even with valid Factory context", async () => {
+  let delegated = 0;
+  const delegate = { async fetch() { delegated += 1; return response({ merged: true }); } };
+  const factoryMcp = { async fetch() { return response({ ok: true }); } };
+  const { createEdgeWorkerHandler } = await import(`${edgeUrl}?merge-closed=${Date.now()}`);
+  const handler = createEdgeWorkerHandler({ delegate, factoryMcp });
   const result = await handler.fetch(new Request("https://hub.example/hub/api/github-workspace/pull-request/merge", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -131,8 +134,22 @@ test("direct browser REST merge is closed even with valid Factory context", asyn
       method: "squash",
       workContext: factoryWorkContext(),
     }),
-  }), { GITHUB_TOKEN: "token" });
+  }), {});
   assert.equal(result.status, 409);
   assert.deepEqual(await result.json(), { code: "GOVERNED_MERGE_REQUIRED" });
-  assert.equal(upstreamCalls, 0);
+  assert.equal(delegated, 0);
+});
+
+test("Code capability treats merge as Foreman-owned while deploy observation remains ready", async () => {
+  const { createCodeCapability } = await import(`${codeUrl}?governed-merge=${Date.now()}`);
+  const workspace = {
+    workContext: factoryWorkContext(),
+    inspect() {}, listTree() {}, listFiles() {}, readText() {}, writeText() {}, deletePath() {},
+    createBranch() {}, compare() {}, openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
+    getWorkflowRuns() {},
+  };
+  const capability = createCodeCapability({ workspace });
+  assert.equal(capability.canMerge, false);
+  assert.equal(capability.canObserveDeploy, true);
+  assert.equal(capability.status, "ready");
 });
