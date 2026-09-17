@@ -2,6 +2,7 @@ import githubWorker from "./go-hub-worker.mjs";
 import { createBrowserInterface } from "./go-hub-browser-interface.js";
 import { createFactoryMcpWorker } from "./go-hub-factory-mcp-worker.mjs";
 export { HephaestusForeman } from "./go-hub-factory-controller.mjs";
+export { GoHubFactoryState } from "./go-hub-factory-state.mjs";
 
 const BROWSER_API_ROOT = "/hub/api/browser";
 const encoder = new TextEncoder();
