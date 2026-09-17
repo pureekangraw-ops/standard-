@@ -43,7 +43,8 @@ export function createMimirExperienceSearchPort({ readExperience } = {}) {
       .join(" ");
     const candidates = retrieveExperience({ records, query: queryText });
     if (!candidates.length) return wait("NO_MATCH");
-    const selected = candidates[0].record;
+    const selected = candidates.find(candidate => candidate.record.status === "RECORDED")?.record;
+    if (!selected) return wait("PENDING_VERIFICATION");
     return Object.freeze({
       status: "PASS",
       waitReason: null,
