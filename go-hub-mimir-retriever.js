@@ -26,13 +26,20 @@ function score(candidate) {
   return candidate.relevance.core * 2 + candidate.relevance.helper;
 }
 
-export function createMimirStructuredRetriever({ coreText, helperText = () => "" } = {}) {
+export function createMimirStructuredRetriever({
+  coreText,
+  helperText = () => "",
+  tokenize = words,
+} = {}) {
   if (typeof coreText !== "function") throw new TypeError("MIMIR retriever coreText is required");
   if (typeof helperText !== "function") throw new TypeError("MIMIR retriever helperText must be a function");
+  if (typeof tokenize !== "function") throw new TypeError("MIMIR retriever tokenize must be a function");
 
   return function retrieve({ records = [], query = "" } = {}) {
     if (!Array.isArray(records)) throw new TypeError("MIMIR retriever records must be an array");
-    const terms = words(query);
+    const terms = tokenize(query)
+      .map(term => String(term || "").toLocaleLowerCase().trim())
+      .filter(Boolean);
     return records
       .map((record, index) => {
         const core = String(coreText(record) || "").toLocaleLowerCase();
