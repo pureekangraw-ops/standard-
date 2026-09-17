@@ -14,6 +14,23 @@ function browserResponse(payload, status = 200) {
   });
 }
 
+function browserWorkContext(overrides = {}) {
+  return {
+    workId: "WORK-BROWSER-1",
+    checkpointId: "CENTRE-BROWSER-1",
+    returnAddress: "CENTRE-BROWSER-1",
+    destination: "destination://browser",
+    task: "Read browser reality",
+    requestedResult: "Return page evidence",
+    lensReference: "lens://browser-reality",
+    ...overrides,
+  };
+}
+
+function routedBody(url, extra = {}) {
+  return { url, workContext: browserWorkContext(), ...extra };
+}
+
 function browserEnv(browser, allowedHostnames = ["shop.example.com"]) {
   return {
     BROWSER: browser,
@@ -25,7 +42,7 @@ async function loadWorker(tag) {
   return import(`${workerUrl}?browser=${tag}-${Date.now()}`);
 }
 
-test("Edge browser route reads a server-authorized page without GitHub credentials", async () => {
+test("Edge browser route reads a server-authorized page with exact Browser work context", async () => {
   const calls = [];
   const BROWSER = {
     async quickAction(action, options) {
@@ -48,7 +65,7 @@ test("Edge browser route reads a server-authorized page without GitHub credentia
   const request = new Request("https://hub.example/hub/api/browser/read", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ url: "https://shop.example.com/product/new" }),
+    body: JSON.stringify(routedBody("https://shop.example.com/product/new")),
   });
 
   const response = await handler.fetch(request, browserEnv(BROWSER));
@@ -60,6 +77,29 @@ test("Edge browser route reads a server-authorized page without GitHub credentia
   assert.equal(calls.length, 1);
 });
 
+test("Edge browser route rejects missing, wrong-destination, and mismatched-return work context", async () => {
+  let calls = 0;
+  const BROWSER = { async quickAction() { calls += 1; return browserResponse({}); } };
+  const { createEdgeWorkerHandler } = await loadWorker("route-context");
+  const handler = createEdgeWorkerHandler();
+  const env = browserEnv(BROWSER);
+
+  for (const body of [
+    { url: "https://shop.example.com/product/new" },
+    routedBody("https://shop.example.com/product/new", { workContext: browserWorkContext({ destination: "destination://factory" }) }),
+    routedBody("https://shop.example.com/product/new", { workContext: browserWorkContext({ returnAddress: "CENTRE-OTHER" }) }),
+  ]) {
+    const response = await handler.fetch(new Request("https://hub.example/hub/api/browser/read", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }), env);
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { code: "INVALID_BROWSER_WORK_CONTEXT" });
+  }
+  assert.equal(calls, 0);
+});
+
 test("Edge browser route ignores a caller-supplied allowlist and enforces server policy", async () => {
   let called = false;
   const BROWSER = { async quickAction() { called = true; return browserResponse({}); } };
@@ -68,10 +108,9 @@ test("Edge browser route ignores a caller-supplied allowlist and enforces server
   const request = new Request("https://hub.example/hub/api/browser/read", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      url: "https://evil.example.net/form",
+    body: JSON.stringify(routedBody("https://evil.example.net/form", {
       allowedHostnames: ["evil.example.net"],
-    }),
+    })),
   });
 
   const response = await handler.fetch(request, browserEnv(BROWSER, ["shop.example.com"]));
@@ -88,7 +127,7 @@ test("Edge browser route fails closed when server host policy is missing", async
   const request = new Request("https://hub.example/hub/api/browser/read", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ url: "https://shop.example.com/product/new" }),
+    body: JSON.stringify(routedBody("https://shop.example.com/product/new")),
   });
 
   const response = await handler.fetch(request, { BROWSER });
@@ -103,7 +142,7 @@ test("Edge browser route fails closed when Browser Run is not configured", async
   const request = new Request("https://hub.example/hub/api/browser/read", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ url: "https://shop.example.com/product/new" }),
+    body: JSON.stringify(routedBody("https://shop.example.com/product/new")),
   });
 
   const response = await handler.fetch(request, {
