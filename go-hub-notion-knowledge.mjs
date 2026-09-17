@@ -4,6 +4,7 @@ import { createMimirKnowledgeSearchPort } from "./go-hub-mimir-knowledge.js";
 const NOTION_API_ROOT = "https://api.notion.com/v1";
 const NOTION_VERSION = "2026-03-11";
 const MAX_PAGES = 1000;
+const CANONICAL_KNOWLEDGE_TITLE = "MIMIR — KNOWLEDGE";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -87,7 +88,7 @@ export function createNotionKnowledgeService({
   fetchImpl = fetch,
   token,
   dataSourceId,
-  knowledgeTitle = "MIMIR Knowledge",
+  knowledgeTitle = CANONICAL_KNOWLEDGE_TITLE,
   now = () => new Date(),
 } = {}) {
   return Object.freeze({
@@ -103,7 +104,7 @@ export function createNotionKnowledgeService({
           rows = await readAllRows(fetchImpl, token, resolvedDataSourceId);
         } catch (error) {
           if (error?.message !== "NOTION_KNOWLEDGE_UPSTREAM_ERROR" || error?.status !== 404) throw error;
-          resolvedDataSourceId = await locateKnowledgeDataSource(fetchImpl, token, String(knowledgeTitle || "MIMIR Knowledge").trim());
+          resolvedDataSourceId = await locateKnowledgeDataSource(fetchImpl, token, String(knowledgeTitle || CANONICAL_KNOWLEDGE_TITLE).trim());
           bindingRecovery = "SEARCH_EXACT_TITLE";
           rows = await readAllRows(fetchImpl, token, resolvedDataSourceId);
         }
