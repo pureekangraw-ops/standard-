@@ -26,14 +26,13 @@ test("GO Hub shell registers the Code capability", () => {
   assert.match(shell, /runtime\.register\(["']Code["']/);
 });
 
-
 test("Code capability exposes machine-usable workstation lifecycle state", async () => {
   const { pathToFileURL } = require("node:url");
   const { createCodeCapability } = await import(pathToFileURL(codeModule).href);
   const workspace = {
     inspect() {}, listTree() {}, listFiles() {}, readText() {}, writeText() {}, deletePath() {},
     createBranch() {}, compare() {}, openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
-    mergePullRequest() {}, getWorkflowRuns() {},
+    getWorkflowRuns() {},
   };
   const task = {
     snapshot() {
@@ -46,12 +45,12 @@ test("Code capability exposes machine-usable workstation lifecycle state", async
   };
   const capability = createCodeCapability({ workspace, task });
   assert.equal(capability.status, "ready");
+  assert.equal(capability.canMerge, false);
   assert.equal(capability.task.state, "CI_RUNNING");
   assert.equal(capability.nextAction, "check-ci");
   assert.equal(capability.headSha, "head-1");
   assert.equal(capability.pullRequest.number, 19);
 });
-
 
 test("Code task session restores and saves through the injected persistence port", async () => {
   const { pathToFileURL } = require("node:url");
@@ -76,14 +75,13 @@ test("Code task session restores and saves through the injected persistence port
   assert.equal(stored.audit[0].event, "SPECIALIST_RETURN");
 });
 
-
 test("Code capability projects deployment evidence from the task snapshot", async () => {
   const { pathToFileURL } = require("node:url");
   const { createCodeCapability } = await import(pathToFileURL(codeModule).href);
   const workspace = {
     inspect() {}, listTree() {}, listFiles() {}, readText() {}, writeText() {}, deletePath() {},
     createBranch() {}, compare() {}, openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
-    mergePullRequest() {}, getWorkflowRuns() {},
+    getWorkflowRuns() {},
   };
   const deployment = { status: "success", runId: 34809615501 };
   const task = {
@@ -126,7 +124,7 @@ test("Code capability projects Engine 4 recovery and learning truth", async () =
   const capability=createCodeCapability({task:{snapshot:()=>truth}}); for(const [key,value] of Object.entries(truth)) assert.deepEqual(capability[key],value);
 });
 
-test("Code capability does not claim full readiness when PR, CI, merge, or deploy routes are missing", async () => {
+test("Code capability requires PR, CI, and deploy observation while merge remains Foreman-owned", async () => {
   const { pathToFileURL } = require("node:url");
   const { createCodeCapability } = await import(`${pathToFileURL(codeModule).href}?readiness=${Date.now()}`);
   const partialWorkspace = {
@@ -143,13 +141,12 @@ test("Code capability does not claim full readiness when PR, CI, merge, or deplo
 
   const fullWorkspace = {
     ...partialWorkspace,
-    openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
-    mergePullRequest() {}, getWorkflowRuns() {},
+    openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {}, getWorkflowRuns() {},
   };
   const full = createCodeCapability({ workspace: fullWorkspace });
   assert.equal(full.status, "ready");
   assert.equal(full.canPullRequest, true);
   assert.equal(full.canCI, true);
-  assert.equal(full.canMerge, true);
+  assert.equal(full.canMerge, false);
   assert.equal(full.canObserveDeploy, true);
 });
