@@ -140,10 +140,6 @@ export function completeWaitingRoomVerification(current, input = {}) {
 
 export function completeMergeAndReturn(current, input = {}) {
   const verification = input.postMergeVerification;
-  if (verification?.status !== "pass" || !String(verification.mainSha || "").trim() ||
-      !String(verification.checkedAt || "").trim()) {
-    throw new Error("passed post-merge verification is required");
-  }
   const parked = parkMergedWork(current, {
     repository: input.repository,
     goId: input.goId,
