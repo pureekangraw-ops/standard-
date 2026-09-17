@@ -1,4 +1,6 @@
+export { createMimirDirectoryResolver } from "./go-hub-mimir-directory.js";
 import { createReturnPacket } from "./go-hub-centre.js";
+import { createMimirStructuredRetriever } from "./go-hub-mimir-retriever.js";
 
 export const MIMIR_DESTINATION = "destination://mimir";
 
@@ -192,23 +194,12 @@ function helperRecordText(record) {
   return [record.aliases, record.tags].join(" ").toLowerCase();
 }
 
-function queryTerms(query) {
-  return [query.task, query.requestedResult, query.lensReference]
-    .map(text)
-    .join(" ")
+function catalogTerms(value) {
+  return String(value ?? "")
     .toLowerCase()
     .split(/[\s/→,:;()[\]{}]+/)
     .map(term => term.trim())
     .filter(term => term.length > 1);
-}
-
-function relevance(record, terms) {
-  const core = coreRecordText(record);
-  const helper = helperRecordText(record);
-  return terms.reduce((score, term) => ({
-    core: score.core + (core.includes(term) ? 1 : 0),
-    helper: score.helper + (helper.includes(term) ? 1 : 0),
-  }), { core: 0, helper: 0 });
 }
 
 function canonicalGate(record) {
@@ -289,6 +280,12 @@ function candidateScore(candidate) {
   return candidate.relevance.core * 2 + candidate.relevance.helper;
 }
 
+const retrieveCatalog = createMimirStructuredRetriever({
+  coreText: coreRecordText,
+  helperText: helperRecordText,
+  tokenize: catalogTerms,
+});
+
 export function createMimirCatalogSearchPort({ readCatalog } = {}) {
   if (typeof readCatalog !== "function") {
     throw new TypeError("MIMIR catalog reader is required");
@@ -297,10 +294,14 @@ export function createMimirCatalogSearchPort({ readCatalog } = {}) {
   return async function searchCatalog(query = {}) {
     const sourceRows = await readCatalog();
     const records = normalizeRecords(sourceRows).map(normalizeCatalogRecord);
-    const terms = queryTerms(query);
-    const candidates = records
-      .map(record => ({ record, relevance: relevance(record, terms), gate: gate(record) }))
-      .filter(candidate => candidate.relevance.core > 0);
+    const queryText = [query.task, query.requestedResult, query.lensReference]
+      .map(text)
+      .join(" ");
+    const candidates = retrieveCatalog({ records, query: queryText })
+      .map(candidate => ({
+        ...candidate,
+        gate: gate(candidate.record),
+      }));
 
     if (!candidates.length) {
       return { status: WAIT, waitReason: "NO_MATCH", records: [], route: null };
