@@ -92,3 +92,35 @@ test("V5 Traffic snapshot marks current, stale, and missing station reality with
     }
   }
 });
+
+test("V5 Dashboard is a read-only overview and drill-down projection of the shared Traffic snapshot",async()=>{
+  const module=await import(runtimeUrl+"?dashboard="+Date.now());
+  assert.equal(typeof module.createTrafficDashboard,"function");
+  assert.equal(typeof module.getTrafficDashboardStation,"function");
+  const snapshot=module.createTrafficSnapshot({
+    stations:["factory","mimir","library"],
+    summaries:[
+      module.createTrafficSummary({station:"factory",activity:"building",queue:1,blocker:"merge busy",updatedAt:"2026-09-17T10:55:00Z"}),
+      module.createTrafficSummary({station:"mimir",activity:"indexing",queue:0,blocker:null,updatedAt:"2026-09-17T10:00:00Z"}),
+    ],
+    now:new Date("2026-09-17T11:00:00Z"),
+    staleAfterMs:15*60*1000,
+  });
+  const dashboard=module.createTrafficDashboard(snapshot);
+  assert.deepEqual(dashboard.overview,{
+    stations:3,
+    current:1,
+    stale:1,
+    unknown:1,
+    blocked:1,
+  });
+  assert.deepEqual(dashboard.stations,snapshot);
+  assert.deepEqual(module.getTrafficDashboardStation(dashboard,"mimir"),snapshot[1]);
+  assert.equal(module.getTrafficDashboardStation(dashboard,"missing"),null);
+  assert.equal(Object.isFrozen(dashboard),true);
+  assert.equal(Object.isFrozen(dashboard.overview),true);
+  assert.equal(Object.isFrozen(dashboard.stations),true);
+  for(const key of ["gate","permission","allowedToProceed","nextStation","route","nextAction","mutation"]){
+    assert.equal(Object.hasOwn(dashboard,key),false,`${key} must not exist on Dashboard model`);
+  }
+});
