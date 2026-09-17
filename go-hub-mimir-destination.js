@@ -280,6 +280,20 @@ function candidateScore(candidate) {
   return candidate.relevance.core * 2 + candidate.relevance.helper;
 }
 
+function explicitNamedCandidates(candidates, queryText) {
+  const queryTerms = new Set(catalogTerms(queryText));
+  return candidates
+    .filter(candidate => {
+      const nameTerms = catalogTerms(candidate.record.name);
+      return nameTerms.length > 0 && nameTerms.every(term => queryTerms.has(term));
+    })
+    .sort((a, b) =>
+      candidateScore(b) - candidateScore(a) ||
+      numericRating(b.record.rating) - numericRating(a.record.rating) ||
+      a.record.name.localeCompare(b.record.name),
+    );
+}
+
 const retrieveCatalog = createMimirStructuredRetriever({
   coreText: coreRecordText,
   helperText: helperRecordText,
@@ -307,6 +321,7 @@ export function createMimirCatalogSearchPort({ readCatalog } = {}) {
       return { status: WAIT, waitReason: "NO_MATCH", records: [], route: null };
     }
 
+    const explicit = explicitNamedCandidates(candidates, queryText);
     const usable = candidates
       .filter(candidate => candidate.gate.status === PASS)
       .sort((a, b) =>
@@ -315,7 +330,7 @@ export function createMimirCatalogSearchPort({ readCatalog } = {}) {
         a.record.name.localeCompare(b.record.name),
       );
 
-    const selected = usable[0] || candidates.sort((a, b) =>
+    const selected = explicit[0] || usable[0] || candidates.sort((a, b) =>
       candidateScore(b) - candidateScore(a) || a.record.name.localeCompare(b.record.name),
     )[0];
 
