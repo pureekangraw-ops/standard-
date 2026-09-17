@@ -30,6 +30,10 @@ export function deriveFactoryNextAction(snapshot = {}) {
     case "MERGE_GATE":
       return "build";
     case "BUILD":
+      return String(snapshot.buildArtifact?.kind || "").toLowerCase() === "apk" ? "signing-gate" : "product-qc";
+    case "SIGNING_GATE":
+      return "sign-apk";
+    case "SIGNATURE_VERIFIED":
       return "product-qc";
     case "PRODUCT_QC":
       return "fix-product";
