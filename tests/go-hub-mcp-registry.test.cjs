@@ -29,12 +29,13 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_compare_refs",
     "go_hub_open_pull_request", "go_hub_get_pull_request", "go_hub_get_ci",
     "go_hub_get_failure_evidence", "go_hub_rerun_failed_jobs", "go_hub_factory_action", "go_hub_factory_foreman",
-    "go_hub_merge_pull_request", "go_hub_get_workflow_runs", "go_hub_mimir_search_catalog",
+    "go_hub_maintenance", "go_hub_merge_pull_request", "go_hub_get_workflow_runs", "go_hub_mimir_search_catalog",
     "go_hub_mimir_search_knowledge", "go_hub_linear_list_projects", "go_hub_linear_get_issue",
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_factory_foreman").annotations.readOnlyHint, false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_maintenance").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_merge_pull_request").annotations.destructiveHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_mimir_search_knowledge").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_list_projects").annotations.readOnlyHint, true);

@@ -7,6 +7,7 @@ import { createLinearService } from "./go-hub-linear-service.mjs";
 import { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createFactoryControllerService } from "./go-hub-factory-controller.mjs";
 import { createFactoryActionService } from "./go-hub-factory-service.mjs";
+import { createMaintenanceService } from "./go-hub-maintenance.js";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -134,6 +135,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const factoryAction = env?.GO_HUB_FACTORY_STATE
         ? createFactoryActionService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE })
         : async () => json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
+      const maintenance = createMaintenanceService();
       const catalog = createNotionCatalogService({
         fetchImpl,
         token: env?.NOTION_TOKEN,
@@ -154,6 +156,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         lifecycle: Object.freeze({
           ...lifecycle,
           factoryAction: input => factoryAction(input),
+          maintenance: input => maintenance.maintenance(input),
           searchCatalog: input => catalog.searchCatalog(input),
           searchKnowledge: input => knowledge.searchKnowledge(input),
           linearListProjects: input => linear.listProjects(input),
