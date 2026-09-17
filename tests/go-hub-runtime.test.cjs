@@ -3,8 +3,111 @@ const fs=require("node:fs");
 const path=require("node:path");
 const test=require("node:test");
 const assert=require("node:assert/strict");
+const {pathToFileURL}=require("node:url");
 const root=path.resolve(__dirname,"..");
+const runtimePath=path.join(root,"go-hub-runtime.js");
+const runtimeUrl=pathToFileURL(runtimePath).href;
 const read=p=>fs.readFileSync(path.join(root,p),"utf8");
-test("runtime module exists",()=>assert.equal(fs.existsSync(path.join(root,"go-hub-runtime.js")),true));
+test("runtime module exists",()=>assert.equal(fs.existsSync(runtimePath),true));
 test("runtime stays neutral",()=>{const s=read("go-hub-runtime.js").toLowerCase(); for(const x of ["normalpocket","metropolis-r5","ygph-standard-secure"]) assert.equal(s.includes(x),false);});
 test("runtime exposes registry",()=>{const s=read("go-hub-runtime.js"); assert.match(s,/createHubRuntime/); assert.match(s,/register/); assert.match(s,/list/); assert.match(s,/get/);});
+
+test("V5 Traffic summary uses the canonical common station fields and no routing authority",async()=>{
+  const module=await import(runtimeUrl+"?traffic-summary="+Date.now());
+  assert.equal(typeof module.createTrafficSummary,"function");
+  const summary=module.createTrafficSummary({station:"factory",status:"BUSY",active:1,queue:2,blocked:true,lastUpdate:"2026-09-17T11:00:00Z"});
+  assert.deepEqual(summary,{station:"factory",status:"BUSY",active:1,queue:2,blocked:true,lastUpdate:"2026-09-17T11:00:00Z"});
+  assert.throws(()=>module.createTrafficSummary({station:"factory",status:"WORKING",active:1,queue:0,blocked:false,lastUpdate:"2026-09-17T11:00:00Z"}),/unsupported traffic status/i);
+  for(const key of ["gate","permission","allowedToProceed","nextStation","route"]){
+    assert.equal(Object.hasOwn(summary,key),false,`${key} must not exist on Traffic summary`);
+  }
+  assert.equal(Object.isFrozen(summary),true);
+});
+
+test("V5 Traffic snapshot preserves station status, marks stale data STALE, and missing reality UNKNOWN",async()=>{
+  const module=await import(runtimeUrl+"?traffic-snapshot="+Date.now());
+  assert.equal(typeof module.createTrafficSnapshot,"function");
+  const snapshot=module.createTrafficSnapshot({
+    stations:["factory","mimir","verification","library"],
+    summaries:[
+      module.createTrafficSummary({station:"mimir",status:"NORMAL",active:1,queue:0,blocked:false,lastUpdate:"2026-09-17T10:00:00Z"}),
+      module.createTrafficSummary({station:"factory",status:"BUSY",active:1,queue:1,blocked:true,lastUpdate:"2026-09-17T10:55:00Z"}),
+      module.createTrafficSummary({station:"verification",status:"FULL",active:2,queue:5,blocked:false,lastUpdate:"2026-09-17T10:58:00Z"}),
+    ],
+    now:new Date("2026-09-17T11:00:00Z"),
+    staleAfterMs:15*60*1000,
+  });
+  assert.deepEqual(snapshot,[
+    {station:"factory",status:"BUSY",active:1,queue:1,blocked:true,lastUpdate:"2026-09-17T10:55:00Z"},
+    {station:"mimir",status:"STALE",active:1,queue:0,blocked:false,lastUpdate:"2026-09-17T10:00:00Z"},
+    {station:"verification",status:"FULL",active:2,queue:5,blocked:false,lastUpdate:"2026-09-17T10:58:00Z"},
+    {station:"library",status:"UNKNOWN",active:null,queue:null,blocked:null,lastUpdate:null},
+  ]);
+  assert.equal(Object.isFrozen(snapshot),true);
+  assert.equal(snapshot.every(item=>Object.isFrozen(item)),true);
+  assert.equal(snapshot[2].status,"FULL","a full station must not be rewritten as ERROR");
+  for(const item of snapshot){
+    for(const key of ["gate","permission","allowedToProceed","nextStation","route"]){
+      assert.equal(Object.hasOwn(item,key),false,`${key} must not exist on Traffic snapshot`);
+    }
+  }
+});
+
+test("V5 Dashboard is a read-only overview and drill-down projection of canonical Traffic reality",async()=>{
+  const module=await import(runtimeUrl+"?dashboard="+Date.now());
+  assert.equal(typeof module.createTrafficDashboard,"function");
+  assert.equal(typeof module.getTrafficDashboardStation,"function");
+  const snapshot=module.createTrafficSnapshot({
+    stations:["factory","mimir","verification","library"],
+    summaries:[
+      module.createTrafficSummary({station:"factory",status:"BUSY",active:1,queue:1,blocked:true,lastUpdate:"2026-09-17T10:55:00Z"}),
+      module.createTrafficSummary({station:"mimir",status:"NORMAL",active:1,queue:0,blocked:false,lastUpdate:"2026-09-17T10:00:00Z"}),
+      module.createTrafficSummary({station:"verification",status:"FULL",active:2,queue:5,blocked:false,lastUpdate:"2026-09-17T10:58:00Z"}),
+    ],
+    now:new Date("2026-09-17T11:00:00Z"),
+    staleAfterMs:15*60*1000,
+  });
+  const dashboard=module.createTrafficDashboard(snapshot);
+  assert.deepEqual(dashboard.overview,{stations:4,active:4,queued:6,blocked:1,stale:1,unknown:1});
+  assert.deepEqual(dashboard.stations,snapshot);
+  assert.deepEqual(module.getTrafficDashboardStation(dashboard,"mimir"),snapshot[1]);
+  assert.equal(module.getTrafficDashboardStation(dashboard,"missing"),null);
+  assert.equal(Object.isFrozen(dashboard),true);
+  assert.equal(Object.isFrozen(dashboard.overview),true);
+  assert.equal(Object.isFrozen(dashboard.stations),true);
+  for(const key of ["gate","permission","allowedToProceed","nextStation","route","nextAction","mutation"]){
+    assert.equal(Object.hasOwn(dashboard,key),false,`${key} must not exist on Dashboard model`);
+  }
+});
+
+test("V5 Factory station monitor derives drill-down and canonical Traffic from Foreman truth",async()=>{
+  const module=await import(runtimeUrl+"?factory-monitor="+Date.now());
+  assert.equal(typeof module.createFactoryStationMonitor,"function");
+  const state={repositories:{"pureekangraw-ops/standard-":{
+    assembly:{active:{jobId:"job-a",status:"ACTIVE",risk:{status:"SAFE",reasons:[]}},queue:[{jobId:"job-b",status:"QUEUED"}]},
+    merge:{active:{jobId:"job-m",status:"ACTIVE",risk:{status:"SAFE",reasons:[]}},queue:[]},
+  }}};
+  const monitor=module.createFactoryStationMonitor({state,repository:"pureekangraw-ops/standard-",lastUpdate:"2026-09-17T12:00:00Z"});
+  assert.equal(monitor.station,"factory");
+  assert.equal(monitor.assembly.active.jobId,"job-a");
+  assert.equal(monitor.merge.active.jobId,"job-m");
+  assert.deepEqual(monitor.traffic,{station:"factory",status:"BUSY",active:2,queue:1,blocked:false,lastUpdate:"2026-09-17T12:00:00Z"});
+});
+
+test("V5 Library monitor projects real query outcome without inventing traffic counts",async()=>{
+  const module=await import(runtimeUrl+"?library-monitor="+Date.now());
+  assert.equal(typeof module.createLibraryStationMonitor,"function");
+  const monitor=module.createLibraryStationMonitor({query:"helmet size",result:{status:"PASS",departmentId:"KNOWLEDGE",records:[{id:"r1"}],evidence:{source:"notion"}}});
+  assert.deepEqual(monitor,{station:"library",query:"helmet size",status:"MATCH",matches:1,conflict:false,source:{source:"notion"}});
+  assert.equal(Object.hasOwn(monitor,"active"),false);
+  assert.equal(Object.hasOwn(monitor,"queue"),false);
+});
+
+test("V5 Verification monitor reports CHECKING/PASS/FAIL/UNKNOWN from real verification state",async()=>{
+  const module=await import(runtimeUrl+"?verification-monitor="+Date.now());
+  assert.equal(typeof module.createVerificationStationMonitor,"function");
+  assert.deepEqual(module.createVerificationStationMonitor({checking:true}),{station:"verification",status:"CHECKING",reason:null,evidence:[]});
+  const report={status:"FAIL",reason:"DIRECT_EVIDENCE_CONTRADICTS",evidence:[{sourceId:"runtime"}]};
+  assert.deepEqual(module.createVerificationStationMonitor({report}),{station:"verification",status:"FAIL",reason:"DIRECT_EVIDENCE_CONTRADICTS",evidence:[{sourceId:"runtime"}]});
+  assert.equal(module.createVerificationStationMonitor({}).status,"UNKNOWN");
+});
