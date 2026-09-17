@@ -36,3 +36,16 @@ test("MIMIR Memory results keep MEMORY identity and cannot override current comm
   assert.equal(result.records[0].sourceContext, "chat://older-context");
   assert.equal(result.records[0].recordedAt, "2026-09-15T10:00:00Z");
 });
+
+test("MIMIR Memory source failure fails closed as SOURCE_UNAVAILABLE", async () => {
+  const module = await import(libraryUrl + "?memory-source-failure=" + Date.now());
+  const searchMemory = module.createMimirMemorySearchPort({
+    readMemory: async () => { throw new Error("provider offline"); },
+  });
+
+  const result = await searchMemory({ task: "anything", requestedResult: "memory context" });
+
+  assert.equal(result.status, "WAIT");
+  assert.equal(result.waitReason, "SOURCE_UNAVAILABLE");
+  assert.deepEqual(result.records, []);
+});
