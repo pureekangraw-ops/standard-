@@ -5,6 +5,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const serviceUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-notion-knowledge.mjs")).href;
+const canonicalKnowledgeTitle = "MIMIR — KNOWLEDGE";
 
 function page() {
   const text = value => ({ type: "rich_text", rich_text: [{ type: "text", plain_text: value, text: { content: value } }] });
@@ -25,15 +26,15 @@ function page() {
   };
 }
 
-function searchResult(id, title = "MIMIR Knowledge") {
+function searchResult(id, title = canonicalKnowledgeTitle) {
   return { object: "data_source", id, title: [{ plain_text: title }] };
 }
 
-test("Knowledge recovers one stale configured data-source id through read-only Notion search", async () => {
+test("Knowledge recovers the canonical MIMIR — KNOWLEDGE source when the configured id is stale", async () => {
   const { createNotionKnowledgeService } = await import(serviceUrl + "?recover=" + Date.now());
   const calls = [];
   const service = createNotionKnowledgeService({
-    token: "secret", dataSourceId: "stale-id", knowledgeTitle: "MIMIR Knowledge",
+    token: "secret", dataSourceId: "stale-id",
     now: () => new Date("2026-09-17T00:00:00Z"),
     async fetchImpl(url, init) {
       calls.push({ url, init });
@@ -51,13 +52,14 @@ test("Knowledge recovers one stale configured data-source id through read-only N
   assert.equal(payload.knowledge.bindingRecovery, "SEARCH_EXACT_TITLE");
   const searchCall = calls.find(call => call.url.endsWith("/search"));
   assert.ok(searchCall);
+  assert.equal(JSON.parse(searchCall.init.body).query, canonicalKnowledgeTitle);
   assert.deepEqual(JSON.parse(searchCall.init.body).filter, { property: "object", value: "data_source" });
 });
 
-test("Knowledge recovery fails closed when search is ambiguous", async () => {
+test("Knowledge recovery fails closed when canonical source search is ambiguous", async () => {
   const { createNotionKnowledgeService } = await import(serviceUrl + "?ambiguous=" + Date.now());
   const service = createNotionKnowledgeService({
-    token: "secret", dataSourceId: "stale-id", knowledgeTitle: "MIMIR Knowledge",
+    token: "secret", dataSourceId: "stale-id",
     async fetchImpl(url) {
       if (url.endsWith("/data_sources/stale-id/query")) return new Response(JSON.stringify({}), { status: 404 });
       if (url.endsWith("/search")) return new Response(JSON.stringify({ results: [searchResult("a"), searchResult("b")], has_more: false }), { status: 200 });
