@@ -6,6 +6,7 @@ const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
 const moduleUrl = pathToFileURL(path.join(root, "go-hub-github-workspace.js")).href;
+const repository = "pureekangraw-ops/standard-";
 
 function response(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -14,12 +15,24 @@ function response(payload, status = 200) {
   });
 }
 
+function factoryWorkContext() {
+  return {
+    workId: "WORK-GITHUB-WORKSPACE",
+    checkpointId: "CENTRE-GITHUB-WORKSPACE",
+    returnAddress: "CENTRE-GITHUB-WORKSPACE",
+    destination: "destination://factory",
+    task: "Operate repository through Factory",
+    requestedResult: "Repository change remains governed",
+    lensReference: "lens://github-workspace",
+  };
+}
+
 test("workspace inspects a branch through the same-origin gateway without Authorization", async () => {
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url: String(url), init });
     return response({
-      repository: "pureekangraw-ops/standard-",
+      repository,
       defaultBranch: "main",
       branch: "feature-a",
       baseSha: "base-1",
@@ -30,7 +43,7 @@ test("workspace inspects a branch through the same-origin gateway without Author
   const { createGitHubWorkspace } = await import(`${moduleUrl}?inspect=${Date.now()}`);
   const workspace = createGitHubWorkspace({
     gatewayBase: "/hub/api/github-workspace",
-    repository: "pureekangraw-ops/standard-",
+    repository,
     fetchImpl,
   });
   const result = await workspace.inspect({ branch: "feature-a" });
@@ -53,7 +66,7 @@ test("workspace lists recursive tree and reads a selected branch", async () => {
   const { createGitHubWorkspace } = await import(`${moduleUrl}?tree=${Date.now()}`);
   const workspace = createGitHubWorkspace({
     gatewayBase: "/hub/api/github-workspace",
-    repository: "pureekangraw-ops/standard-",
+    repository,
     fetchImpl,
   });
   assert.deepEqual(await workspace.listTree({ ref: "feature-a" }), [
@@ -67,8 +80,7 @@ test("workspace lists recursive tree and reads a selected branch", async () => {
   }
 });
 
-
-test("workspace creates a branch, mutates files with SHA guards, and compares refs", async () => {
+test("Factory-routed workspace creates a branch, mutates files with SHA guards, and compares refs", async () => {
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url: String(url), init });
@@ -79,10 +91,12 @@ test("workspace creates a branch, mutates files with SHA guards, and compares re
     throw new Error(`unexpected request ${url}`);
   };
   const { createGitHubWorkspace } = await import(`${moduleUrl}?mutate=${Date.now()}`);
+  const workContext = factoryWorkContext();
   const workspace = createGitHubWorkspace({
     gatewayBase: "/hub/api/github-workspace",
-    repository: "pureekangraw-ops/standard-",
+    repository,
     fetchImpl,
+    workContext,
   });
 
   assert.deepEqual(await workspace.createBranch({ name: "feature-b", fromSha: "base-2" }), {
@@ -97,15 +111,15 @@ test("workspace creates a branch, mutates files with SHA guards, and compares re
   assert.equal((await workspace.compare({ base: "main", head: "feature-b" })).aheadBy, 1);
 
   assert.deepEqual(JSON.parse(calls[0].init.body), {
-    repository: "pureekangraw-ops/standard-", name: "feature-b", fromSha: "base-2",
+    repository, name: "feature-b", fromSha: "base-2", workContext,
   });
   assert.deepEqual(JSON.parse(calls[1].init.body), {
-    repository: "pureekangraw-ops/standard-", path: "src/app.js", content: "next",
-    branch: "feature-b", expectedSha: "blob-old",
+    repository, path: "src/app.js", content: "next",
+    branch: "feature-b", workContext, expectedSha: "blob-old",
   });
   assert.deepEqual(JSON.parse(calls[2].init.body), {
-    repository: "pureekangraw-ops/standard-", path: "src/app.js",
-    branch: "feature-b", expectedSha: "blob-new",
+    repository, path: "src/app.js",
+    branch: "feature-b", expectedSha: "blob-new", workContext,
   });
   for (const call of calls) {
     assert.equal("Authorization" in (call.init.headers || {}), false);
@@ -113,8 +127,7 @@ test("workspace creates a branch, mutates files with SHA guards, and compares re
   }
 });
 
-
-test("workspace exposes PR and exact-head CI operations without Authorization", async () => {
+test("Factory-routed workspace opens PR and reruns CI while read-only PR/CI remains observable", async () => {
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url: String(url), init });
@@ -134,10 +147,12 @@ test("workspace exposes PR and exact-head CI operations without Authorization", 
     throw new Error(`unexpected request ${value}`);
   };
   const { createGitHubWorkspace } = await import(`${moduleUrl}?prci=${Date.now()}`);
+  const workContext = factoryWorkContext();
   const workspace = createGitHubWorkspace({
     gatewayBase: "/hub/api/github-workspace",
-    repository: "pureekangraw-ops/standard-",
+    repository,
     fetchImpl,
+    workContext,
   });
 
   assert.equal((await workspace.openPullRequest({
@@ -148,12 +163,12 @@ test("workspace exposes PR and exact-head CI operations without Authorization", 
   assert.deepEqual(await workspace.rerunFailed({ runId: 7 }), { ok: true, runId: 7 });
 
   assert.deepEqual(JSON.parse(calls[0].init.body), {
-    repository: "pureekangraw-ops/standard-", branch: "feature-c", base: "main", title: "Slice C", body: "details",
+    repository, branch: "feature-c", base: "main", title: "Slice C", body: "details", workContext,
   });
   assert.match(calls[1].url, /number=19/);
   assert.match(calls[2].url, /sha=head-c/);
   assert.deepEqual(JSON.parse(calls[3].init.body), {
-    repository: "pureekangraw-ops/standard-", runId: 7,
+    repository, runId: 7, workContext,
   });
   for (const call of calls) {
     assert.equal("Authorization" in (call.init.headers || {}), false);
@@ -161,14 +176,10 @@ test("workspace exposes PR and exact-head CI operations without Authorization", 
   }
 });
 
-
-test("workspace exposes guarded merge and exact-SHA deploy observation", async () => {
+test("workspace does not expose direct merge and still observes exact-SHA deploy runs", async () => {
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url: String(url), init });
-    if (String(url).endsWith("/pull-request/merge")) {
-      return response({ merged: true, mergeSha: "merge-d", headSha: "head-d" });
-    }
     if (String(url).includes("/workflow-runs?")) {
       return response({ headSha: "merge-d", runs: [{ id: 91, conclusion: "success" }] });
     }
@@ -177,19 +188,12 @@ test("workspace exposes guarded merge and exact-SHA deploy observation", async (
   const { createGitHubWorkspace } = await import(moduleUrl + "?merge-deploy=" + Date.now());
   const workspace = createGitHubWorkspace({
     gatewayBase: "/hub/api/github-workspace",
-    repository: "pureekangraw-ops/standard-",
+    repository,
     fetchImpl,
   });
-  assert.deepEqual(await workspace.mergePullRequest({
-    number: 19, expectedHeadSha: "head-d", method: "squash",
-  }), { merged: true, mergeSha: "merge-d", headSha: "head-d" });
+  assert.equal(typeof workspace.mergePullRequest, "undefined");
   assert.equal((await workspace.getWorkflowRuns({ sha: "merge-d" })).headSha, "merge-d");
-  assert.deepEqual(JSON.parse(calls[0].init.body), {
-    repository: "pureekangraw-ops/standard-", number: 19, expectedHeadSha: "head-d", method: "squash",
-  });
-  assert.match(calls[1].url, /sha=merge-d/);
-  for (const call of calls) {
-    assert.equal("Authorization" in (call.init.headers || {}), false);
-    assert.equal("authorization" in (call.init.headers || {}), false);
-  }
+  assert.match(calls[0].url, /sha=merge-d/);
+  assert.equal("Authorization" in (calls[0].init.headers || {}), false);
+  assert.equal("authorization" in (calls[0].init.headers || {}), false);
 });
