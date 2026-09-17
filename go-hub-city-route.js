@@ -1,3 +1,5 @@
+import { CITY_DESTINATIONS, getCityDestination } from "./go-hub-route-contract.js";
+
 const HEIMDALL = Object.freeze({
   id: "heimdall",
   responsibilities: Object.freeze(["SAFETY", "PERMISSION", "STOP"]),
@@ -23,13 +25,7 @@ const CITY_ROUTE = Object.freeze({
   }),
   exit: HEIMDALL,
   returnTo: "big-chat",
-  destinations: Object.freeze({
-    factory: Object.freeze({
-      id: "factory",
-      role: "building-entry",
-      route: "destination://factory",
-    }),
-  }),
+  destinations: CITY_DESTINATIONS,
 });
 
 function heimdallDecision(heimdall = {}) {
@@ -58,6 +54,13 @@ function snapshot(value) {
   return freeze(copy);
 }
 
+function canonicalFitDestination(fit = {}) {
+  const byRoute = getCityDestination(fit.route);
+  const byId = getCityDestination(fit.destinationId);
+  if (!byRoute || !byId || byRoute.id !== byId.id) return null;
+  return byRoute;
+}
+
 export function createCityRoute() {
   return CITY_ROUTE;
 }
@@ -81,30 +84,25 @@ export function crossBifrost(packet = {}, { direction = "" } = {}) {
 }
 
 export function enterWorkLoop(fit = {}) {
-  if (fit.gate !== "PASS") {
-    return Object.freeze({
-      destination: "optician",
-      via: "optician",
-      reason: "GATE_NOT_PASSED",
-    });
-  }
-  return Object.freeze({
-    destination: "go-work-loop",
-    via: "optician",
-    workRoute: String(fit.route || "") || null,
-    destinationId: String(fit.destinationId || "") || null,
-  });
+  return routeInbound({ fit });
 }
 
 export function routeInbound({ fit = {} } = {}) {
   if (fit.gate !== "PASS") {
     return Object.freeze({ destination: "optician", reason: "FIT_NOT_READY" });
   }
+  const target = canonicalFitDestination(fit);
+  if (!target) {
+    return Object.freeze({
+      destination: "optician",
+      reason: "DESTINATION_NOT_CANONICAL",
+    });
+  }
   return Object.freeze({
     destination: "go-work-loop",
     via: "optician",
-    workRoute: String(fit.route || "") || null,
-    destinationId: String(fit.destinationId || "") || null,
+    workRoute: target.route,
+    destinationId: target.id,
   });
 }
 
