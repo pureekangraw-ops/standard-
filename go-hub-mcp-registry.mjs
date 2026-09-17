@@ -7,6 +7,7 @@ const nullableStr = { anyOf: [{ type: "string" }, { type: "null" }] };
 const FACTORY = "destination://factory";
 const MIMIR = "destination://mimir";
 const LINEAR = "destination://linear";
+const MAINTENANCE = "destination://maintenance";
 const workContext = {
   type: "object",
   properties: {
@@ -38,6 +39,7 @@ const definitions = [
   def("go_hub_rerun_failed_jobs", "Rerun failed workflow jobs.", "rerunFailed", schema({ repository: str, runId: int, workContext }, ["repository", "runId", "workContext"]), ann(false)),
   def("go_hub_factory_action", "Execute one governed Factory task action through durable task authority.", "factoryAction", schema({ taskId: str, action: { type: "string", enum: ["inspect", "create_branch", "write", "delete", "compare", "open_pr", "check_ci", "diagnose_failure"] }, input: obj, expectedRevision: revision, workContext }, ["taskId", "action", "input", "workContext"]), ann(false)),
   def("go_hub_factory_foreman", "Request, cancel, park, verify, release, or inspect Hephaestus work.", "factoryForeman", schema({ action: { type: "string", enum: ["request", "cancel", "park", "verify", "release", "state"] }, repository: str, slot: { type: "string", enum: ["assembly", "merge"] }, goId: str, jobId: str, mainSha: str, mergedAt: str, readyGate: obj, piece: obj, assembly: obj, assemblyQc: obj, pullRequest: obj, ci: obj, risk: obj, cancellation: obj, postMergeVerification: obj, workContext }, ["action", "repository"]), ann(false)),
+  def("go_hub_maintenance", "Inspect governed Maintenance capability or build a source-bound Factory closeout plan.", "maintenance", schema({ target: { type: "string", enum: ["factory"] }, action: { type: "string", enum: ["inspect", "plan_closeout"] }, input: obj, workContext }, ["target", "action", "input", "workContext"]), ann(true)),
   def("go_hub_merge_pull_request", "Merge with Foreman ownership and exact-head CI.", "mergePullRequest", schema({ repository: str, number: int, expectedHeadSha: str, goId: str, jobId: str, method: { type: "string", enum: ["merge", "squash", "rebase"] }, workContext }, ["repository", "number", "expectedHeadSha", "goId", "jobId", "workContext"]), ann(false, true)),
   def("go_hub_get_workflow_runs", "Observe workflow and deployment runs.", "getWorkflowRuns", schema({ repository: str, sha: str }, ["repository", "sha"]), ann(true)),
   def("go_hub_mimir_search_catalog", "Search live MIMIR catalog with Gate-before-Rating.", "searchCatalog", schema({ task: str, requestedResult: str, lensReference: str, workContext }, ["task", "requestedResult", "workContext"]), ann(true)),
@@ -50,6 +52,7 @@ const definitions = [
 
 const factoryTools = new Set(["go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_merge_pull_request", "go_hub_factory_action"]);
 const mimirTools = new Set(["go_hub_mimir_search_catalog", "go_hub_mimir_search_knowledge"]);
+const maintenanceTools = new Set(["go_hub_maintenance"]);
 const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linear_update_issue"]);
 
 function assertArgs(definition, args) {
@@ -78,6 +81,7 @@ function assertLifecycle(name, args) {
   if (factoryTools.has(name)) assertWork(args.workContext, FACTORY);
   if (linearMutationTools.has(name)) assertWork(args.workContext, LINEAR);
   if (mimirTools.has(name)) assertWork(args.workContext, MIMIR);
+  if (maintenanceTools.has(name)) assertWork(args.workContext, MAINTENANCE);
   if (name === "go_hub_factory_foreman" && args.action !== "state") assertWork(args.workContext, FACTORY);
 }
 
