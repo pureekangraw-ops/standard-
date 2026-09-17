@@ -23,6 +23,36 @@ export function createFactoryGuardedLifecycle({ lifecycle, factory } = {}) {
     factoryForeman(input = {}) {
       return factory.foreman(input);
     },
+    async cancelStaleFactoryWork(input = {}) {
+      const observed = await lifecycle.getPullRequest({
+        repository: input.repository,
+        number: input.number,
+      });
+      if (!observed.ok) return observed;
+      const proof = await observed.clone().json().catch(() => null);
+      if (!proof || String(proof.state || "").toLowerCase() !== "closed" || proof.merged !== false ||
+          Number(proof.number) !== Number(input.number) || !String(proof.headSha || "").trim()) {
+        return json({ code: "FACTORY_STALE_WORK_CANCELLATION_REFUSED" }, 409);
+      }
+      return factory.foreman({
+        action: "cancel",
+        repository: input.repository,
+        slot: "merge",
+        goId: input.goId,
+        jobId: input.jobId,
+        cancellation: {
+          reason: "PULL_REQUEST_CLOSED_UNMERGED",
+          observedAt: new Date().toISOString(),
+          pullRequest: {
+            number: Number(proof.number),
+            state: String(proof.state),
+            merged: false,
+            headSha: String(proof.headSha),
+          },
+        },
+        workContext: input.workContext,
+      });
+    },
     async mergePullRequest(input = {}) {
       const ownership = await factory.assertActiveMerge(input);
       if (!ownership.ok) return ownership;
