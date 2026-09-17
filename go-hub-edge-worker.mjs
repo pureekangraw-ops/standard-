@@ -61,7 +61,7 @@ function isBrowserApiPath(pathname) {
   return pathname === BROWSER_API_ROOT || pathname.startsWith(`${BROWSER_API_ROOT}/`);
 }
 
-export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = createFactoryMcpWorker() } = {}) {
+export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = createFactoryMcpWorker(), fetchImpl = fetch } = {}) {
   if (!delegate || typeof delegate.fetch !== "function") {
     throw new Error("edge delegate fetch is required");
   }
@@ -82,7 +82,7 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
           const body = await request.json().catch(() => null);
           if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code: "INVALID_JSON" }, 400);
           assertFactoryWorkContext(body.workContext);
-          const lifecycle = createGithubLifecycleService({ fetchImpl: fetch, token: env.GITHUB_TOKEN });
+          const lifecycle = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
           const factoryAction = createFactoryActionService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE });
           return factoryAction({
             taskId: body.taskId,
