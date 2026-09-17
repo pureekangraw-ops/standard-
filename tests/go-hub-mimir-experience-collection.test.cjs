@@ -138,3 +138,33 @@ test("MIMIR Experience reports OUTDATED_LESSON when only outdated matches remain
   assert.equal(result.waitReason, "OUTDATED_LESSON");
   assert.deepEqual(result.evidence.outdatedIds, ["lesson-outdated-only"]);
 });
+
+test("Experience to Knowledge promotion is an explicit proposal and never an automatic write", async () => {
+  const module = await import(libraryUrl + "?experience-promotion=" + Date.now());
+  assert.equal(typeof module.proposeKnowledgeCandidateFromExperience, "function");
+  const lesson = {
+    id: "lesson-promote",
+    context: "deployment verification",
+    action: "compare exact SHA",
+    finding: "runtime proof must match deployed source",
+    resolution: "verify runtime after deploy",
+    reusableWhen: "publishing runtime changes",
+    sourceTaskId: "task-promote",
+    sourceArtifactDigest: "sha256:promote",
+    recordedAt: "2026-09-17T02:00:00Z",
+    status: "RECORDED",
+    collection: "EXPERIENCE",
+  };
+
+  const denied = module.proposeKnowledgeCandidateFromExperience(lesson, { authorized: false });
+  assert.equal(denied.status, "WAIT");
+  assert.equal(denied.waitReason, "NEED_AUTHORITY");
+
+  const proposed = module.proposeKnowledgeCandidateFromExperience(lesson, { authorized: true });
+  assert.equal(proposed.status, "PASS");
+  assert.equal(proposed.writePerformed, false);
+  assert.equal(proposed.candidate.knowledgeStatus, "CANDIDATE");
+  assert.equal(proposed.candidate.verificationState, "PENDING");
+  assert.equal(proposed.candidate.sourceId, "task-promote");
+  assert.equal(proposed.candidate.evidence, "sha256:promote");
+});
