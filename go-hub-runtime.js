@@ -1,3 +1,5 @@
+export { createTrafficSummary } from "./go-hub-traffic.js";
+
 export function createHubRuntime() {
   const entries = new Map();
 
