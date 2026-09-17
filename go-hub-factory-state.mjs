@@ -1,9 +1,9 @@
-import { DurableObject } from "cloudflare:workers";
 import { createFactoryStatePort } from "./go-hub-factory-state-core.mjs";
 
-export class GoHubFactoryState extends DurableObject {
+export class GoHubFactoryState {
   constructor(ctx, env) {
-    super(ctx, env);
+    this.ctx = ctx;
+    this.env = env;
     this.port = createFactoryStatePort({ storage: ctx.storage });
   }
 
