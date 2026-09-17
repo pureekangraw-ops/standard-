@@ -115,13 +115,14 @@ test("guarded merge automatically parks successful GitHub merge evidence in the 
   assert.equal(calls[0].jobId, "job-merge");
 });
 
-test("MCP Foreman contract exposes park and verify waiting-room actions", async () => {
+test("MCP Foreman contract exposes cancellation plus waiting-room actions", async () => {
   const { createMcpRegistry } = await import(`${registryUrl}?${Date.now()}`);
   const noop = async () => new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
   const registry = createMcpRegistry({ lifecycle: new Proxy({}, { get: () => noop }) });
   const tool = registry.listTools().find(item => item.name === "go_hub_factory_foreman");
   assert.ok(tool);
-  assert.deepEqual(tool.inputSchema.properties.action.enum, ["request", "park", "verify", "release", "state"]);
+  assert.deepEqual(tool.inputSchema.properties.action.enum, ["request", "cancel", "park", "verify", "release", "state"]);
+  assert.ok(tool.inputSchema.properties.cancellation);
   assert.ok(tool.inputSchema.properties.mainSha);
   assert.ok(tool.inputSchema.properties.mergedAt);
 });
