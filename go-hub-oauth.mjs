@@ -172,7 +172,7 @@ function metadata(config, path) {
 function authorizePage(values) {
   const hidden = Object.entries(values).map(([name, value]) =>
     `<input type="hidden" name="${name}" value="${String(value).replace(/[&<>"']/g, character => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&#39;",
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
     })[character])}">`
   ).join("");
   return new Response(`<!doctype html><html><meta name="viewport" content="width=device-width"><title>GO Hub authorization</title><body><main><h1>GO Hub Factory</h1><p>Authorize BIG's ChatGPT connection.</p><form method="post">${hidden}<label>Owner passcode <input name="passcode" type="password" autocomplete="current-password" required></label><button type="submit">Authorize</button></form></main></body></html>`, {
