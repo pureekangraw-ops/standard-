@@ -24,8 +24,8 @@ export function createCodeCapability({ workspace = null, task = null, workContex
   const canDiff = canBranch && hasMethod(workspace, "compare");
   const canPullRequest = canDiff && hasMethod(workspace, "openPullRequest") && hasMethod(workspace, "getPullRequest");
   const canCI = canPullRequest && hasMethod(workspace, "getCI") && hasMethod(workspace, "rerunFailed");
-  const canMerge = canCI && hasMethod(workspace, "mergePullRequest");
-  const canObserveDeploy = canMerge && hasMethod(workspace, "getWorkflowRuns");
+  const canMerge = false;
+  const canObserveDeploy = canCI && hasMethod(workspace, "getWorkflowRuns");
   const fullLifecycleReady = canInspect && canDelete && canObserveDeploy;
   const snapshot = taskSnapshot(task);
 
