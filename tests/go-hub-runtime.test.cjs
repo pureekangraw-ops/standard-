@@ -12,80 +12,81 @@ test("runtime module exists",()=>assert.equal(fs.existsSync(runtimePath),true));
 test("runtime stays neutral",()=>{const s=read("go-hub-runtime.js").toLowerCase(); for(const x of ["normalpocket","metropolis-r5","ygph-standard-secure"]) assert.equal(s.includes(x),false);});
 test("runtime exposes registry",()=>{const s=read("go-hub-runtime.js"); assert.match(s,/createHubRuntime/); assert.match(s,/register/); assert.match(s,/list/); assert.match(s,/get/);});
 
-test("V5 Traffic summary is a small read-only station observation, not routing authority",async()=>{
+test("V5 Traffic summary uses the canonical common station fields and no routing authority",async()=>{
   const module=await import(runtimeUrl+"?traffic-summary="+Date.now());
   assert.equal(typeof module.createTrafficSummary,"function");
   const summary=module.createTrafficSummary({
     station:"factory",
-    activity:"assembling PR #76",
+    status:"BUSY",
+    active:1,
     queue:2,
-    blocker:"merge lane busy",
-    updatedAt:"2026-09-17T11:00:00Z",
+    blocked:true,
+    lastUpdate:"2026-09-17T11:00:00Z",
   });
   assert.deepEqual(summary,{
     station:"factory",
-    activity:"assembling PR #76",
+    status:"BUSY",
+    active:1,
     queue:2,
-    blocker:"merge lane busy",
-    updatedAt:"2026-09-17T11:00:00Z",
+    blocked:true,
+    lastUpdate:"2026-09-17T11:00:00Z",
   });
+  assert.throws(()=>module.createTrafficSummary({
+    station:"factory",
+    status:"WORKING",
+    active:1,
+    queue:0,
+    blocked:false,
+    lastUpdate:"2026-09-17T11:00:00Z",
+  }),/unsupported traffic status/i);
   for(const key of ["gate","permission","allowedToProceed","nextStation","route"]){
     assert.equal(Object.hasOwn(summary,key),false,`${key} must not exist on Traffic summary`);
   }
   assert.equal(Object.isFrozen(summary),true);
 });
 
-test("V5 Traffic snapshot marks current, stale, and missing station reality without inventing work",async()=>{
+test("V5 Traffic snapshot preserves station status, marks stale data STALE, and missing reality UNKNOWN",async()=>{
   const module=await import(runtimeUrl+"?traffic-snapshot="+Date.now());
   assert.equal(typeof module.createTrafficSnapshot,"function");
   const current=module.createTrafficSummary({
     station:"factory",
-    activity:"building",
+    status:"BUSY",
+    active:1,
     queue:1,
-    blocker:null,
-    updatedAt:"2026-09-17T10:55:00Z",
+    blocked:true,
+    lastUpdate:"2026-09-17T10:55:00Z",
   });
   const stale=module.createTrafficSummary({
     station:"mimir",
-    activity:"indexing",
+    status:"NORMAL",
+    active:1,
     queue:0,
-    blocker:null,
-    updatedAt:"2026-09-17T10:00:00Z",
+    blocked:false,
+    lastUpdate:"2026-09-17T10:00:00Z",
+  });
+  const full=module.createTrafficSummary({
+    station:"verification",
+    status:"FULL",
+    active:2,
+    queue:5,
+    blocked:false,
+    lastUpdate:"2026-09-17T10:58:00Z",
   });
   const snapshot=module.createTrafficSnapshot({
-    stations:["factory","mimir","library"],
-    summaries:[stale,current],
+    stations:["factory","mimir","verification","library"],
+    summaries:[stale,current,full],
     now:new Date("2026-09-17T11:00:00Z"),
     staleAfterMs:15*60*1000,
   });
   assert.deepEqual(snapshot,[
-    {
-      station:"factory",
-      activity:"building",
-      queue:1,
-      blocker:null,
-      updatedAt:"2026-09-17T10:55:00Z",
-      freshness:"CURRENT",
-    },
-    {
-      station:"mimir",
-      activity:"indexing",
-      queue:0,
-      blocker:null,
-      updatedAt:"2026-09-17T10:00:00Z",
-      freshness:"STALE",
-    },
-    {
-      station:"library",
-      activity:"UNKNOWN",
-      queue:null,
-      blocker:null,
-      updatedAt:null,
-      freshness:"UNKNOWN",
-    },
+    {station:"factory",status:"BUSY",active:1,queue:1,blocked:true,lastUpdate:"2026-09-17T10:55:00Z"},
+    {station:"mimir",status:"STALE",active:1,queue:0,blocked:false,lastUpdate:"2026-09-17T10:00:00Z"},
+    {station:"verification",status:"FULL",active:2,queue:5,blocked:false,lastUpdate:"2026-09-17T10:58:00Z"},
+    {station:"library",status:"UNKNOWN",active:null,queue:null,blocked:null,lastUpdate:null},
   ]);
   assert.equal(Object.isFrozen(snapshot),true);
   assert.equal(snapshot.every(item=>Object.isFrozen(item)),true);
+  assert.equal(snapshot[2].status,"FULL","a full station must not be rewritten as ERROR");
   for(const item of snapshot){
     for(const key of ["gate","permission","allowedToProceed","nextStation","route"]){
       assert.equal(Object.hasOwn(item,key),false,`${key} must not exist on Traffic snapshot`);
@@ -93,26 +94,28 @@ test("V5 Traffic snapshot marks current, stale, and missing station reality with
   }
 });
 
-test("V5 Dashboard is a read-only overview and drill-down projection of the shared Traffic snapshot",async()=>{
+test("V5 Dashboard is a read-only overview and drill-down projection of canonical Traffic reality",async()=>{
   const module=await import(runtimeUrl+"?dashboard="+Date.now());
   assert.equal(typeof module.createTrafficDashboard,"function");
   assert.equal(typeof module.getTrafficDashboardStation,"function");
   const snapshot=module.createTrafficSnapshot({
-    stations:["factory","mimir","library"],
+    stations:["factory","mimir","verification","library"],
     summaries:[
-      module.createTrafficSummary({station:"factory",activity:"building",queue:1,blocker:"merge busy",updatedAt:"2026-09-17T10:55:00Z"}),
-      module.createTrafficSummary({station:"mimir",activity:"indexing",queue:0,blocker:null,updatedAt:"2026-09-17T10:00:00Z"}),
+      module.createTrafficSummary({station:"factory",status:"BUSY",active:1,queue:1,blocked:true,lastUpdate:"2026-09-17T10:55:00Z"}),
+      module.createTrafficSummary({station:"mimir",status:"NORMAL",active:1,queue:0,blocked:false,lastUpdate:"2026-09-17T10:00:00Z"}),
+      module.createTrafficSummary({station:"verification",status:"FULL",active:2,queue:5,blocked:false,lastUpdate:"2026-09-17T10:58:00Z"}),
     ],
     now:new Date("2026-09-17T11:00:00Z"),
     staleAfterMs:15*60*1000,
   });
   const dashboard=module.createTrafficDashboard(snapshot);
   assert.deepEqual(dashboard.overview,{
-    stations:3,
-    current:1,
+    stations:4,
+    active:4,
+    queued:6,
+    blocked:1,
     stale:1,
     unknown:1,
-    blocked:1,
   });
   assert.deepEqual(dashboard.stations,snapshot);
   assert.deepEqual(module.getTrafficDashboardStation(dashboard,"mimir"),snapshot[1]);
