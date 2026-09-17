@@ -18,15 +18,25 @@ function assertTaskId(value) {
   return taskId;
 }
 
+function stateStub(binding, taskId) {
+  if (!binding) return null;
+  if (typeof binding.getByName === "function") return binding.getByName(taskId);
+  if (typeof binding.idFromName === "function" && typeof binding.get === "function") {
+    return binding.get(binding.idFromName(taskId));
+  }
+  return null;
+}
+
 export function createFactoryActionService({ lifecycle, binding, now, createId } = {}) {
   if (!lifecycle) throw new Error("Factory lifecycle is required");
-  if (!binding || typeof binding.getByName !== "function") {
+  if (!binding || (typeof binding.getByName !== "function" &&
+      !(typeof binding.idFromName === "function" && typeof binding.get === "function"))) {
     throw Object.assign(new Error("FACTORY_STATE_NOT_CONFIGURED"), { status: 503 });
   }
 
   return async function factoryAction(input = {}) {
     const taskId = assertTaskId(input.taskId);
-    const stub = binding.getByName(taskId);
+    const stub = stateStub(binding, taskId);
     const state = Object.freeze({
       load: () => stub.load(),
       save: value => stub.save(value),
