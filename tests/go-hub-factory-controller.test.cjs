@@ -35,10 +35,10 @@ function mergeRequest(overrides = {}) {
     slot: "merge",
     goId: "go-a",
     jobId: "job-merge",
-    assembly: { status: "ASSEMBLED", integrationHeadSha: "integration-head" },
+    assembly: { id: "assembly-1", status: "ASSEMBLED", integrationHeadSha: "integration-head" },
     assemblyQc: { status: "pass", checkedHeadSha: "integration-head" },
-    pullRequest: { number: 50, headSha: "pr-head" },
-    ci: { status: "success", headSha: "pr-head" },
+    pullRequest: { number: 50, headSha: "integration-head" },
+    ci: { status: "success", headSha: "integration-head" },
     risk: { status: "SAFE", reasons: [] },
     ...overrides,
   };
@@ -98,12 +98,22 @@ test("server-side admission refuses stale Assembly evidence", async () => {
   assert.equal(result.outcome.reason, "READY_GATE_STALE_HEAD");
 });
 
-test("Merge stays owned through Verify and exits through Hephaestus to Optician", async () => {
+test("Merge stays owned through sealed result and Verify before returning to Optician", async () => {
   const { HephaestusForeman } = await import(controllerUrl);
   const foreman = new HephaestusForeman(memoryContext(), {});
   const admitted = await foreman.requestSlot(mergeRequest());
   assert.equal(admitted.outcome.status, "ACTIVE");
   assert.equal(await foreman.assertActiveMerge({ repository: "pureekangraw-ops/standard-", goId: "go-a", jobId: "job-merge" }), true);
+
+  await assert.rejects(
+    foreman.releaseSlot({ repository: "pureekangraw-ops/standard-", slot: "merge", goId: "go-a", jobId: "job-merge" }),
+    /merge result/i,
+  );
+
+  await foreman.recordMergeResult({
+    repository: "pureekangraw-ops/standard-", goId: "go-a", jobId: "job-merge",
+    pullRequestNumber: 50, headSha: "integration-head", mergeSha: "main-after-merge",
+  });
 
   await assert.rejects(
     foreman.releaseSlot({ repository: "pureekangraw-ops/standard-", slot: "merge", goId: "go-a", jobId: "job-merge" }),
@@ -119,6 +129,7 @@ test("Merge stays owned through Verify and exits through Hephaestus to Optician"
   });
   assert.equal(completed.returnPacket.destination, "optician");
   assert.equal(completed.returnPacket.reason, "FACTORY_REALITY_CHANGED");
+  assert.equal(completed.returnPacket.mergeGate.merge.mergeSha, "main-after-merge");
 });
 
 test("Factory controller fails closed without Durable Object binding", async () => {

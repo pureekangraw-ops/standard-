@@ -26,10 +26,10 @@ function memoryContext() {
 function mergeInput(overrides = {}) {
   return {
     repository: "pureekangraw-ops/standard-", slot: "merge", goId: "go-a", jobId: "job-merge",
-    assembly: { status: "ASSEMBLED", integrationHeadSha: "integration-head" },
+    assembly: { id: "assembly-1", status: "ASSEMBLED", integrationHeadSha: "integration-head" },
     assemblyQc: { status: "pass", checkedHeadSha: "integration-head" },
-    pullRequest: { number: 51, headSha: "pr-head" },
-    ci: { status: "success", headSha: "pr-head" },
+    pullRequest: { number: 51, headSha: "integration-head" },
+    ci: { status: "success", headSha: "integration-head" },
     risk: { status: "SAFE", reasons: [] },
     workContext: factoryWorkContext,
     ...overrides,

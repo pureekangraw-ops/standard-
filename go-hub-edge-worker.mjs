@@ -1,9 +1,12 @@
-import githubWorker from "./go-hub-worker.mjs";
+import githubWorker, { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createBrowserInterface } from "./go-hub-browser-interface.js";
 import { createFactoryMcpWorker } from "./go-hub-factory-mcp-worker.mjs";
+import { createFactoryActionService } from "./go-hub-factory-service.mjs";
 export { HephaestusForeman } from "./go-hub-factory-controller.mjs";
+export { GoHubFactoryState } from "./go-hub-factory-state.mjs";
 
 const BROWSER_API_ROOT = "/hub/api/browser";
+const FACTORY_ACTION_PATH = "/hub/api/github-workspace/factory-action";
 const encoder = new TextEncoder();
 
 function json(payload, status = 200) {
@@ -44,11 +47,21 @@ function timingSafeEqual(left, right) {
   return difference === 0;
 }
 
+function assertFactoryWorkContext(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("workContext is required");
+  for (const field of ["workId", "checkpointId", "returnAddress", "destination", "task", "requestedResult", "lensReference"]) {
+    if (!String(value[field] || "").trim()) throw new Error("workContext missing field: " + field);
+  }
+  if (String(value.checkpointId) !== String(value.returnAddress)) throw new Error("workContext Return Address must match Checkpoint ID");
+  if (String(value.destination) !== "destination://factory") throw new Error("workContext destination must be destination://factory");
+  return value;
+}
+
 function isBrowserApiPath(pathname) {
   return pathname === BROWSER_API_ROOT || pathname.startsWith(`${BROWSER_API_ROOT}/`);
 }
 
-export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = createFactoryMcpWorker() } = {}) {
+export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = createFactoryMcpWorker(), fetchImpl = fetch } = {}) {
   if (!delegate || typeof delegate.fetch !== "function") {
     throw new Error("edge delegate fetch is required");
   }
@@ -61,6 +74,25 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
       const url = new URL(request.url);
       if (url.pathname === "/mcp") {
         return factoryMcp.fetch(request, env);
+      }
+      if (request.method === "POST" && url.pathname === FACTORY_ACTION_PATH) {
+        if (!env?.GITHUB_TOKEN) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
+        if (!env?.GO_HUB_FACTORY_STATE) return json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
+        try {
+          const body = await request.json().catch(() => null);
+          if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code: "INVALID_JSON" }, 400);
+          assertFactoryWorkContext(body.workContext);
+          const lifecycle = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
+          const factoryAction = createFactoryActionService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE });
+          return factoryAction({
+            taskId: body.taskId,
+            action: body.action,
+            input: body.input || {},
+            expectedRevision: body.expectedRevision,
+          });
+        } catch (error) {
+          return json({ code: error?.message || "FACTORY_ACTION_ERROR" }, error?.status || 400);
+        }
       }
       if (!isBrowserApiPath(url.pathname)) {
         return delegate.fetch(request, env);

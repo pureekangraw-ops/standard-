@@ -6,6 +6,7 @@ import { createNotionKnowledgeService } from "./go-hub-notion-knowledge.mjs";
 import { createLinearService } from "./go-hub-linear-service.mjs";
 import { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createFactoryControllerService } from "./go-hub-factory-controller.mjs";
+import { createFactoryActionService } from "./go-hub-factory-service.mjs";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -62,8 +63,31 @@ export function createFactoryGuardedLifecycle({ lifecycle, factory } = {}) {
       const merged = await lifecycle.mergePullRequest(input);
       if (!merged.ok) return merged;
       const mergeProof = await merged.clone().json().catch(() => null);
-      if (mergeProof?.merged !== true || !String(mergeProof.mergeSha || "").trim()) {
+      const mergedHeadSha = String(mergeProof?.headSha || input.expectedHeadSha || "").trim();
+      if (mergeProof?.merged !== true || !String(mergeProof.mergeSha || "").trim() || !mergedHeadSha) {
         return json({ code: "MERGE_RESULT_MISSING_EVIDENCE" }, 500);
+      }
+      if (typeof factory.recordMergeResult !== "function") {
+        return json({ code: "FACTORY_MERGE_RESULT_NOT_RECORDED" }, 502);
+      }
+      const recorded = await factory.recordMergeResult({
+        repository: input.repository,
+        goId: input.goId,
+        jobId: input.jobId,
+        workContext: input.workContext,
+        pullRequestNumber: Number(input.number),
+        headSha: mergedHeadSha,
+        mergeSha: String(mergeProof.mergeSha),
+      });
+      if (!recorded.ok) {
+        const detail = await recorded.json().catch(() => ({}));
+        return json({
+          code: "FACTORY_MERGE_RESULT_NOT_RECORDED",
+          merged: true,
+          mergeSha: mergeProof.mergeSha,
+          headSha: mergedHeadSha,
+          factoryCode: detail.code || "FACTORY_RECORD_MERGE_FAILED",
+        }, 502);
       }
 
       const parked = await factory.foreman({
@@ -107,6 +131,9 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const github = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
       const factory = createFactoryControllerService({ namespace: env?.HEPHAESTUS });
       const lifecycle = createFactoryGuardedLifecycle({ lifecycle: github, factory });
+      const factoryAction = env?.GO_HUB_FACTORY_STATE
+        ? createFactoryActionService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE })
+        : async () => json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
       const catalog = createNotionCatalogService({
         fetchImpl,
         token: env?.NOTION_TOKEN,
@@ -126,6 +153,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const registry = createMcpRegistry({
         lifecycle: Object.freeze({
           ...lifecycle,
+          factoryAction: input => factoryAction(input),
           searchCatalog: input => catalog.searchCatalog(input),
           searchKnowledge: input => knowledge.searchKnowledge(input),
           linearListProjects: input => linear.listProjects(input),

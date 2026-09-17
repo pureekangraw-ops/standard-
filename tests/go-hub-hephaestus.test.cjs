@@ -23,6 +23,17 @@ function request(overrides = {}) {
   };
 }
 
+function mergeAdmission() {
+  return {
+    assemblyId: "assembly-1",
+    sourceHeadSha: "integration-head",
+    pullRequestNumber: 49,
+    pullRequestHeadSha: "integration-head",
+    ciHeadSha: "integration-head",
+    ciStatus: "success",
+  };
+}
+
 test("Hephaestus gives one GO the repo slot and queues the next GO", async () => {
   const { createHephaestusState, requestFactorySlot } = await load();
   const initial = createHephaestusState();
@@ -103,13 +114,16 @@ test("Merge admission requires exact Assembly QC PR CI heads and SAFE risk", asy
   const { evaluateFactoryAdmission } = await load();
   const base = {
     slot: "merge",
-    assembly: { status: "ASSEMBLED", integrationHeadSha: "integration-head" },
+    assembly: { id: "assembly-1", status: "ASSEMBLED", integrationHeadSha: "integration-head" },
     assemblyQc: { status: "pass", checkedHeadSha: "integration-head" },
-    pullRequest: { number: 49, headSha: "pr-head" },
-    ci: { status: "success", headSha: "pr-head" },
+    pullRequest: { number: 49, headSha: "integration-head" },
+    ci: { status: "success", headSha: "integration-head" },
     risk: { status: "SAFE", reasons: [] },
   };
   assert.deepEqual(evaluateFactoryAdmission(base), { decision: "ADMIT", reasons: [] });
+  const stalePr = evaluateFactoryAdmission({ ...base, pullRequest: { number: 49, headSha: "other-head" }, ci: { status: "success", headSha: "other-head" } });
+  assert.equal(stalePr.decision, "WAIT");
+  assert.deepEqual(stalePr.reasons, ["PULL_REQUEST_STALE_HEAD"]);
   const staleCi = evaluateFactoryAdmission({ ...base, ci: { status: "success", headSha: "old-head" } });
   assert.equal(staleCi.decision, "WAIT");
   assert.deepEqual(staleCi.reasons, ["CI_STALE_HEAD"]);
@@ -168,18 +182,35 @@ test("slot release promotes the next FIFO job as NEEDS_RECHECK before it can wor
   assert.equal(rechecked.state.repositories["pureekangraw-ops/standard-"].assembly.active.status, "ACTIVE");
 });
 
-test("Merge completion requires post-merge verification before returning to Optician", async () => {
+test("Merge completion requires sealed merge result and post-merge verification before returning to Optician", async () => {
   const { createHephaestusState, requestFactorySlot } = await load();
   const { completeMergeAndReturn } = await loadReturn();
-  const active = requestFactorySlot(createHephaestusState(), request({ slot: "merge" }));
+  const active = requestFactorySlot(createHephaestusState(), request({
+    slot: "merge",
+    mergeAdmission: mergeAdmission(),
+  }));
   assert.throws(() => completeMergeAndReturn(active.state, {
+    repository: "pureekangraw-ops/standard-",
+    goId: "go-a",
+    jobId: "job-a",
+    postMergeVerification: { status: "pass", mainSha: "main-after-merge", checkedAt: "now" },
+  }), /merge result/i);
+
+  const withResult = structuredClone(active.state);
+  withResult.repositories["pureekangraw-ops/standard-"].merge.active.mergeResult = {
+    pullRequestNumber: 49,
+    headSha: "integration-head",
+    mergeSha: "main-after-merge",
+    recordedAt: "now",
+  };
+  assert.throws(() => completeMergeAndReturn(withResult, {
     repository: "pureekangraw-ops/standard-",
     goId: "go-a",
     jobId: "job-a",
     postMergeVerification: { status: "fail" },
   }), /post-merge verification/i);
 
-  const completed = completeMergeAndReturn(active.state, {
+  const completed = completeMergeAndReturn(withResult, {
     repository: "pureekangraw-ops/standard-",
     goId: "go-a",
     jobId: "job-a",
@@ -189,13 +220,9 @@ test("Merge completion requires post-merge verification before returning to Opti
       checkedAt: "2026-09-15T23:30:00+07:00",
     },
   });
-  assert.deepEqual(completed.returnPacket, {
-    destination: "optician",
-    reason: "FACTORY_REALITY_CHANGED",
-    repository: "pureekangraw-ops/standard-",
-    goId: "go-a",
-    jobId: "job-a",
-    mainSha: "main-after-merge",
-  });
+  assert.equal(completed.returnPacket.destination, "optician");
+  assert.equal(completed.returnPacket.reason, "FACTORY_REALITY_CHANGED");
+  assert.equal(completed.returnPacket.mainSha, "main-after-merge");
+  assert.deepEqual(completed.returnPacket.mergeGate.pullRequest, { number: 49, headSha: "integration-head" });
   assert.equal(completed.state.repositories["pureekangraw-ops/standard-"].merge.active, null);
 });

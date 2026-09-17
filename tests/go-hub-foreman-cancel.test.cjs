@@ -14,7 +14,7 @@ function memoryContext() {
 function mergeRequest(overrides = {}) {
   return {
     repository: "pureekangraw-ops/standard-", slot: "merge", goId: "go-old", jobId: "job-pr-69",
-    assembly: { status: "ASSEMBLED", integrationHeadSha: "head-69" },
+    assembly: { id: "assembly-69", status: "ASSEMBLED", integrationHeadSha: "head-69" },
     assemblyQc: { status: "pass", checkedHeadSha: "head-69" },
     pullRequest: { number: 69, headSha: "head-69" },
     ci: { status: "success", headSha: "head-69" },
