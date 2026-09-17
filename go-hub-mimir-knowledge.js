@@ -1,3 +1,4 @@
+export { createMimirStructuredRetriever } from "./go-hub-mimir-retriever.js";
 const PASS = "PASS";
 const WAIT = "WAIT";
 
