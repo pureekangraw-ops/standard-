@@ -25,13 +25,28 @@ async function loadWorker(tag) {
   return import(`${workerUrl}?owner-auth=${tag}-${Date.now()}`);
 }
 
+function browserWorkContext() {
+  return {
+    workId: "WORK-BROWSER-AUTH",
+    checkpointId: "CENTRE-BROWSER-AUTH",
+    returnAddress: "CENTRE-BROWSER-AUTH",
+    destination: "destination://browser",
+    task: "Read protected browser reality",
+    requestedResult: "Return authenticated page evidence",
+    lensReference: "lens://browser-owner-auth",
+  };
+}
+
 function request(passcode) {
   const headers = { "content-type": "application/json" };
   if (passcode !== undefined) headers["x-go-owner-passcode"] = passcode;
   return new Request("https://hub.example/hub/api/browser/read", {
     method: "POST",
     headers,
-    body: JSON.stringify({ url: "https://shop.example.com/product/new" }),
+    body: JSON.stringify({
+      url: "https://shop.example.com/product/new",
+      workContext: browserWorkContext(),
+    }),
   });
 }
 
