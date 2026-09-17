@@ -6,6 +6,7 @@ const { pathToFileURL } = require("node:url");
 
 const controllerUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-factory-controller.mjs")).href;
 const factoryMcpUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-factory-mcp-worker.mjs")).href;
+const registryUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-mcp-registry.mjs")).href;
 
 function memoryContext() {
   const values = new Map();
@@ -112,4 +113,15 @@ test("guarded merge automatically parks successful GitHub merge evidence in the 
   assert.equal(calls[0].mainSha, "main-after-merge");
   assert.equal(calls[0].goId, "go-a");
   assert.equal(calls[0].jobId, "job-merge");
+});
+
+test("MCP Foreman contract exposes park and verify waiting-room actions", async () => {
+  const { createMcpRegistry } = await import(`${registryUrl}?${Date.now()}`);
+  const noop = async () => new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+  const registry = createMcpRegistry({ lifecycle: new Proxy({}, { get: () => noop }) });
+  const tool = registry.listTools().find(item => item.name === "go_hub_factory_foreman");
+  assert.ok(tool);
+  assert.deepEqual(tool.inputSchema.properties.action.enum, ["request", "park", "verify", "release", "state"]);
+  assert.ok(tool.inputSchema.properties.mainSha);
+  assert.ok(tool.inputSchema.properties.mergedAt);
 });
