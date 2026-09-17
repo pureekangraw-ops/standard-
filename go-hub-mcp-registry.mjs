@@ -1,5 +1,6 @@
 const str = { type: "string", minLength: 1 };
 const int = { type: "integer", minimum: 1 };
+const revision = { type: "integer", minimum: 0 };
 const obj = { type: "object" };
 const priority = { type: "integer", minimum: 0, maximum: 4 };
 const nullableStr = { anyOf: [{ type: "string" }, { type: "null" }] };
@@ -35,6 +36,7 @@ const definitions = [
   def("go_hub_get_ci", "Read exact-head CI evidence.", "getCI", schema({ repository: str, sha: str }, ["repository", "sha"]), ann(true)),
   def("go_hub_get_failure_evidence", "Read failed jobs and concise logs.", "getFailureEvidence", schema({ repository: str, runId: int }, ["repository", "runId"]), ann(true)),
   def("go_hub_rerun_failed_jobs", "Rerun failed workflow jobs.", "rerunFailed", schema({ repository: str, runId: int, workContext }, ["repository", "runId", "workContext"]), ann(false)),
+  def("go_hub_factory_action", "Execute one governed Factory task action through durable task authority.", "factoryAction", schema({ taskId: str, action: { type: "string", enum: ["inspect", "create_branch", "write", "delete", "compare", "open_pr", "check_ci", "diagnose_failure"] }, input: obj, expectedRevision: revision, workContext }, ["taskId", "action", "input", "workContext"]), ann(false)),
   def("go_hub_factory_foreman", "Request, cancel, park, verify, release, or inspect Hephaestus work.", "factoryForeman", schema({ action: { type: "string", enum: ["request", "cancel", "park", "verify", "release", "state"] }, repository: str, slot: { type: "string", enum: ["assembly", "merge"] }, goId: str, jobId: str, mainSha: str, mergedAt: str, readyGate: obj, piece: obj, assembly: obj, assemblyQc: obj, pullRequest: obj, ci: obj, risk: obj, cancellation: obj, postMergeVerification: obj, workContext }, ["action", "repository"]), ann(false)),
   def("go_hub_merge_pull_request", "Merge with Foreman ownership and exact-head CI.", "mergePullRequest", schema({ repository: str, number: int, expectedHeadSha: str, goId: str, jobId: str, method: { type: "string", enum: ["merge", "squash", "rebase"] }, workContext }, ["repository", "number", "expectedHeadSha", "goId", "jobId", "workContext"]), ann(false, true)),
   def("go_hub_get_workflow_runs", "Observe workflow and deployment runs.", "getWorkflowRuns", schema({ repository: str, sha: str }, ["repository", "sha"]), ann(true)),
@@ -46,7 +48,7 @@ const definitions = [
   def("go_hub_linear_update_issue", "Update an in-team Linear issue after a scoped read.", "linearUpdateIssue", schema({ identifier: str, title: str, description: nullableStr, priority, stateId: nullableStr, projectId: nullableStr, workContext }, ["identifier", "workContext"]), ann(false)),
 ];
 
-const factoryTools = new Set(["go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_merge_pull_request"]);
+const factoryTools = new Set(["go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_merge_pull_request", "go_hub_factory_action"]);
 const mimirTools = new Set(["go_hub_mimir_search_catalog", "go_hub_mimir_search_knowledge"]);
 const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linear_update_issue"]);
 
@@ -56,6 +58,12 @@ function assertArgs(definition, args) {
     if (!(field in args) || args[field] === "" || args[field] == null) throw new Error("missing required argument: " + field);
   }
   for (const key of Object.keys(args)) if (!Object.hasOwn(definition.inputSchema.properties, key)) throw new Error("unknown argument: " + key);
+  const actionSchema = definition.inputSchema.properties.action;
+  if (actionSchema?.enum && args.action != null && !actionSchema.enum.includes(args.action)) throw new Error("invalid action");
+  if (definition.inputSchema.properties.expectedRevision && args.expectedRevision != null &&
+      (!Number.isSafeInteger(args.expectedRevision) || args.expectedRevision < 0)) {
+    throw new Error("invalid expectedRevision");
+  }
 }
 
 function assertWork(value, destination) {
