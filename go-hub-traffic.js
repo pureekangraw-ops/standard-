@@ -1,19 +1,35 @@
+const TRAFFIC_STATUSES = Object.freeze(["NORMAL", "BUSY", "FULL", "ERROR", "UNKNOWN", "STALE"]);
+const TRAFFIC_STATUS_SET = new Set(TRAFFIC_STATUSES);
+const SUMMARY_FIELDS = new Set(["station", "status", "active", "queue", "blocked", "lastUpdate"]);
+
 function required(value, label) {
   const text = String(value || "").trim();
   if (!text) throw new Error(`${label} is required`);
   return text;
 }
 
-function queueDepth(value) {
+function status(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!TRAFFIC_STATUS_SET.has(normalized)) throw new Error(`unsupported traffic status: ${normalized || "UNKNOWN"}`);
+  return normalized;
+}
+
+function nullableCount(value, label) {
   if (value == null || value === "") return null;
   const number = Number(value);
-  if (!Number.isSafeInteger(number) || number < 0) throw new Error("traffic queue must be a non-negative integer or null");
+  if (!Number.isSafeInteger(number) || number < 0) throw new Error(`${label} must be a non-negative integer or null`);
   return number;
 }
 
+function nullableBlocked(value) {
+  if (value == null) return null;
+  if (typeof value !== "boolean") throw new Error("traffic blocked must be boolean or null");
+  return value;
+}
+
 function iso(value) {
-  const text = required(value, "traffic updatedAt");
-  if (Number.isNaN(new Date(text).getTime())) throw new Error("traffic updatedAt must be an ISO date");
+  const text = required(value, "traffic lastUpdate");
+  if (Number.isNaN(new Date(text).getTime())) throw new Error("traffic lastUpdate must be an ISO date");
   return text;
 }
 
@@ -30,12 +46,16 @@ function maxAge(value) {
 }
 
 export function createTrafficSummary(input = {}) {
+  for (const key of Object.keys(input)) {
+    if (!SUMMARY_FIELDS.has(key)) throw new Error(`unknown traffic summary field: ${key}`);
+  }
   return Object.freeze({
     station: required(input.station, "traffic station"),
-    activity: required(input.activity, "traffic activity"),
-    queue: queueDepth(input.queue),
-    blocker: String(input.blocker || "").trim() || null,
-    updatedAt: iso(input.updatedAt),
+    status: status(input.status),
+    active: nullableCount(input.active, "traffic active"),
+    queue: nullableCount(input.queue, "traffic queue"),
+    blocked: nullableBlocked(input.blocked),
+    lastUpdate: iso(input.lastUpdate),
   });
 }
 
@@ -62,17 +82,19 @@ export function createTrafficSnapshot({
     if (!summary) {
       return Object.freeze({
         station,
-        activity: "UNKNOWN",
+        status: "UNKNOWN",
+        active: null,
         queue: null,
-        blocker: null,
-        updatedAt: null,
-        freshness: "UNKNOWN",
+        blocked: null,
+        lastUpdate: null,
       });
     }
-    const ageMs = Math.max(0, clock.getTime() - new Date(summary.updatedAt).getTime());
+    const ageMs = Math.max(0, clock.getTime() - new Date(summary.lastUpdate).getTime());
     return Object.freeze({
       ...summary,
-      freshness: ageMs > threshold ? "STALE" : "CURRENT",
+      status: ageMs > threshold ? "STALE" : summary.status,
     });
   }));
 }
+
+export { TRAFFIC_STATUSES };
