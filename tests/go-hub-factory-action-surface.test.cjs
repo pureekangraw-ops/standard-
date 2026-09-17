@@ -112,3 +112,17 @@ test("browser workspace calls Factory action through same-origin gateway without
     workContext: { workId: "WORK-84", checkpointId: "CENTRE-84", returnAddress: "CENTRE-84", destination: "destination://factory", task: "govern Factory action", requestedResult: "durable task authority", lensReference: "factory://unified" },
   });
 });
+
+
+test("current edge worker owns the governed Factory action route and durable binding", () => {
+  const fs = require("node:fs");
+  const edge = fs.readFileSync(path.join(root, "go-hub-edge-worker.mjs"), "utf8");
+  const wrangler = fs.readFileSync(path.join(root, "wrangler.go-hub.jsonc"), "utf8");
+  assert.match(edge, /FACTORY_ACTION_PATH = "\/hub\/api\/github-workspace\/factory-action"/);
+  assert.match(edge, /assertFactoryWorkContext/);
+  assert.match(edge, /GO_HUB_FACTORY_STATE/);
+  assert.match(edge, /GoHubFactoryState/);
+  assert.match(wrangler, /"name": "GO_HUB_FACTORY_STATE"/);
+  assert.match(wrangler, /"class_name": "GoHubFactoryState"/);
+  assert.match(wrangler, /"tag": "v2-factory-task-state"/);
+});
