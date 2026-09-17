@@ -16,17 +16,31 @@ function response(payload, status = 200) {
   });
 }
 
-test("workspace can create a new file without an expected blob SHA", async () => {
+function factoryWorkContext() {
+  return {
+    workId: "WORK-FILE-CREATE",
+    checkpointId: "CENTRE-FILE-CREATE",
+    returnAddress: "CENTRE-FILE-CREATE",
+    destination: "destination://factory",
+    task: "Create a file through Factory",
+    requestedResult: "New file exists on task branch",
+    lensReference: "lens://file-create",
+  };
+}
+
+test("workspace can create a new file without an expected blob SHA when Factory-routed", async () => {
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url: String(url), init });
     return response({ ok: true, commit: "commit-new", sha: "blob-new" });
   };
   const { createGitHubWorkspace } = await import(`${workspaceUrl}?create=${Date.now()}`);
+  const workContext = factoryWorkContext();
   const workspace = createGitHubWorkspace({
     gatewayBase: "/hub/api/github-workspace",
     repository,
     fetchImpl,
+    workContext,
   });
 
   assert.deepEqual(
@@ -38,6 +52,7 @@ test("workspace can create a new file without an expected blob SHA", async () =>
     path: "src/new.js",
     content: "hello",
     branch: "feature-create",
+    workContext,
   });
 });
 
