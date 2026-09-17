@@ -29,6 +29,17 @@ function bindWorkContext(result, request) {
   if (job) job.workContext = structuredClone(request.workContext);
   return { state: Object.freeze(state), outcome: result.outcome };
 }
+function assertClosedUnmergedCancellation(input = {}) {
+  const cancellation = input.cancellation;
+  const pr = cancellation?.pullRequest;
+  if (String(cancellation?.reason || "") !== "PULL_REQUEST_CLOSED_UNMERGED" ||
+      !String(cancellation?.observedAt || "").trim() ||
+      String(pr?.state || "").toLowerCase() !== "closed" || pr?.merged !== false ||
+      !Number.isInteger(pr?.number) || pr.number < 1 || !String(pr?.headSha || "").trim()) {
+    throw new Error("closed unmerged pull request evidence is required");
+  }
+  return { reason: "PULL_REQUEST_CLOSED_UNMERGED", observedAt: String(cancellation.observedAt), pullRequest: structuredClone(pr) };
+}
 
 export class HephaestusForeman {
   constructor(ctx, env) { this.ctx = ctx; this.env = env; }
@@ -48,6 +59,35 @@ export class HephaestusForeman {
       ? admitQueuedFactorySlot(current, request)
       : requestFactorySlot(current, request);
     result = bindWorkContext(result, request);
+    await this.saveState(result.state);
+    return result;
+  }
+
+  async cancelWork(input = {}) {
+    const repository = required(input.repository, "repository");
+    const slot = validSlot(input.slot);
+    const goId = required(input.goId, "goId");
+    const jobId = required(input.jobId, "jobId");
+    const cancellation = assertClosedUnmergedCancellation(input);
+    const current = await this.loadState();
+    const active = current?.repositories?.[repository]?.[slot]?.active;
+    if (!active || active.goId !== goId || active.jobId !== jobId) {
+      throw new Error("active slot owner does not match cancellation");
+    }
+    if (slot !== "merge" || Number(active?.jobId?.match(/\d+/)?.[0] || 0) !== cancellation.pullRequest.number) {
+      throw new Error("cancellation pull request does not match active merge work");
+    }
+    const released = releaseFactorySlot(current, { repository, slot, goId, jobId });
+    const result = {
+      state: released.state,
+      outcome: Object.freeze({
+        status: "CANCELLED",
+        reason: cancellation.reason,
+        observedAt: cancellation.observedAt,
+        promotedJobId: released.outcome.promotedJobId,
+        nextAction: released.outcome.nextAction,
+      }),
+    };
     await this.saveState(result.state);
     return result;
   }
@@ -115,6 +155,7 @@ export class HephaestusForeman {
       const body = request.method === "GET" ? {} : await request.json().catch(() => null);
       if (request.method !== "GET" && (!body || typeof body !== "object" || Array.isArray(body))) return json({ code: "INVALID_JSON" }, 400);
       if (request.method === "POST" && url.pathname === "/request") return json(await this.requestSlot(body));
+      if (request.method === "POST" && url.pathname === "/cancel") return json(await this.cancelWork(body));
       if (request.method === "POST" && url.pathname === "/park") return json(await this.parkMerged(body));
       if (request.method === "POST" && url.pathname === "/verify") return json(await this.verifyWaitingRoom(body));
       if (request.method === "POST" && url.pathname === "/release") return json(await this.releaseSlot(body));
@@ -146,6 +187,7 @@ export function createFactoryControllerService({ namespace } = {}) {
       const repository = String(input.repository || "").trim();
       if (!repository) return Promise.resolve(json({ code: "repository is required" }, 400));
       if (input.action === "request") return call(namespace, "/request", input);
+      if (input.action === "cancel") return call(namespace, "/cancel", input);
       if (input.action === "park") return call(namespace, "/park", input);
       if (input.action === "verify") return call(namespace, "/verify", input);
       if (input.action === "release") return call(namespace, "/release", input);
