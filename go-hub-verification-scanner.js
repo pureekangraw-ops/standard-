@@ -12,20 +12,18 @@ const baseStations=[
 function signingStation(t){
   if(String(t.buildArtifact?.kind||"").toLowerCase()!=="apk")return null;
   return ["signing-gate","reseal-signing-gate",truth=>Boolean(
-    truth.signingGate?.state==="SIGNING_GATE_READY"&&
-    truth.signingGate.sourceArtifactId===truth.buildArtifact?.id&&
-    truth.signingGate.unsignedApkSha256===truth.buildArtifact?.digest&&
-    truth.signingGate.sourceSha===truth.buildArtifact?.sourceHeadSha&&
-    truth.signedArtifact?.status==="SIGNATURE_VERIFIED"&&
-    truth.signedArtifact.sourceArtifactId===truth.buildArtifact?.id&&
-    truth.signedArtifact.sourceHeadSha===truth.buildArtifact?.sourceHeadSha&&
-    truth.signedArtifact.digest&&
+    truth.signingGate?.state==="SIGNING_GATE_READY"&&truth.signingGate.sourceArtifactId===truth.buildArtifact?.id&&
+    truth.signingGate.unsignedApkSha256===truth.buildArtifact?.digest&&truth.signingGate.sourceSha===truth.buildArtifact?.sourceHeadSha&&
+    truth.signedArtifact?.status==="SIGNATURE_VERIFIED"&&truth.signedArtifact.sourceArtifactId===truth.buildArtifact?.id&&
+    truth.signedArtifact.sourceHeadSha===truth.buildArtifact?.sourceHeadSha&&truth.signedArtifact.digest&&
     truth.signedArtifact.certificateSha256===truth.signingGate.expectedCertificateSha256
   )];
 }
-function productQcStation(t){return ["product-qc","rerun-product-qc",truth=>{const artifact=productArtifact(truth);return Boolean(truth.factoryStage==="PRODUCT_VERIFIED"&&artifact&&truth.productQc?.status==="pass"&&truth.productQc.artifactId===artifact.id&&truth.productQc.artifactDigest===artifact.digest);}];}
+function productQcStation(){return ["product-qc","rerun-product-qc",truth=>{const artifact=productArtifact(truth);return Boolean(artifact&&truth.productQc?.status==="pass"&&truth.productQc.artifactId===artifact.id&&truth.productQc.artifactDigest===artifact.digest);}];}
+function publicationStation(){return ["publication","republish-product",truth=>{const artifact=productArtifact(truth),p=truth.publication,d=p?.deployment;return Boolean(artifact&&p?.status==="PUBLISHED"&&p.artifactId===artifact.id&&p.artifactDigest===artifact.digest&&p.sourceSha===artifact.sourceHeadSha&&d?.status==="success"&&d.sha===p.sourceSha&&Number(d.runId||0)>0&&String(d.target||"").trim());}];}
+function observationStation(){return ["observation","reobserve-product",truth=>{const artifact=productArtifact(truth),p=truth.publication,o=truth.observation;return Boolean(truth.factoryStage==="OBSERVED"&&artifact&&o?.status==="pass"&&o.artifactId===artifact.id&&o.artifactDigest===artifact.digest&&Number(o.publicationRunId||0)===Number(p?.deployment?.runId||0)&&String(o.target||"").trim()&&String(o.kind||"").trim()&&o.evidence!=null&&String(o.observedAt||"").trim());}];}
 export function scanFactoryTruth(truth={}){
-  const stations=[...baseStations];const signing=signingStation(truth);if(signing)stations.push(signing);stations.push(productQcStation(truth));
+  const stations=[...baseStations];const signing=signingStation(truth);if(signing)stations.push(signing);stations.push(productQcStation(),publicationStation(),observationStation());
   const checked=[];for(const [station,recoveryAction,valid] of stations){checked.push(station);if(!valid(truth))return Object.freeze({status:"FIRST_BROKEN_TRUTH",station,reason:`${station} truth is missing, failed, or stale`,recoveryAction,checkedStations:Object.freeze(checked)});}
   const artifact=productArtifact(truth);return Object.freeze({status:"VERIFIED_CHAIN",artifactId:String(artifact.id),artifactDigest:String(artifact.digest),blueprintRef:String(truth.blueprint.ref),checkedStations:Object.freeze(checked),scannedAt:new Date().toISOString()});
 }
