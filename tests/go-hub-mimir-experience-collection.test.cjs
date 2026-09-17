@@ -89,3 +89,28 @@ test("MIMIR Experience never selects an OUTDATED lesson over a usable RECORDED l
   assert.equal(result.status, "PASS");
   assert.equal(result.records[0].id, "lesson-current");
 });
+
+test("MIMIR Experience surfaces DISPUTED lessons as conflict evidence instead of choosing one", async () => {
+  const module = await import(libraryUrl + "?experience-disputed=" + Date.now());
+  const searchExperience = module.createMimirExperienceSearchPort({
+    readExperience: async () => [{
+      id: "lesson-disputed",
+      context: "runtime binding mismatch",
+      action: "inspect binding",
+      finding: "two explanations remain possible",
+      resolution: "do not choose without evidence",
+      reusableWhen: "runtime binding mismatch",
+      sourceTaskId: "task-conflict",
+      sourceArtifactDigest: "sha256:conflict",
+      recordedAt: "2026-09-17T01:00:00Z",
+      status: "DISPUTED",
+    }],
+  });
+
+  const result = await searchExperience({ task: "runtime binding mismatch" });
+
+  assert.equal(result.status, "WAIT");
+  assert.equal(result.waitReason, "CONFLICT");
+  assert.deepEqual(result.records, []);
+  assert.deepEqual(result.evidence.conflictIds, ["lesson-disputed"]);
+});
