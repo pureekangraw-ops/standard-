@@ -39,3 +39,16 @@ test("MIMIR Experience retrieves reusable lessons with provenance and no automat
   assert.equal(result.records[0].sourceArtifactDigest, "sha256:abc");
   assert.equal(result.records[0].canAutoPromoteToKnowledge, false);
 });
+
+test("MIMIR Experience source failure fails closed as SOURCE_UNAVAILABLE", async () => {
+  const module = await import(libraryUrl + "?experience-source-failure=" + Date.now());
+  const searchExperience = module.createMimirExperienceSearchPort({
+    readExperience: async () => { throw new Error("provider offline"); },
+  });
+
+  const result = await searchExperience({ task: "anything", requestedResult: "reusable lesson" });
+
+  assert.equal(result.status, "WAIT");
+  assert.equal(result.waitReason, "SOURCE_UNAVAILABLE");
+  assert.deepEqual(result.records, []);
+});
