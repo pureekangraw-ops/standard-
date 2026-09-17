@@ -10,6 +10,40 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+
+function sealedMergeGate(current, repository, goId, jobId) {
+  const active = current?.repositories?.[repository]?.merge?.active;
+  if (!active || active.goId !== goId || active.jobId !== jobId || active.status !== "ACTIVE") {
+    throw new Error("active merge slot owner does not match release");
+  }
+  const admission = active.mergeAdmission;
+  if (!admission?.assemblyId || !admission?.sourceHeadSha || !admission?.pullRequestNumber ||
+      !admission?.pullRequestHeadSha || admission.ciStatus !== "success" || !admission?.ciHeadSha) {
+    throw new Error("sealed merge admission truth is required");
+  }
+  const mergeResult = active.mergeResult;
+  if (!mergeResult?.mergeSha || !mergeResult?.headSha || !mergeResult?.pullRequestNumber) {
+    throw new Error("sealed merge result is required before release");
+  }
+  if (mergeResult.headSha !== admission.pullRequestHeadSha ||
+      mergeResult.headSha !== admission.sourceHeadSha ||
+      mergeResult.pullRequestNumber !== admission.pullRequestNumber) {
+    throw new Error("sealed merge result does not match admission truth");
+  }
+  return {
+    status: "MERGED",
+    assemblyId: String(admission.assemblyId),
+    sourceHeadSha: String(admission.sourceHeadSha),
+    pullRequest: { number: Number(admission.pullRequestNumber), headSha: String(admission.pullRequestHeadSha) },
+    ci: { status: "success", headSha: String(admission.ciHeadSha) },
+    merge: {
+      headSha: String(mergeResult.headSha),
+      mergeSha: String(mergeResult.mergeSha),
+      pullRequestNumber: Number(mergeResult.pullRequestNumber),
+    },
+  };
+}
+
 function waitingRoomFor(state, repository) {
   const repositoryState = state.repositories?.[repository];
   if (!repositoryState) throw new Error("queue lane not found");
@@ -23,6 +57,10 @@ export function parkMergedWork(current, input = {}) {
   const jobId = required(input.jobId, "jobId");
   const mainSha = required(input.mainSha, "main sha");
   const mergedAt = required(input.mergedAt, "merged at");
+  const mergeGate = sealedMergeGate(current, repository, goId, jobId);
+  if (mainSha !== mergeGate.merge.mergeSha) {
+    throw new Error("parked main sha does not match sealed merge result");
+  }
 
   const released = releaseFactorySlot(current, {
     repository,
@@ -42,6 +80,7 @@ export function parkMergedWork(current, input = {}) {
     status: "WAITING_VERIFICATION",
     mainSha,
     mergedAt,
+    mergeGate: clone(mergeGate),
   });
 
   return Object.freeze({
@@ -74,6 +113,16 @@ export function completeWaitingRoomVerification(current, input = {}) {
   }
   room.splice(index, 1);
 
+  const mergeGate = Object.freeze({
+    ...clone(parked.mergeGate || {}),
+    status: "MERGED_VERIFIED",
+    postMergeVerification: Object.freeze({
+      status: "pass",
+      mainSha: String(verification.mainSha),
+      checkedAt: String(verification.checkedAt),
+    }),
+  });
+
   return Object.freeze({
     state: Object.freeze(state),
     outcome: Object.freeze({ status: "VERIFIED" }),
@@ -84,6 +133,7 @@ export function completeWaitingRoomVerification(current, input = {}) {
       goId,
       jobId,
       mainSha: String(verification.mainSha),
+      mergeGate,
     }),
   });
 }
