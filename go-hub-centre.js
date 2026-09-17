@@ -118,6 +118,15 @@ export function receiveReturn(work, returned = {}) {
   return snapshot(next);
 }
 
+export function resumeReturnedWork(work, { reuseFit = false } = {}) {
+  assertState(work, CENTRE_STATES.RETURNED);
+  const next = structuredClone(work);
+  next.status = CENTRE_STATES.READY;
+  next.handoff = null;
+  if (!reuseFit) next.lens = null;
+  return snapshot(next);
+}
+
 export function createTestDestinationAdapter(handler = envelope => ({ received: envelope.task })) {
   if (typeof handler !== "function") throw new Error("test destination handler is required");
   return freeze({
@@ -154,6 +163,10 @@ export function createCentrePassage() {
 
     return(work, returned = {}) {
       return receiveReturn(work, returned);
+    },
+
+    resume(work, input = {}) {
+      return resumeReturnedWork(work, input);
     },
   });
 }
