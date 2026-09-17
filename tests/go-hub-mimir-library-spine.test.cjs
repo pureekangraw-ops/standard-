@@ -8,6 +8,7 @@ const { pathToFileURL } = require("node:url");
 const root = path.resolve(__dirname, "..");
 const mimirUrl = pathToFileURL(path.join(root, "go-hub-mimir-destination.js")).href;
 const directoryUrl = pathToFileURL(path.join(root, "go-hub-mimir-directory.js")).href;
+const libraryUrl = pathToFileURL(path.join(root, "go-hub-mimir-library.js")).href;
 const knowledgeUrl = pathToFileURL(path.join(root, "go-hub-mimir-knowledge.js")).href;
 
 test("MIMIR directory resolves an explicit collection intent without returning content records", async () => {
@@ -84,15 +85,20 @@ test("MIMIR structured retriever accepts an explicit tokenizer so catalog matchi
 });
 
 test("MIMIR library invokes only the department chosen by the route-only directory", async () => {
-  const module = await import(directoryUrl + "?library=" + Date.now());
-  assert.equal(typeof module.createMimirLibrary, "function");
+  const directoryModule = await import(directoryUrl + "?library-directory=" + Date.now());
+  const libraryModule = await import(libraryUrl + "?library-core=" + Date.now());
+  assert.equal(typeof directoryModule.createMimirDirectoryResolver, "function");
+  assert.equal(typeof libraryModule.createMimirLibraryCore, "function");
 
   const calls = [];
-  const library = module.createMimirLibrary({
+  const resolveDirectory = directoryModule.createMimirDirectoryResolver({
     routes: [
       { id: "catalog", intents: ["CATALOG"], route: "mimir://catalog", status: "ACTIVE", permission: "ALLOWED" },
       { id: "knowledge", intents: ["KNOWLEDGE"], route: "mimir://knowledge", status: "ACTIVE", permission: "ALLOWED" },
     ],
+  });
+  const library = libraryModule.createMimirLibraryCore({
+    resolveDirectory,
     departments: {
       catalog: async query => {
         calls.push(["catalog", query]);
