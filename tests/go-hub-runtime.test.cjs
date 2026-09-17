@@ -34,3 +34,61 @@ test("V5 Traffic summary is a small read-only station observation, not routing a
   }
   assert.equal(Object.isFrozen(summary),true);
 });
+
+test("V5 Traffic snapshot marks current, stale, and missing station reality without inventing work",async()=>{
+  const module=await import(runtimeUrl+"?traffic-snapshot="+Date.now());
+  assert.equal(typeof module.createTrafficSnapshot,"function");
+  const current=module.createTrafficSummary({
+    station:"factory",
+    activity:"building",
+    queue:1,
+    blocker:null,
+    updatedAt:"2026-09-17T10:55:00Z",
+  });
+  const stale=module.createTrafficSummary({
+    station:"mimir",
+    activity:"indexing",
+    queue:0,
+    blocker:null,
+    updatedAt:"2026-09-17T10:00:00Z",
+  });
+  const snapshot=module.createTrafficSnapshot({
+    stations:["factory","mimir","library"],
+    summaries:[stale,current],
+    now:new Date("2026-09-17T11:00:00Z"),
+    staleAfterMs:15*60*1000,
+  });
+  assert.deepEqual(snapshot,[
+    {
+      station:"factory",
+      activity:"building",
+      queue:1,
+      blocker:null,
+      updatedAt:"2026-09-17T10:55:00Z",
+      freshness:"CURRENT",
+    },
+    {
+      station:"mimir",
+      activity:"indexing",
+      queue:0,
+      blocker:null,
+      updatedAt:"2026-09-17T10:00:00Z",
+      freshness:"STALE",
+    },
+    {
+      station:"library",
+      activity:"UNKNOWN",
+      queue:null,
+      blocker:null,
+      updatedAt:null,
+      freshness:"UNKNOWN",
+    },
+  ]);
+  assert.equal(Object.isFrozen(snapshot),true);
+  assert.equal(snapshot.every(item=>Object.isFrozen(item)),true);
+  for(const item of snapshot){
+    for(const key of ["gate","permission","allowedToProceed","nextStation","route"]){
+      assert.equal(Object.hasOwn(item,key),false,`${key} must not exist on Traffic snapshot`);
+    }
+  }
+});
