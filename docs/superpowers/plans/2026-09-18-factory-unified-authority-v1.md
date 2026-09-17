@@ -38,7 +38,7 @@ Hub seams must be integrated separately and only after Factory core is green.
 - [x] Run exact-head STANDARD Safety Gate
 - [x] Repair failures until green
 - [x] Open one consolidation PR to main
-- [ ] Mark old PRs superseded only after final checklist commit is green
+- [x] Mark old PRs superseded after consolidation evidence is green
 
 
 ## Verification checkpoint
@@ -48,3 +48,5 @@ Hub seams must be integrated separately and only after Factory core is green.
 - Tests: 404 passed / 0 failed
 - Deploy gate: PASS
 - GO Browser review artifact build/upload: PASS
+
+- Historical PRs #43, #46, #68, #72 are labeled SUPERSEDED by #84 and intentionally left open as evidence.
