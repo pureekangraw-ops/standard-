@@ -26,6 +26,38 @@ function normalizeExperienceRecord(record = {}) {
   });
 }
 
+export function proposeKnowledgeCandidateFromExperience(record = {}, { authorized = false } = {}) {
+  const lesson = normalizeExperienceRecord(record);
+  if (authorized !== true) {
+    return Object.freeze({ status: "WAIT", waitReason: "NEED_AUTHORITY", writePerformed: false, candidate: null });
+  }
+  if (lesson.status !== "RECORDED") {
+    return Object.freeze({ status: "WAIT", waitReason: "EXPERIENCE_NOT_PROMOTABLE", writePerformed: false, candidate: null });
+  }
+  if (!lesson.id || !lesson.finding || !lesson.sourceTaskId || !lesson.sourceArtifactDigest) {
+    return Object.freeze({ status: "WAIT", waitReason: "MISSING_DECISION_CRITICAL_FIELD", writePerformed: false, candidate: null });
+  }
+  return Object.freeze({
+    status: "PASS",
+    waitReason: null,
+    writePerformed: false,
+    candidate: Object.freeze({
+      title: lesson.context || lesson.id,
+      topic: lesson.reusableWhen || lesson.context,
+      claim: lesson.finding,
+      summary: lesson.resolution,
+      knowledgeStatus: "CANDIDATE",
+      verificationState: "PENDING",
+      sourceId: lesson.sourceTaskId,
+      sourceUrl: `experience://${lesson.id}`,
+      evidence: lesson.sourceArtifactDigest,
+      publishedAt: lesson.recordedAt,
+      supersedes: "",
+      tags: "experience-candidate",
+    }),
+  });
+}
+
 export function createMimirExperienceSearchPort({ readExperience } = {}) {
   if (typeof readExperience !== "function") throw new TypeError("MIMIR experience reader is required");
 
