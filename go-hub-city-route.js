@@ -96,17 +96,13 @@ export function enterWorkLoop(fit = {}) {
   });
 }
 
-export function routeInbound({ fit = {}, heimdall = {} } = {}) {
+export function routeInbound({ fit = {} } = {}) {
   if (fit.gate !== "PASS") {
     return Object.freeze({ destination: "optician", reason: "FIT_NOT_READY" });
   }
-  const passage = heimdallDecision(heimdall);
-  if (passage.decision !== "PASS") {
-    return Object.freeze({ destination: "heimdall", reason: passage.reason });
-  }
   return Object.freeze({
     destination: "go-work-loop",
-    via: Object.freeze(["optician", "heimdall"]),
+    via: "optician",
     workRoute: String(fit.route || "") || null,
     destinationId: String(fit.destinationId || "") || null,
   });

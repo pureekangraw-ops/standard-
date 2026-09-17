@@ -8,7 +8,7 @@ const { pathToFileURL } = require("node:url");
 const moduleUrl = pathToFileURL(path.resolve(__dirname, "../go-hub-city-route.js")).href;
 const load = () => import(`${moduleUrl}?${Date.now()}-${Math.random()}`);
 
-test("GO City exposes Bifrost transport then Optician then Heimdall before the city", async () => {
+test("GO City exposes Bifrost transport, Optician entry, and Heimdall exit guardian", async () => {
   const { createCityRoute } = await load();
   const city = createCityRoute();
 
@@ -18,17 +18,17 @@ test("GO City exposes Bifrost transport then Optician then Heimdall before the c
   assert.deepEqual(city.entry.responsibilities, ["INTAKE", "LENS", "ROUTE"]);
   assert.equal(city.guardian.id, "heimdall");
   assert.deepEqual(city.guardian.responsibilities, ["SAFETY", "PERMISSION", "STOP"]);
+  assert.equal(city.exit.id, "heimdall");
   assert.equal(city.loop.id, "go-work-loop");
   assert.equal(city.information.id, "mimir");
   assert.equal(city.destinations.factory.role, "building-entry");
 });
 
-test("inbound passage requires Optician fit before Heimdall can admit work to the city", async () => {
+test("inbound passage requires Optician fit and does not invent an Heimdall entry gate", async () => {
   const { routeInbound } = await load();
 
   assert.deepEqual(routeInbound({
     fit: { gate: "WAIT" },
-    heimdall: { decision: "PASS" },
   }), {
     destination: "optician",
     reason: "FIT_NOT_READY",
@@ -36,26 +36,9 @@ test("inbound passage requires Optician fit before Heimdall can admit work to th
 
   assert.deepEqual(routeInbound({
     fit: { gate: "PASS", route: "destination://factory", destinationId: "factory" },
-    heimdall: { decision: "WAIT", reason: "NEED_AUTHORITY" },
-  }), {
-    destination: "heimdall",
-    reason: "NEED_AUTHORITY",
-  });
-
-  assert.deepEqual(routeInbound({
-    fit: { gate: "PASS", route: "destination://factory", destinationId: "factory" },
-    heimdall: { decision: "BLOCK", reason: "SAFETY_STOP" },
-  }), {
-    destination: "heimdall",
-    reason: "SAFETY_STOP",
-  });
-
-  assert.deepEqual(routeInbound({
-    fit: { gate: "PASS", route: "destination://factory", destinationId: "factory" },
-    heimdall: { decision: "PASS" },
   }), {
     destination: "go-work-loop",
-    via: ["optician", "heimdall"],
+    via: "optician",
     workRoute: "destination://factory",
     destinationId: "factory",
   });
