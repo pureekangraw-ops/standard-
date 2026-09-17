@@ -1,3 +1,5 @@
+export { createMimirMemorySearchPort } from "./go-hub-mimir-memory.js";
+
 function wait(reason, directory = null) {
   return Object.freeze({
     status: "WAIT",
