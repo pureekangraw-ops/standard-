@@ -34,14 +34,7 @@ export function createFactoryStationMonitor({ state = {}, repository = "", lastU
     station: "factory",
     assembly,
     merge,
-    traffic: createTrafficSummary({
-      station: "factory",
-      status,
-      active,
-      queue,
-      blocked,
-      lastUpdate,
-    }),
+    traffic: createTrafficSummary({ station: "factory", status, active, queue, blocked, lastUpdate }),
   });
 }
 
@@ -68,6 +61,19 @@ export function createLibraryStationMonitor({ query = "", result = {} } = {}) {
   });
 }
 
+export function createLibraryTrafficSummary({ monitor = {}, lastUpdate } = {}) {
+  const state = String(monitor?.status || "UNKNOWN").trim().toUpperCase();
+  const status = state === "CONFLICT" ? "ERROR" : state === "UNKNOWN" ? "UNKNOWN" : "NORMAL";
+  return createTrafficSummary({
+    station: "library",
+    status,
+    active: null,
+    queue: null,
+    blocked: null,
+    lastUpdate,
+  });
+}
+
 export function createVerificationStationMonitor({ checking = false, report = null } = {}) {
   if (checking) {
     return Object.freeze({ station: "verification", status: "CHECKING", reason: null, evidence: Object.freeze([]) });
@@ -80,5 +86,18 @@ export function createVerificationStationMonitor({ checking = false, report = nu
     status,
     reason: report?.reason == null ? null : String(report.reason),
     evidence: Object.freeze(evidence),
+  });
+}
+
+export function createVerificationTrafficSummary({ monitor = {}, lastUpdate } = {}) {
+  const state = String(monitor?.status || "UNKNOWN").trim().toUpperCase();
+  const status = state === "CHECKING" ? "BUSY" : state === "PASS" ? "NORMAL" : state === "FAIL" ? "ERROR" : "UNKNOWN";
+  return createTrafficSummary({
+    station: "verification",
+    status,
+    active: null,
+    queue: null,
+    blocked: null,
+    lastUpdate,
   });
 }
