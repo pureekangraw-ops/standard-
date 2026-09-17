@@ -85,13 +85,15 @@ function roleForElement(element) {
   return "textbox";
 }
 
-function semanticRoleForElement(element, evidence) {
+function semanticRoleForElement(element, evidence, profile) {
   const type = String(element?.type || element?.getAttribute?.("type") || "").toLowerCase();
   const autocomplete = cleanText(element?.getAttribute?.("autocomplete")).toLowerCase();
   if (type === "password") return "password";
   if (autocomplete.split(/\s+/).includes("one-time-code")) return "otp";
   if (autocomplete.split(/\s+/).some(token => token.startsWith("cc-") || token === "transaction-amount")) return "payment";
-  return semanticRoleForName(evidence.value);
+  const normalizedEvidence = cleanText(evidence.value).toLowerCase();
+  const profileAlias = profile?.semanticAliases?.[normalizedEvidence];
+  return profileAlias || semanticRoleForName(evidence.value);
 }
 
 function optionEvidence(element) {
@@ -126,10 +128,10 @@ function signatureFor(document, element, role, evidence) {
   });
 }
 
-function fieldFromElement(document, element, occurrenceBySignature) {
+function fieldFromElement(document, element, occurrenceBySignature, profile) {
   const role = roleForElement(element);
   const evidence = accessibleNameEvidence(document, element);
-  const semanticRole = semanticRoleForElement(element, evidence);
+  const semanticRole = semanticRoleForElement(element, evidence, profile);
   const signature = signatureFor(document, element, role, evidence);
   const signatureKey = JSON.stringify(signature);
   const occurrence = occurrenceBySignature.get(signatureKey) || 0;
@@ -168,7 +170,7 @@ export function scanLocalDocument({ document, location, title = "", profile } = 
 
   const occurrenceBySignature = new Map();
   const fields = Array.from(document.querySelectorAll(CANDIDATE_SELECTOR))
-    .map(element => fieldFromElement(document, element, occurrenceBySignature));
+    .map(element => fieldFromElement(document, element, occurrenceBySignature, profile));
   const pathname = normalizedPathname(url.pathname);
   const signatures = fields.map(field => field.signature);
   const fingerprintSource = {
