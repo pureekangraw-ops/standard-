@@ -33,7 +33,7 @@ test("Code capability exposes machine-usable workstation lifecycle state", async
   const workspace = {
     inspect() {}, listTree() {}, listFiles() {}, readText() {}, writeText() {}, deletePath() {},
     createBranch() {}, compare() {}, openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
-    mergePullRequest() {}, getWorkflowRuns() {},
+    mergePullRequest() {}, getWorkflowRuns() {}, factoryAction() {},
   };
   const task = {
     snapshot() {
@@ -44,7 +44,7 @@ test("Code capability exposes machine-usable workstation lifecycle state", async
       };
     },
   };
-  const capability = createCodeCapability({ workspace, task });
+  const capability = createCodeCapability({ workspace, task, controllerReady: true });
   assert.equal(capability.status, "ready");
   assert.equal(capability.task.state, "CI_RUNNING");
   assert.equal(capability.nextAction, "check-ci");
@@ -83,7 +83,7 @@ test("Code capability projects deployment evidence from the task snapshot", asyn
   const workspace = {
     inspect() {}, listTree() {}, listFiles() {}, readText() {}, writeText() {}, deletePath() {},
     createBranch() {}, compare() {}, openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
-    mergePullRequest() {}, getWorkflowRuns() {},
+    mergePullRequest() {}, getWorkflowRuns() {}, factoryAction() {},
   };
   const deployment = { status: "success", runId: 34809615501 };
   const task = {
@@ -96,7 +96,7 @@ test("Code capability projects deployment evidence from the task snapshot", asyn
       };
     },
   };
-  const capability = createCodeCapability({ workspace, task });
+  const capability = createCodeCapability({ workspace, task, controllerReady: true });
   assert.deepEqual(capability.deploy, deployment);
 });
 
@@ -144,12 +144,15 @@ test("Code capability does not claim full readiness when PR, CI, merge, or deplo
   const fullWorkspace = {
     ...partialWorkspace,
     openPullRequest() {}, getPullRequest() {}, getCI() {}, rerunFailed() {},
-    mergePullRequest() {}, getWorkflowRuns() {},
+    mergePullRequest() {}, getWorkflowRuns() {}, factoryAction() {},
   };
-  const full = createCodeCapability({ workspace: fullWorkspace });
-  assert.equal(full.status, "ready");
-  assert.equal(full.canPullRequest, true);
-  assert.equal(full.canCI, true);
-  assert.equal(full.canMerge, true);
-  assert.equal(full.canObserveDeploy, true);
+  const raw = createCodeCapability({ workspace: fullWorkspace });
+  assert.equal(raw.status, "raw-lifecycle");
+  const governed = createCodeCapability({ workspace: { ...fullWorkspace, factoryAction() {} }, controllerReady: true });
+  assert.equal(governed.status, "ready");
+  assert.equal(governed.canPullRequest, true);
+  assert.equal(governed.canCI, true);
+  assert.equal(governed.canMerge, true);
+  assert.equal(governed.canObserveDeploy, true);
+  assert.equal(governed.canFactoryAction, true);
 });
