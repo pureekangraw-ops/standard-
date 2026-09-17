@@ -7,6 +7,7 @@ const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
 const mimirUrl = pathToFileURL(path.join(root, "go-hub-mimir-destination.js")).href;
+const directoryUrl = pathToFileURL(path.join(root, "go-hub-mimir-directory.js")).href;
 const knowledgeUrl = pathToFileURL(path.join(root, "go-hub-mimir-knowledge.js")).href;
 
 test("MIMIR directory resolves an explicit collection intent without returning content records", async () => {
@@ -80,4 +81,42 @@ test("MIMIR structured retriever accepts an explicit tokenizer so catalog matchi
   });
 
   assert.deepEqual(result.map(item => item.record.id), ["single-letter"]);
+});
+
+test("MIMIR library invokes only the department chosen by the route-only directory", async () => {
+  const module = await import(directoryUrl + "?library=" + Date.now());
+  assert.equal(typeof module.createMimirLibrary, "function");
+
+  const calls = [];
+  const library = module.createMimirLibrary({
+    routes: [
+      { id: "catalog", intents: ["CATALOG"], route: "mimir://catalog", status: "ACTIVE", permission: "ALLOWED" },
+      { id: "knowledge", intents: ["KNOWLEDGE"], route: "mimir://knowledge", status: "ACTIVE", permission: "ALLOWED" },
+    ],
+    departments: {
+      catalog: async query => {
+        calls.push(["catalog", query]);
+        return { status: "PASS", records: [{ id: "catalog-record" }], route: "catalog://notion" };
+      },
+      knowledge: async query => {
+        calls.push(["knowledge", query]);
+        return { status: "PASS", records: [{ id: "knowledge-record" }], route: "knowledge://notion" };
+      },
+    },
+  });
+
+  const result = await library.query({
+    intent: "KNOWLEDGE",
+    task: "Find knowledge even if this sentence says catalog",
+    requestedResult: "Verified fact",
+    lensReference: "lens://knowledge",
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], "knowledge");
+  assert.equal(result.status, "PASS");
+  assert.equal(result.departmentId, "knowledge");
+  assert.equal(result.directoryRoute, "mimir://knowledge");
+  assert.equal(result.departmentRoute, "knowledge://notion");
+  assert.deepEqual(result.records, [{ id: "knowledge-record" }]);
 });
