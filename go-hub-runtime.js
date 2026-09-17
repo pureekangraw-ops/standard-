@@ -1,4 +1,5 @@
 export { createTrafficSummary, createTrafficSnapshot } from "./go-hub-traffic.js";
+export { createTrafficDashboard, getTrafficDashboardStation } from "./go-hub-dashboard-model.js";
 
 export function createHubRuntime() {
   const entries = new Map();
