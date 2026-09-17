@@ -79,3 +79,35 @@ test("V5 Dashboard is a read-only overview and drill-down projection of canonica
     assert.equal(Object.hasOwn(dashboard,key),false,`${key} must not exist on Dashboard model`);
   }
 });
+
+test("V5 Factory station monitor derives drill-down and canonical Traffic from Foreman truth",async()=>{
+  const module=await import(runtimeUrl+"?factory-monitor="+Date.now());
+  assert.equal(typeof module.createFactoryStationMonitor,"function");
+  const state={repositories:{"pureekangraw-ops/standard-":{
+    assembly:{active:{jobId:"job-a",status:"ACTIVE",risk:{status:"SAFE",reasons:[]}},queue:[{jobId:"job-b",status:"QUEUED"}]},
+    merge:{active:{jobId:"job-m",status:"ACTIVE",risk:{status:"SAFE",reasons:[]}},queue:[]},
+  }}};
+  const monitor=module.createFactoryStationMonitor({state,repository:"pureekangraw-ops/standard-",lastUpdate:"2026-09-17T12:00:00Z"});
+  assert.equal(monitor.station,"factory");
+  assert.equal(monitor.assembly.active.jobId,"job-a");
+  assert.equal(monitor.merge.active.jobId,"job-m");
+  assert.deepEqual(monitor.traffic,{station:"factory",status:"BUSY",active:2,queue:1,blocked:false,lastUpdate:"2026-09-17T12:00:00Z"});
+});
+
+test("V5 Library monitor projects real query outcome without inventing traffic counts",async()=>{
+  const module=await import(runtimeUrl+"?library-monitor="+Date.now());
+  assert.equal(typeof module.createLibraryStationMonitor,"function");
+  const monitor=module.createLibraryStationMonitor({query:"helmet size",result:{status:"PASS",departmentId:"KNOWLEDGE",records:[{id:"r1"}],evidence:{source:"notion"}}});
+  assert.deepEqual(monitor,{station:"library",query:"helmet size",status:"MATCH",matches:1,conflict:false,source:{source:"notion"}});
+  assert.equal(Object.hasOwn(monitor,"active"),false);
+  assert.equal(Object.hasOwn(monitor,"queue"),false);
+});
+
+test("V5 Verification monitor reports CHECKING/PASS/FAIL/UNKNOWN from real verification state",async()=>{
+  const module=await import(runtimeUrl+"?verification-monitor="+Date.now());
+  assert.equal(typeof module.createVerificationStationMonitor,"function");
+  assert.deepEqual(module.createVerificationStationMonitor({checking:true}),{station:"verification",status:"CHECKING",reason:null,evidence:[]});
+  const report={status:"FAIL",reason:"DIRECT_EVIDENCE_CONTRADICTS",evidence:[{sourceId:"runtime"}]};
+  assert.deepEqual(module.createVerificationStationMonitor({report}),{station:"verification",status:"FAIL",reason:"DIRECT_EVIDENCE_CONTRADICTS",evidence:[{sourceId:"runtime"}]});
+  assert.equal(module.createVerificationStationMonitor({}).status,"UNKNOWN");
+});
