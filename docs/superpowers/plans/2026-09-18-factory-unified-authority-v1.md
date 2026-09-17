@@ -29,13 +29,22 @@ Hub seams must be integrated separately and only after Factory core is green.
 ## Execution checklist
 - [x] Analyze duplicate PRs and classify ownership
 - [x] Create fresh consolidation branch from current main
-- [ ] Import non-conflicting Global Sequence core
-- [ ] Merge exact-head merge sealing into current Foreman without losing #82 cancellation/recovery
-- [ ] Merge Factory MCP/return seams without losing current-main changes
-- [ ] Separate #46 task/action controller from Foreman naming collision
-- [ ] Import durable state + Reality Receipt core
-- [ ] Add/port regression tests
-- [ ] Run exact-head STANDARD Safety Gate
-- [ ] Repair failures until green
-- [ ] Open one consolidation PR to main
-- [ ] Mark old PRs superseded only after consolidation evidence is green
+- [x] Import non-conflicting Global Sequence core
+- [x] Merge exact-head merge sealing into current Foreman without losing #82 cancellation/recovery
+- [x] Merge Factory MCP/return seams without losing current-main changes
+- [x] Separate #46 task/action controller from Foreman naming collision
+- [x] Import durable state + Reality Receipt core
+- [x] Add/port regression tests
+- [x] Run exact-head STANDARD Safety Gate
+- [x] Repair failures until green
+- [x] Open one consolidation PR to main
+- [ ] Mark old PRs superseded only after final checklist commit is green
+
+
+## Verification checkpoint
+- Consolidation PR: #84
+- Green code head before checklist-only update: `0d7980014e2e6ea753c7ff0c477e9c3a5ae193c6`
+- STANDARD Safety Gate run: `35283865409`
+- Tests: 404 passed / 0 failed
+- Deploy gate: PASS
+- GO Browser review artifact build/upload: PASS
