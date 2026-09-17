@@ -52,6 +52,13 @@ export function createMimirExperienceSearchPort({ readExperience } = {}) {
           conflictIds: Object.freeze(disputed.map(candidate => candidate.record.id)),
         }));
       }
+      const outdated = candidates.filter(candidate => candidate.record.status === "OUTDATED");
+      if (outdated.length) {
+        return wait("OUTDATED_LESSON", Object.freeze({
+          collection: "EXPERIENCE",
+          outdatedIds: Object.freeze(outdated.map(candidate => candidate.record.id)),
+        }));
+      }
       return wait("PENDING_VERIFICATION");
     }
     return Object.freeze({
