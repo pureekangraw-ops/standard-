@@ -114,3 +114,27 @@ test("MIMIR Experience surfaces DISPUTED lessons as conflict evidence instead of
   assert.deepEqual(result.records, []);
   assert.deepEqual(result.evidence.conflictIds, ["lesson-disputed"]);
 });
+
+test("MIMIR Experience reports OUTDATED_LESSON when only outdated matches remain", async () => {
+  const module = await import(libraryUrl + "?experience-outdated-only=" + Date.now());
+  const searchExperience = module.createMimirExperienceSearchPort({
+    readExperience: async () => [{
+      id: "lesson-outdated-only",
+      context: "legacy deployment route",
+      action: "use legacy route",
+      finding: "worked before cutover",
+      resolution: "legacy resolution",
+      reusableWhen: "legacy deployment route",
+      sourceTaskId: "task-legacy",
+      sourceArtifactDigest: "sha256:legacy",
+      recordedAt: "2026-09-10T00:00:00Z",
+      status: "OUTDATED",
+    }],
+  });
+
+  const result = await searchExperience({ task: "legacy deployment route" });
+
+  assert.equal(result.status, "WAIT");
+  assert.equal(result.waitReason, "OUTDATED_LESSON");
+  assert.deepEqual(result.evidence.outdatedIds, ["lesson-outdated-only"]);
+});
