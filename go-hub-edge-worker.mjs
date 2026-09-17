@@ -5,6 +5,7 @@ import { CITY_DESTINATIONS, assertCityWorkContext } from "./go-hub-route-contrac
 export { HephaestusForeman } from "./go-hub-factory-controller.mjs";
 
 const BROWSER_API_ROOT = "/hub/api/browser";
+const GITHUB_API_ROOT = "/hub/api/github-workspace";
 const encoder = new TextEncoder();
 
 function json(payload, status = 200) {
@@ -49,6 +50,35 @@ function isBrowserApiPath(pathname) {
   return pathname === BROWSER_API_ROOT || pathname.startsWith(`${BROWSER_API_ROOT}/`);
 }
 
+function isGithubApiPath(pathname) {
+  return pathname === GITHUB_API_ROOT || pathname.startsWith(`${GITHUB_API_ROOT}/`);
+}
+
+function isGithubMutation(request, pathname) {
+  if (request.method === "POST" && pathname === `${GITHUB_API_ROOT}/branch`) return true;
+  if ((request.method === "PUT" || request.method === "DELETE") && pathname === `${GITHUB_API_ROOT}/file`) return true;
+  if (request.method === "POST" && pathname === `${GITHUB_API_ROOT}/pull-request`) return true;
+  if (request.method === "POST" && pathname === `${GITHUB_API_ROOT}/ci/rerun-failed`) return true;
+  return false;
+}
+
+async function guardGithubRoute(request, pathname) {
+  if (request.method === "POST" && pathname === `${GITHUB_API_ROOT}/pull-request/merge`) {
+    return json({ code: "GOVERNED_MERGE_REQUIRED" }, 409);
+  }
+  if (!isGithubMutation(request, pathname)) return null;
+  const body = await request.clone().json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return json({ code: "INVALID_JSON" }, 400);
+  }
+  try {
+    assertCityWorkContext(body.workContext, CITY_DESTINATIONS.factory.route);
+  } catch {
+    return json({ code: "INVALID_FACTORY_WORK_CONTEXT" }, 400);
+  }
+  return null;
+}
+
 export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = createFactoryMcpWorker() } = {}) {
   if (!delegate || typeof delegate.fetch !== "function") {
     throw new Error("edge delegate fetch is required");
@@ -62,6 +92,11 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
       const url = new URL(request.url);
       if (url.pathname === "/mcp") {
         return factoryMcp.fetch(request, env);
+      }
+      if (isGithubApiPath(url.pathname)) {
+        const blocked = await guardGithubRoute(request, url.pathname);
+        if (blocked) return blocked;
+        return delegate.fetch(request, env);
       }
       if (!isBrowserApiPath(url.pathname)) {
         return delegate.fetch(request, env);
