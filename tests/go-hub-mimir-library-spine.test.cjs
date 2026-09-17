@@ -66,3 +66,18 @@ test("MIMIR structured retriever ranks records by query relevance without applyi
   assert.equal(Object.hasOwn(result[0], "gate"), false);
   assert.equal(Object.hasOwn(result[0], "rating"), false);
 });
+
+test("MIMIR structured retriever accepts an explicit tokenizer so catalog matching can preserve its contract", async () => {
+  const module = await import(knowledgeUrl + "?tokenizer=" + Date.now());
+  const retrieve = module.createMimirStructuredRetriever({
+    coreText: record => record.text,
+    tokenize: query => String(query).split("|").filter(Boolean),
+  });
+
+  const result = retrieve({
+    records: [{ id: "single-letter", text: "a registry route" }],
+    query: "a|z",
+  });
+
+  assert.deepEqual(result.map(item => item.record.id), ["single-letter"]);
+});
