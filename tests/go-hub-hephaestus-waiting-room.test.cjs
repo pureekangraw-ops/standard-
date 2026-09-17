@@ -17,8 +17,27 @@ function mergeRequest(overrides = {}) {
     goId: "go-a",
     jobId: "job-a",
     admission: admit,
+    mergeAdmission: {
+      assemblyId: "assembly-a",
+      sourceHeadSha: "head-a",
+      pullRequestNumber: 84,
+      pullRequestHeadSha: "head-a",
+      ciHeadSha: "head-a",
+      ciStatus: "success",
+    },
     ...overrides,
   };
+}
+
+function sealMergeResult(state) {
+  const next = structuredClone(state);
+  next.repositories["pureekangraw-ops/standard-"].merge.active.mergeResult = {
+    pullRequestNumber: 84,
+    headSha: "head-a",
+    mergeSha: "main-after-merge",
+    recordedAt: "2026-09-17T08:09:00+07:00",
+  };
+  return next;
 }
 
 test("merged work releases the merge lane immediately and moves into the verification waiting room", async () => {
@@ -27,6 +46,7 @@ test("merged work releases the merge lane immediately and moves into the verific
 
   let state = requestFactorySlot(createHephaestusState(), mergeRequest()).state;
   state = requestFactorySlot(state, mergeRequest({ goId: "go-b", jobId: "job-b" })).state;
+  state = sealMergeResult(state);
 
   const parked = parkMergedWork(state, {
     repository: "pureekangraw-ops/standard-",
@@ -41,14 +61,14 @@ test("merged work releases the merge lane immediately and moves into the verific
   assert.equal(repository.merge.queue[0].status, "NEEDS_RECHECK");
   assert.equal(parked.outcome.status, "PARKED_FOR_VERIFICATION");
   assert.equal(parked.outcome.promotedJobId, "job-b");
-  assert.deepEqual(repository.waitingRoom, [{
-    repository: "pureekangraw-ops/standard-",
-    goId: "go-a",
-    jobId: "job-a",
-    status: "WAITING_VERIFICATION",
-    mainSha: "main-after-merge",
-    mergedAt: "2026-09-17T08:10:00+07:00",
-  }]);
+  assert.equal(repository.waitingRoom.length, 1);
+  assert.equal(repository.waitingRoom[0].repository, "pureekangraw-ops/standard-");
+  assert.equal(repository.waitingRoom[0].goId, "go-a");
+  assert.equal(repository.waitingRoom[0].jobId, "job-a");
+  assert.equal(repository.waitingRoom[0].status, "WAITING_VERIFICATION");
+  assert.equal(repository.waitingRoom[0].mainSha, "main-after-merge");
+  assert.equal(repository.waitingRoom[0].mergeGate.status, "MERGED");
+  assert.equal(repository.waitingRoom[0].mergeGate.merge.mergeSha, "main-after-merge");
 });
 
 test("passed verification checks out of the waiting room and returns to Optician", async () => {
@@ -56,7 +76,8 @@ test("passed verification checks out of the waiting room and returns to Optician
   const { parkMergedWork, completeWaitingRoomVerification } = await loadReturn();
 
   const active = requestFactorySlot(createHephaestusState(), mergeRequest());
-  const parked = parkMergedWork(active.state, {
+  const sealed = sealMergeResult(active.state);
+  const parked = parkMergedWork(sealed, {
     repository: "pureekangraw-ops/standard-",
     goId: "go-a",
     jobId: "job-a",
@@ -76,21 +97,22 @@ test("passed verification checks out of the waiting room and returns to Optician
   });
 
   assert.deepEqual(completed.state.repositories["pureekangraw-ops/standard-"].waitingRoom, []);
-  assert.deepEqual(completed.returnPacket, {
-    destination: "optician",
-    reason: "FACTORY_REALITY_CHANGED",
-    repository: "pureekangraw-ops/standard-",
-    goId: "go-a",
-    jobId: "job-a",
-    mainSha: "main-after-merge",
-  });
+  assert.equal(completed.returnPacket.destination, "optician");
+  assert.equal(completed.returnPacket.reason, "FACTORY_REALITY_CHANGED");
+  assert.equal(completed.returnPacket.repository, "pureekangraw-ops/standard-");
+  assert.equal(completed.returnPacket.goId, "go-a");
+  assert.equal(completed.returnPacket.jobId, "job-a");
+  assert.equal(completed.returnPacket.mainSha, "main-after-merge");
+  assert.equal(completed.returnPacket.mergeGate.status, "MERGED_VERIFIED");
+  assert.equal(completed.returnPacket.mergeGate.merge.mergeSha, "main-after-merge");
 });
 
 test("waiting-room verification fails closed when the verified main SHA does not match the parked merge", async () => {
   const { createHephaestusState, requestFactorySlot } = await loadHephaestus();
   const { parkMergedWork, completeWaitingRoomVerification } = await loadReturn();
   const active = requestFactorySlot(createHephaestusState(), mergeRequest());
-  const parked = parkMergedWork(active.state, {
+  const sealed = sealMergeResult(active.state);
+  const parked = parkMergedWork(sealed, {
     repository: "pureekangraw-ops/standard-",
     goId: "go-a",
     jobId: "job-a",
