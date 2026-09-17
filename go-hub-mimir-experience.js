@@ -5,8 +5,8 @@ const retrieveExperience = createMimirStructuredRetriever({
   helperText: record => [record.sourceTaskId, record.sourceArtifactDigest].join(" "),
 });
 
-function wait(reason) {
-  return Object.freeze({ status: "WAIT", waitReason: reason, records: Object.freeze([]), route: null, evidence: null });
+function wait(reason, evidence = null) {
+  return Object.freeze({ status: "WAIT", waitReason: reason, records: Object.freeze([]), route: null, evidence });
 }
 
 function normalizeExperienceRecord(record = {}) {
@@ -44,7 +44,16 @@ export function createMimirExperienceSearchPort({ readExperience } = {}) {
     const candidates = retrieveExperience({ records, query: queryText });
     if (!candidates.length) return wait("NO_MATCH");
     const selected = candidates.find(candidate => candidate.record.status === "RECORDED")?.record;
-    if (!selected) return wait("PENDING_VERIFICATION");
+    if (!selected) {
+      const disputed = candidates.filter(candidate => candidate.record.status === "DISPUTED");
+      if (disputed.length) {
+        return wait("CONFLICT", Object.freeze({
+          collection: "EXPERIENCE",
+          conflictIds: Object.freeze(disputed.map(candidate => candidate.record.id)),
+        }));
+      }
+      return wait("PENDING_VERIFICATION");
+    }
     return Object.freeze({
       status: "PASS",
       waitReason: null,
