@@ -3,6 +3,7 @@ import { createCodeCapability, createCodeTaskSession } from "./go-hub-code-modul
 import { createLocalStorageKeyValueStore, createStatePersistence } from "./go-hub-persistence.js";
 import { createGitHubWorkspace } from "./go-hub-github-workspace.js";
 import { createWorkbenchView } from "./go-hub-workbench-model.js";
+import { createOperatorView } from "./go-hub-operator-model.js";
 import { createFactoryRealityReturn, createFactoryWorkContext } from "./go-hub-factory-return.js";
 import { createCityRoute, routeInbound } from "./go-hub-city-route.js";
 import { fitWork } from "./go-hub-optician.js";
@@ -129,6 +130,27 @@ function renderWorkbench(snapshot) {
   if (next) next.textContent = view.blocker ? `BLOCKED — ${view.blocker}` : (view.next || "—");
 }
 
+function renderOperator(snapshot) {
+  const view = createOperatorView(snapshot || {});
+  const values = {
+    state: view.state,
+    repository: view.repository,
+    base: view.base,
+    "work-branch": view.workBranch,
+    head: view.head,
+    pr: view.pullRequest,
+    ci: view.ci,
+    deploy: view.deploy,
+    verification: view.verification,
+    blocker: view.interruption?.state || view.blocker,
+    "next-action": view.interruption?.actions?.join(" · ") || view.next,
+  };
+  for (const [key, value] of Object.entries(values)) {
+    const node = document.querySelector(`[data-code-${key}]`);
+    if (node) node.textContent = value || "—";
+  }
+}
+
 function renderCentre() {
   document.querySelector("[data-centre-state]").textContent = centreWork.status;
   document.querySelector("[data-centre-checkpoint]").textContent = centreWork.checkpointId;
@@ -182,6 +204,7 @@ function render() {
   );
   renderCentre();
   renderWorkbench(task.snapshot());
+  renderOperator(task.snapshot());
 }
 
 centreForm?.addEventListener("submit", async event => {
