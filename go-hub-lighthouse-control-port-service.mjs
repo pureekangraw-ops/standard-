@@ -56,7 +56,7 @@ function nativeCors(request) {
 }
 
 export function lighthouseControlPortOwnerPage() {
-  return new Response(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LIGHTHOUSE ↔ GO Hub</title></head><body><main><h1>LIGHTHOUSE ↔ GO Hub</h1><p>Create a device bootstrap, then paste it once into LIGHTHOUSE Settings. The owner passcode stays on GO Hub and is never stored in the APK.</p><form id="pair"><label>Owner passcode <input id="passcode" type="password" autocomplete="current-password" required></label><label>Device label <input id="label" value="LIGHTHOUSE Android" maxlength="120"></label><button type="submit">Create bootstrap</button></form><label>Bootstrap <textarea id="bootstrap" readonly rows="8"></textarea></label><p id="status"></p><script>const f=document.getElementById('pair'),o=document.getElementById('bootstrap'),s=document.getElementById('status');f.addEventListener('submit',async e=>{e.preventDefault();o.value='';s.textContent='Creating…';try{const r=await fetch('/hub/api/lighthouse-control-port/session/start',{method:'POST',headers:{'content-type':'application/json','x-go-owner-passcode':document.getElementById('passcode').value},body:JSON.stringify({device_label:document.getElementById('label').value})});const b=await r.json();document.getElementById('passcode').value='';if(!r.ok)throw new Error(b.code||'PAIRING_FAILED');o.value=JSON.stringify(b);s.textContent='Bootstrap ready.';}catch(err){document.getElementById('passcode').value='';s.textContent=err.message||'PAIRING_FAILED';}});</script></main></body></html>`, {
+  return new Response(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LIGHTHOUSE ↔ GO Hub</title></head><body><main><h1>LIGHTHOUSE ↔ GO Hub</h1><p>Create a device bootstrap, then paste it once into LIGHTHOUSE Settings. The owner passcode stays on GO Hub and is never stored in the APK.</p><form id="pair"><label>Owner passcode <input id="passcode" type="password" autocomplete="current-password" required></label><label>Device label <input id="label" value="LIGHTHOUSE Android" maxlength="120"></label><button type="submit">Create bootstrap</button></form><label>Bootstrap <textarea id="bootstrap" readonly rows="8"></textarea></label><p id="status"></p><script>const f=document.getElementById('pair'),o=document.getElementById('bootstrap'),s=document.getElementById('status');f.addEventListener('submit',async e=>{e.preventDefault();o.value='';s.textContent='Creating…';try{const r=await fetch('/hub/api/lighthouse-control-port/session/start',{method:'POST',headers:{'content-type':'application/json','x-go-owner-passcode':document.getElementById('passcode').value},body:JSON.stringify({device_label:document.getElementById('label').value})});const raw=await r.text();let b=null;try{b=raw?JSON.parse(raw):{};}catch{throw new Error('PAIRING_NON_JSON_'+r.status+': '+raw.slice(0,160));}document.getElementById('passcode').value='';if(!r.ok)throw new Error((b.code||'PAIRING_FAILED')+(b.reason?': '+b.reason:''));o.value=JSON.stringify(b);s.textContent='Bootstrap ready.';}catch(err){document.getElementById('passcode').value='';s.textContent=err.message||'PAIRING_FAILED';}});</script></main></body></html>`, {
     headers:{ "content-type":"text/html; charset=utf-8", "cache-control":"no-store" },
   });
 }
@@ -87,10 +87,18 @@ export function createLighthouseControlPortHttpService({ namespace, ownerPasscod
         if (!constantTimeEqual(supplied, configured)) return json({ code:"OWNER_AUTH_FAILED" }, 403);
         const body = await request.json().catch(() => null);
         if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code:"INVALID_JSON" }, 400);
-        const result = await sessions.start({
-          deviceLabel:clean(body.device_label) || "LIGHTHOUSE Android",
-          ttlMs:DEFAULT_SESSION_TTL_MS,
-        });
+        let result;
+        try {
+          result = await sessions.start({
+            deviceLabel:clean(body.device_label) || "LIGHTHOUSE Android",
+            ttlMs:DEFAULT_SESSION_TTL_MS,
+          });
+        } catch (error) {
+          return json({
+            code:"PAIRING_RUNTIME_ERROR",
+            reason:clean(error?.message || error || "unknown").slice(0,160),
+          }, 500);
+        }
         if (!result?.ok) return json({ code:result?.code || "HUB_UNAVAILABLE" }, statusFor(result?.code));
         return json({
           ...result,
