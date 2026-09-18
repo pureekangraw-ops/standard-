@@ -36,7 +36,7 @@ test("active publication metadata follows the GO Hub hard cutover", () => {
   assert.equal(manifest.serviceWorker.file, "go-hub-sw.js");
   assert.equal(manifest.serviceWorker.mode, "go-hub-exclusive");
   assert.equal(manifest.serviceWorker.cachePrefix, "go-hub-app-");
-  assert.equal(manifest.serviceWorker.cacheGeneration, "v8-centre-live-client");
+  assert.equal(manifest.serviceWorker.cacheGeneration, "v9-publication-closure");
   assert.equal(manifest.serviceWorker.autoActivate, true);
 });
 
@@ -62,4 +62,25 @@ test("legacy Worker alias may remain infrastructure-only and does not own GO Hub
   assert.equal(Object.hasOwn(manifest.serviceWorker, "workerName"), false);
   assert.match(guide, /Worker[^\n]*`normalpocket`/);
   assert.equal(manifest.product, "GO Hub");
+});
+
+
+function localModuleDependencies(file) {
+  const source = read(file);
+  return [...source.matchAll(/(?:import|export)\s+(?:[^'"]*?\s+from\s+)?["']\.\/([^"']+)["']/g)]
+    .map(match => match[1]);
+}
+
+test("published GO Hub module graph is closed", () => {
+  const manifestFiles = manifest.productionFiles.map(entry => typeof entry === "string" ? entry : entry.path);
+  const published = new Set(manifestFiles);
+  const missing = [];
+
+  for (const file of manifestFiles.filter(file => file.endsWith(".js"))) {
+    for (const dependency of localModuleDependencies(file)) {
+      if (!published.has(dependency)) missing.push(`${file} -> ${dependency}`);
+    }
+  }
+
+  assert.deepEqual(missing, [], "every relative browser module dependency must be published");
 });
