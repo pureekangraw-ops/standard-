@@ -37,9 +37,9 @@ async function outboundMimirAccess(search) {
     },
   );
   const fitted = centre.fit(reviewed, {
-    lensId: "LENS-SEARCH",
-    lensReference: "lens://search",
-    fittedView: "Find relevant source without inventing missing fields",
+    roleId: "ROLE-SEARCH",
+    roleReference: "role://search",
+    workingView: "Find relevant source without inventing missing fields",
   });
   const away = centre.leave(fitted, {
     destination: mimirModule.MIMIR_DESTINATION,
