@@ -84,7 +84,7 @@ function fitFactoryRoute() {
       successCondition: centreWork.requestedResult,
     },
     reality: task.snapshot(),
-    role: { reference: centreWork.role?.roleReference || centreWork.lens?.lensReference },
+    role: { reference: centreWork.role?.roleReference },
     destination: canonicalFactory,
   });
   if (fit.gate !== "PASS") {
@@ -160,12 +160,12 @@ function renderCentre() {
   field("task").value = centreWork.task || "";
   field("requestedResult").value = centreWork.requestedResult || "";
   field("authority").value = centreWork.authority || "BIG";
-  field("roleReference").value = centreWork.role?.roleReference || centreWork.lens?.lensReference || "";
-  field("workingView").value = centreWork.role?.workingView || centreWork.lens?.fittedView || "";
+  field("roleReference").value = centreWork.role?.roleReference || "";
+  field("workingView").value = centreWork.role?.workingView || "";
 
   const reviewed = centreWork.status !== CENTRE_STATES.ARRIVED
     && centreWork.status !== CENTRE_STATES.WAIT;
-  const fitted = Boolean(centreWork.role || centreWork.lens);
+  const fitted = Boolean(centreWork.role);
   ["task", "requestedResult", "authority"].forEach(name => {
     field(name).disabled = reviewed;
   });
@@ -219,7 +219,7 @@ centreForm?.addEventListener("submit", async event => {
         authority: field("authority").value,
       });
       await centreSession.save(centreWork, "REVIEW_AT_CENTRE");
-    } else if (centreWork.status === CENTRE_STATES.READY && !centreWork.role && !centreWork.lens) {
+    } else if (centreWork.status === CENTRE_STATES.READY && !centreWork.role) {
       centreWork = centre.fit(centreWork, {
         roleId: field("roleReference").value,
         roleReference: field("roleReference").value,
