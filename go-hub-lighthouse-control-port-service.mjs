@@ -43,7 +43,8 @@ function credentials(request) {
 function nativeCors(request) {
   const origin = clean(request.headers.get("origin"));
   if (!origin) return {};
-  const allowed = new Set(["https://localhost", "http://localhost", "capacitor://localhost"]);
+  const requestOrigin = new URL(request.url).origin;
+  const allowed = new Set([requestOrigin, "https://localhost", "http://localhost", "capacitor://localhost"]);
   if (!allowed.has(origin)) return null;
   return {
     "access-control-allow-origin":origin,
