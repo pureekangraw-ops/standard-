@@ -2,6 +2,10 @@ export const GUMROAD_PROFILE = Object.freeze({
   id: "gumroad-v1",
   hosts: Object.freeze(["gumroad.com", "*.gumroad.com"]),
   writableSemantics: Object.freeze(["title", "description", "price", "category", "tags"]),
+  semanticAliases: Object.freeze({
+    name: "title",
+  }),
+  writableContenteditableSemantics: Object.freeze(["description"]),
   blockedActionPattern: /submit|publish|purchase|buy|delete|confirm|checkout|save\s*(and|&)\s*publish/i,
 });
 

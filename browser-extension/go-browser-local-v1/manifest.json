@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GO Browser Local Safe Fill",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local, explicit, fail-closed Safe Fill adapter for GO Browser V1.",
   "browser_specific_settings": {
     "gecko": {
