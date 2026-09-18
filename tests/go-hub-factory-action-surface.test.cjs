@@ -55,6 +55,54 @@ test("Factory action service binds one owner-scoped task to one Durable Object s
   }), /invalid Factory task ID/);
 });
 
+test("Factory action service prefers Durable Object fetch transport over RPC-shaped methods", async () => {
+  const { createFactoryActionService } = await import(serviceUrl + "?factory-fetch=" + Date.now());
+  const calls = [];
+  let stored = null;
+  const binding = {
+    getByName() {
+      return {
+        async fetch(request) {
+          const url = new URL(request.url);
+          calls.push(`${request.method} ${url.pathname}`);
+          if (request.method === "GET" && url.pathname === "/load") {
+            return jsonResponse(stored);
+          }
+          if (request.method === "POST" && url.pathname === "/save") {
+            const input = await request.json();
+            stored = {
+              revision: 1,
+              task: structuredClone(input.task),
+              receipts: [structuredClone(input.receipt)],
+              audit: [structuredClone(input.auditEvent)],
+            };
+            return jsonResponse({
+              revision: stored.revision,
+              task: structuredClone(stored.task),
+              receipt: structuredClone(input.receipt),
+            });
+          }
+          return jsonResponse({ code: "NOT_FOUND" }, 404);
+        },
+        async load() { throw new Error("RPC load must not be used"); },
+        async save() { throw new Error("RPC save must not be used"); },
+      };
+    },
+  };
+  const lifecycle = {
+    inspect: async () => jsonResponse({ repository, defaultBranch: "main", branch: "main", baseSha: "base-1", headSha: "base-1", tree: [] }),
+  };
+  const service = createFactoryActionService({ lifecycle, binding, now: () => "now", createId: () => "r-fetch" });
+  const response = await service({
+    taskId: "pureekangraw-ops:fetch-transport",
+    action: "inspect",
+    input: { repository, intent: "fetch transport", branch: "main" },
+    expectedRevision: 0,
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, ["GET /load", "POST /save"]);
+});
+
 test("MCP registry publishes strict high-level Factory action", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?factory-tool=" + Date.now());
   const calls = [];
@@ -112,7 +160,6 @@ test("browser workspace calls Factory action through same-origin gateway without
     workContext: { workId: "WORK-84", checkpointId: "CENTRE-84", returnAddress: "CENTRE-84", destination: "destination://factory", task: "govern Factory action", requestedResult: "durable task authority", lensReference: "factory://unified" },
   });
 });
-
 
 test("current edge worker owns the governed Factory action route and durable binding", () => {
   const fs = require("node:fs");

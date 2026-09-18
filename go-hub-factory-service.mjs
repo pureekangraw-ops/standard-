@@ -27,6 +27,45 @@ function stateStub(binding, taskId) {
   return null;
 }
 
+async function readStateResponse(response) {
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw Object.assign(new Error(payload?.code || "FACTORY_STATE_ERROR"), { status: response.status });
+  }
+  return payload;
+}
+
+function createStatePort(binding, taskId) {
+  const stub = stateStub(binding, taskId);
+  if (!stub) return null;
+
+  if (typeof stub.fetch === "function") {
+    return Object.freeze({
+      async load() {
+        return readStateResponse(await stub.fetch(new Request("https://factory-state.internal/load", {
+          method: "GET",
+        })));
+      },
+      async save(value) {
+        return readStateResponse(await stub.fetch(new Request("https://factory-state.internal/save", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(value),
+        })));
+      },
+    });
+  }
+
+  if (typeof stub.load === "function" && typeof stub.save === "function") {
+    return Object.freeze({
+      load: () => stub.load(),
+      save: value => stub.save(value),
+    });
+  }
+
+  return null;
+}
+
 export function createFactoryActionService({ lifecycle, binding, now, createId } = {}) {
   if (!lifecycle) throw new Error("Factory lifecycle is required");
   if (!binding || (typeof binding.getByName !== "function" &&
@@ -36,11 +75,10 @@ export function createFactoryActionService({ lifecycle, binding, now, createId }
 
   return async function factoryAction(input = {}) {
     const taskId = assertTaskId(input.taskId);
-    const stub = stateStub(binding, taskId);
-    const state = Object.freeze({
-      load: () => stub.load(),
-      save: value => stub.save(value),
-    });
+    const state = createStatePort(binding, taskId);
+    if (!state) {
+      throw Object.assign(new Error("FACTORY_STATE_NOT_CONFIGURED"), { status: 503 });
+    }
     const controller = createFactoryController({ lifecycle, state, ...(now ? { now } : {}), ...(createId ? { createId } : {}) });
     const result = await controller.execute({
       taskId,

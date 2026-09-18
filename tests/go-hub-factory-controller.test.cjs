@@ -169,3 +169,108 @@ test("guarded MCP lifecycle rejects merge before GitHub when Hephaestus slot is 
   assert.deepEqual(await response.json(), { code: "FACTORY_MERGE_SLOT_REQUIRED" });
   assert.equal(mergeCalls, 0);
 });
+
+test("Foreman retires only an exact integrated merge queue head and returns recovery instead of cancellation", async () => {
+  const { HephaestusForeman } = await import(controllerUrl + "?integrated-queue=" + Date.now());
+  const foreman = new HephaestusForeman(memoryContext(), {});
+  const repository = "pureekangraw-ops/standard-";
+
+  await foreman.requestSlot(mergeRequest({
+    goId: "go-active",
+    jobId: "job-pr-81",
+    pullRequest: { number: 81, headSha: "integration-head" },
+  }));
+  await foreman.requestSlot(mergeRequest({
+    goId: "go-82",
+    jobId: "job-pr-82",
+    pullRequest: { number: 82, headSha: "integration-head" },
+  }));
+  await foreman.requestSlot(mergeRequest({
+    goId: "go-83",
+    jobId: "job-pr-83",
+    pullRequest: { number: 83, headSha: "integration-head" },
+  }));
+  await foreman.recordMergeResult({
+    repository, goId: "go-active", jobId: "job-pr-81",
+    pullRequestNumber: 81, headSha: "integration-head", mergeSha: "main-81",
+  });
+  await foreman.parkMerged({
+    repository, goId: "go-active", jobId: "job-pr-81",
+    mainSha: "main-81", mergedAt: "2026-09-18T09:00:00+07:00",
+  });
+
+  const result = await foreman.cancelWork({
+    repository,
+    slot: "merge",
+    goId: "go-82",
+    jobId: "job-pr-82",
+    cancellation: {
+      reason: "PULL_REQUEST_HEAD_IN_MAIN",
+      observedAt: "2026-09-18T09:01:00+07:00",
+      mainSha: "main-current",
+      pullRequest: { number: 82, state: "closed", headSha: "head-82" },
+      comparison: {
+        status: "ahead",
+        baseSha: "head-82",
+        headSha: "main-current",
+        aheadBy: 93,
+        behindBy: 0,
+      },
+    },
+  });
+
+  assert.equal(result.outcome.status, "RECOVERY_REQUIRED");
+  assert.equal(result.outcome.reason, "PULL_REQUEST_HEAD_IN_MAIN");
+  assert.equal(result.outcome.realityExists, true);
+  assert.equal(result.outcome.retiredJobId, "job-pr-82");
+  assert.equal(result.outcome.promotedJobId, "job-pr-83");
+  const lane = (await foreman.getState()).repositories[repository].merge;
+  assert.equal(lane.active, null);
+  assert.equal(lane.queue[0].jobId, "job-pr-83");
+  assert.equal(lane.queue[0].status, "NEEDS_RECHECK");
+});
+
+test("Foreman integrated queue recovery fails closed on stale or mismatched evidence", async () => {
+  const { HephaestusForeman } = await import(controllerUrl + "?integrated-guard=" + Date.now());
+  const foreman = new HephaestusForeman(memoryContext(), {});
+  const repository = "pureekangraw-ops/standard-";
+
+  await foreman.requestSlot(mergeRequest({
+    goId: "go-active",
+    jobId: "job-pr-81",
+    pullRequest: { number: 81, headSha: "integration-head" },
+  }));
+  await foreman.requestSlot(mergeRequest({
+    goId: "go-82",
+    jobId: "job-pr-82",
+    pullRequest: { number: 82, headSha: "integration-head" },
+  }));
+  await foreman.recordMergeResult({
+    repository, goId: "go-active", jobId: "job-pr-81",
+    pullRequestNumber: 81, headSha: "integration-head", mergeSha: "main-81",
+  });
+  await foreman.parkMerged({
+    repository, goId: "go-active", jobId: "job-pr-81",
+    mainSha: "main-81", mergedAt: "2026-09-18T09:00:00+07:00",
+  });
+
+  await assert.rejects(foreman.cancelWork({
+    repository,
+    slot: "merge",
+    goId: "go-82",
+    jobId: "job-pr-82",
+    cancellation: {
+      reason: "PULL_REQUEST_HEAD_IN_MAIN",
+      observedAt: "2026-09-18T09:01:00+07:00",
+      mainSha: "main-current",
+      pullRequest: { number: 82, state: "closed", headSha: "head-82" },
+      comparison: {
+        status: "ahead",
+        baseSha: "different-head",
+        headSha: "main-current",
+        aheadBy: 93,
+        behindBy: 0,
+      },
+    },
+  }), /integrated queued pull request evidence/i);
+});
