@@ -27,6 +27,7 @@ test("manifest is MV3, Android-enabled, AMO-signable, Gumroad-only, and top-fram
   const manifest = readManifest();
   const matches = ["*://gumroad.com/*", "*://*.gumroad.com/*"];
   assert.equal(manifest.manifest_version, 3);
+  assert.equal(manifest.version, "0.1.1", "AMO requires a new version for each signed submission");
   assert.equal(manifest.browser_specific_settings.gecko.id, "go-browser-local-v1@pureekangraw.local");
   assert.deepEqual(manifest.browser_specific_settings.gecko.data_collection_permissions, { required: ["none"] });
   assert.deepEqual(manifest.browser_specific_settings.gecko_android, {});

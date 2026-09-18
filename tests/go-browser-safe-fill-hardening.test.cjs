@@ -141,3 +141,44 @@ test("choice writer blocks values absent from current select options and writes 
   assert.equal(select.value, "Course");
   assert.deepEqual(select._events, []);
 });
+
+
+test("Gumroad Description contenteditable has a dedicated safe write and read-back contract", async () => {
+  const { GUMROAD_PROFILE, scanLocalDocument, buildFillPlan, executeFillPlan } = await load("gumroad-description-contenteditable");
+  const description = fakeControl({
+    tagName: "DIV",
+    ariaLabel: "Description",
+    value: "Old body",
+    contenteditable: true,
+  });
+  const document = fakeDocument([description]);
+  const location = new URL("https://gumroad.com/products/new");
+  const scan = scanLocalDocument({ document, location, title: "New product", profile: GUMROAD_PROFILE });
+  const plan = buildFillPlan(scan, [{ fieldId: scan.fields[0].fieldId, value: "Safe body" }]);
+
+  const result = executeFillPlan({ document, location, title: "New product", profile: GUMROAD_PROFILE, plan, window: fakeWindow() });
+
+  assert.equal(result.ok, true);
+  assert.equal(description.textContent, "Safe body");
+  assert.deepEqual(description._events, ["input", "change"]);
+  assert.deepEqual(result.receipts.map(item => [item.semanticRole, item.state, item.actualValue]), [
+    ["description", "VERIFIED", "Safe body"],
+  ]);
+});
+
+test("non-description contenteditable remains fail-closed", async () => {
+  const { guardAssignment, GUMROAD_PROFILE } = await load("other-contenteditable");
+  const unknownEditable = field({
+    name: "Mystery",
+    semanticRole: "unknown",
+    signature: signature({ accessibleName: "Mystery", contenteditable: true }),
+  });
+  const titleEditable = field({
+    name: "Name",
+    semanticRole: "title",
+    signature: signature({ accessibleName: "Name", contenteditable: true }),
+  });
+
+  assert.deepEqual(guardAssignment(unknownEditable, GUMROAD_PROFILE), { allowed: false, code: "FIELD_UNKNOWN_BLOCKED" });
+  assert.deepEqual(guardAssignment(titleEditable, GUMROAD_PROFILE), { allowed: false, code: "UNSUPPORTED_FIELD_KIND" });
+});

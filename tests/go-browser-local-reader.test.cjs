@@ -79,6 +79,23 @@ test("Gumroad is the only V1 site profile", async () => {
   assert.equal(profileForUrl("file:///tmp/form"), null);
 });
 
+test("Gumroad current editor classifies bare Name as title and Description contenteditable as description", async () => {
+  const { GUMROAD_PROFILE, scanLocalDocument } = await loadModules("gumroad-current-editor");
+  const result = scanLocalDocument({
+    document: fakeDocument([
+      fakeControl({ tagName: "INPUT", name: "name", ariaLabel: "Name", value: "Old title" }),
+      fakeControl({ tagName: "DIV", ariaLabel: "Description", value: "Old body", contenteditable: "true" }),
+    ]),
+    location: new URL("https://gumroad.com/products/new"),
+    title: "New product",
+    profile: GUMROAD_PROFILE,
+  });
+
+  assert.deepEqual(result.fields.map(field => field.semanticRole), ["title", "description"]);
+  assert.equal(result.fields[1].signature.contenteditable, true);
+  assert.deepEqual(result.unknowns, []);
+});
+
 test("scan derives semantic signatures and structural fingerprint without child-index locators", async () => {
   const { GUMROAD_PROFILE, scanLocalDocument } = await loadModules("scan");
   const document = fakeDocument([
