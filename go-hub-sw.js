@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "go-hub-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v6-centre-live-checkpoint`;
+const CACHE_NAME = `${CACHE_PREFIX}v7-role-review-shell`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -76,8 +76,16 @@ self.addEventListener("fetch", event => {
   }
 
   event.respondWith((async () => {
-    const cached = await caches.match(event.request);
-    if (cached) return cached;
-    return fetch(event.request);
+    try {
+      const response = await fetch(event.request);
+      if (response && response.ok) {
+        const cache = await caches.open(CACHE_NAME);
+        event.waitUntil(cache.put(event.request, response.clone()));
+      }
+      return response;
+    } catch {
+      const cached = await caches.match(event.request);
+      return cached || Response.error();
+    }
   })());
 });
