@@ -10,13 +10,19 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
 test("Centre active runtime is Role-only with no legacy Lens fallback", () => {
   const forbidden = [
     ["go-hub-centre.js", /fitLens|\blens\b|lensReference|lensId|fittedView/],
-    ["go-hub-centre-live.mjs", /lensReference|lensId|fittedView/],
     ["go-hub-shell.js", /centreWork\.lens|\.fittedView/],
     ["go-hub-optician.js", /lensReference|\blens\s*=|lens\.reference/],
   ];
   for (const [file, pattern] of forbidden) {
     assert.doesNotMatch(read(file), pattern, file + " must not retain legacy Lens fallback");
   }
+});
+
+test("Centre live rejects legacy Lens input instead of using it as fallback", () => {
+  const source = read("go-hub-centre-live.mjs");
+  assert.match(source, /LEGACY_LENS_CONTRACT_REJECTED/);
+  assert.match(source, /input\.lensId/);
+  assert.doesNotMatch(source, /roleReference\s*=\s*input\.roleReference\s*\?\?\s*input\.lensReference/);
 });
 
 test("Centre MCP fit schema publishes Role fields and no Lens fields", () => {
