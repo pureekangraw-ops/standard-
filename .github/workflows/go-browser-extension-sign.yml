@@ -1,13 +1,20 @@
 name: GO Browser Extension Sign
 
+# Observer fallback: this file-only push lane exists solely for branch Reality signing when workflow_dispatch UI is unavailable.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - work/go-browser-observer-eye-v1
+    paths:
+      - '.github/workflows/go-browser-extension-sign.yml'
 
 permissions:
   contents: read
 
 jobs:
-  sign:
+  safe-fill-sign:
+    if: ${{ !startsWith(github.ref_name, 'work/go-browser-observer-eye-') }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -47,5 +54,153 @@ jobs:
         with:
           name: go-browser-local-v1-signed-${{ github.sha }}
           path: ${{ steps.sign.outputs.target }}
+          if-no-files-found: error
+          retention-days: 7
+
+
+  observer-reality-package:
+    if: ${{ startsWith(github.ref_name, 'work/go-browser-observer-eye-') }}
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GOHUB_OWNER_PASSCODE: ${{ secrets.GOHUB_OWNER_PASSCODE }}
+      AMO_SIGN_KEY: ${{ secrets.AMO_SIGN_KEY }}
+      AMO_SIGN_SECRET: ${{ secrets.AMO_SIGN_SECRET }}
+      REALITY_WORKER_NAME: go-hub-eye-reality
+    steps:
+      - name: Check out Observer branch
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Require Reality secrets
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN_MISSING"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "CLOUDFLARE_ACCOUNT_ID_MISSING"; exit 1; }
+          test -n "$GOHUB_OWNER_PASSCODE" || { echo "GOHUB_OWNER_PASSCODE_MISSING"; exit 1; }
+          test -n "$AMO_SIGN_KEY" || { echo "AMO_SIGN_KEY_MISSING"; exit 1; }
+          test -n "$AMO_SIGN_SECRET" || { echo "AMO_SIGN_SECRET_MISSING"; exit 1; }
+
+      - name: Verify exact source
+        run: npm run deploy:gate
+
+      - name: Install deployment dependency
+        run: npm install --no-audit --no-fund
+
+      - name: Resolve Cloudflare workers.dev origin
+        id: observer_origin
+        shell: bash
+        run: |
+          response_file="${RUNNER_TEMP}/workers-subdomain.json"
+          curl --fail-with-body --silent --show-error             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/subdomain"             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"             > "${response_file}"
+          subdomain="$(node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(!p.success||!p.result?.subdomain)process.exit(1);process.stdout.write(p.result.subdomain)' "${response_file}")"
+          origin="https://${REALITY_WORKER_NAME}.${subdomain}.workers.dev"
+          echo "origin=${origin}" >> "$GITHUB_OUTPUT"
+          echo "Reality Worker origin: ${origin}"
+
+      - name: Deploy isolated Observer Reality Worker
+        shell: bash
+        run: |
+          secrets_file="${RUNNER_TEMP}/observer-reality.secrets"
+          : > "${secrets_file}"
+          chmod 600 "${secrets_file}"
+          printf 'GOHUB_OWNER_PASSCODE=%s\n' "${GOHUB_OWNER_PASSCODE}" >> "${secrets_file}"
+          npx wrangler deploy --config wrangler.go-hub-observer-reality.jsonc --secrets-file "${secrets_file}"
+
+      - name: Verify Observer owner endpoint
+        shell: bash
+        env:
+          REALITY_ORIGIN: ${{ steps.observer_origin.outputs.origin }}
+        run: |
+          ok=0
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail --silent --show-error "${REALITY_ORIGIN}/hub/observer" | grep -q "Create Eye Session"; then
+              ok=1
+              break
+            fi
+            sleep 5
+          done
+          test "$ok" = "1" || { echo "OBSERVER_REALITY_ENDPOINT_UNAVAILABLE"; exit 1; }
+
+      - name: Build Observer extension source
+        run: npm run build:go-browser-observer-extension
+
+      - name: Build unsigned Observer XPI
+        id: observer_build
+        uses: kewisch/action-web-ext@84a13bb9e1b6108c43788ba091c41ca1dba6ad45
+        with:
+          cmd: build
+          source: dist/go-browser-local-observer-v1
+          filename: go-browser-local-observer-v1-unsigned.xpi
+
+      - name: Sign Observer XPI with Mozilla AMO
+        id: observer_sign
+        uses: kewisch/action-web-ext@84a13bb9e1b6108c43788ba091c41ca1dba6ad45
+        with:
+          cmd: sign
+          source: ${{ steps.observer_build.outputs.target }}
+          channel: unlisted
+          apiKey: ${{ secrets.AMO_SIGN_KEY }}
+          apiSecret: ${{ secrets.AMO_SIGN_SECRET }}
+
+      - name: Verify signed Observer identity
+        shell: bash
+        env:
+          SIGNED_TARGET: ${{ steps.observer_sign.outputs.target }}
+        run: |
+          test -n "${SIGNED_TARGET}" || { echo "SIGNED_OBSERVER_TARGET_MISSING"; exit 1; }
+          manifest_file="${RUNNER_TEMP}/signed-observer-manifest.json"
+          unzip -p "${SIGNED_TARGET}" manifest.json > "${manifest_file}"
+          node - "${manifest_file}" <<'NODE'
+          const fs = require("fs");
+          const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const expectedName = "GO Browser Local Observer Eye";
+          const expectedId = "go-browser-local-observer-v1@pureekangraw.local";
+          const actualId = manifest?.browser_specific_settings?.gecko?.id;
+          if (manifest?.name !== expectedName || actualId !== expectedId) {
+            console.error(`SIGNED_OBSERVER_IDENTITY_MISMATCH name=${manifest?.name || "MISSING"} id=${actualId || "MISSING"}`);
+            process.exit(1);
+          }
+          console.log(`Signed Observer identity verified: ${manifest.name} (${actualId})`);
+          NODE
+
+      - name: Create Observer Reality manifest and digest
+        shell: bash
+        env:
+          REALITY_ORIGIN: ${{ steps.observer_origin.outputs.origin }}
+          SIGNED_TARGET: ${{ steps.observer_sign.outputs.target }}
+        run: |
+          mkdir -p reality-package
+          packaged_xpi="reality-package/go-browser-local-observer-v1-signed.xpi"
+          cp "${SIGNED_TARGET}" "${packaged_xpi}"
+          signed_sha256="$(sha256sum "${packaged_xpi}" | awk '{print $1}')"
+          SIGNED_SHA256="${signed_sha256}" node - <<'NODE'
+          const fs = require("fs");
+          const manifest = {
+            schema_version: "go-browser-observer-reality-v1",
+            exact_commit: process.env.GITHUB_SHA,
+            branch: process.env.GITHUB_REF_NAME,
+            preview_worker: process.env.REALITY_WORKER_NAME,
+            preview_origin: process.env.REALITY_ORIGIN,
+            observer_owner_url: `${process.env.REALITY_ORIGIN}/hub/observer`,
+            signed_xpi_filename: "go-browser-local-observer-v1-signed.xpi",
+            signed_xpi_sha256: process.env.SIGNED_SHA256,
+            firefox_android_reality: "PENDING_OWNER_DEVICE",
+            merge_status: "NOT_MERGED",
+          };
+          fs.writeFileSync("reality-package/observer-reality-manifest.json", JSON.stringify(manifest, null, 2) + "\n");
+          NODE
+          echo "Signed XPI SHA-256: ${signed_sha256}"
+
+      - name: Upload Observer Reality package
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-browser-observer-reality-${{ github.sha }}
+          path: reality-package/
           if-no-files-found: error
           retention-days: 7
