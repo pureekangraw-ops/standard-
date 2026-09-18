@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "go-hub-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v9-publication-closure`;
+const CACHE_NAME = `${CACHE_PREFIX}v9-centre-live-publication-closure`;
 const APP_SHELL = [
   "./",
   "./index.html",
