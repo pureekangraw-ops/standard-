@@ -57,3 +57,19 @@ test("GO Hub dedicated service worker is active from the root and legacy-free", 
   assert.equal(release.serviceWorker.file, "go-hub-sw.js");
   assert.equal(release.serviceWorker.mode, "go-hub-exclusive");
 });
+
+
+test("GO Hub runtime assets cannot stay stale across a shell contract deploy", () => {
+  const source = read("go-hub-sw.js");
+  assert.match(source, /v7-role-review-shell/);
+  assert.match(source, /await fetch\(event\.request\)/);
+  assert.match(source, /cache\.put\(event\.request, response\.clone\(\)\)/);
+  assert.match(source, /const cached = await caches\.match\(event\.request\)/);
+
+  const shell = read("go-hub-shell.js");
+  const rootHtml = read("index.html");
+  assert.match(rootHtml, /name="roleReference"/);
+  assert.match(rootHtml, /name="workingView"/);
+  assert.match(shell, /field\("roleReference"\)/);
+  assert.match(shell, /field\("workingView"\)/);
+});
