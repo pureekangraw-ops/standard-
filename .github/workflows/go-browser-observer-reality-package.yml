@@ -1,7 +1,13 @@
 name: GO Browser Observer Reality Package
 
+# Branch-local push fallback exists so Observer Reality can be produced before this workflow reaches default branch.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - work/go-browser-observer-eye-v1
+    paths:
+      - '.github/workflows/go-browser-observer-reality-package.yml'
 
 permissions:
   contents: read
@@ -100,6 +106,23 @@ jobs:
           apiKey: ${{ secrets.AMO_SIGN_KEY }}
           apiSecret: ${{ secrets.AMO_SIGN_SECRET }}
 
+      - name: Verify signed Observer identity
+        shell: bash
+        env:
+          SIGNED_TARGET: ${{ steps.sign.outputs.target }}
+        run: |
+          test -n "${SIGNED_TARGET}" || { echo "SIGNED_OBSERVER_TARGET_MISSING"; exit 1; }
+          manifest_file="${RUNNER_TEMP}/signed-observer-manifest.json"
+          unzip -p "${SIGNED_TARGET}" manifest.json > "${manifest_file}"
+          node - "${manifest_file}" <<'NODE'
+          const fs = require("fs");
+          const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const expectedName = "GO Browser Local Observer Eye";
+          const expectedId = "go-browser-local-observer-v1@pureekangraw.local";
+          const actualId = manifest?.browser_specific_settings?.gecko?.id;
+          if (manifest?.name !== expectedName || actualId !== expectedId) process.exit(1);
+          NODE
+
       - name: Create Reality manifest and digest
         shell: bash
         env:
@@ -107,12 +130,11 @@ jobs:
           SIGNED_TARGET: ${{ steps.sign.outputs.target }}
         run: |
           mkdir -p reality-package
-          signed_name="$(basename "${SIGNED_TARGET}")"
-          signed_sha256="$(sha256sum "${SIGNED_TARGET}" | awk '{print $1}')"
-          cp "${SIGNED_TARGET}" "reality-package/${signed_name}"
+          packaged_xpi="reality-package/go-browser-local-observer-v1-signed.xpi"
+          cp "${SIGNED_TARGET}" "${packaged_xpi}"
+          signed_sha256="$(sha256sum "${packaged_xpi}" | awk '{print $1}')"
           SIGNED_SHA256="${signed_sha256}" node - <<'NODE'
           const fs = require("fs");
-          const path = require("path");
           const manifest = {
             schema_version: "go-browser-observer-reality-v1",
             exact_commit: process.env.GITHUB_SHA,
@@ -120,7 +142,7 @@ jobs:
             preview_worker: process.env.REALITY_WORKER_NAME,
             preview_origin: process.env.REALITY_ORIGIN,
             observer_owner_url: `${process.env.REALITY_ORIGIN}/hub/observer`,
-            signed_xpi_filename: path.basename(process.env.SIGNED_TARGET),
+            signed_xpi_filename: "go-browser-local-observer-v1-signed.xpi",
             signed_xpi_sha256: process.env.SIGNED_SHA256,
             firefox_android_reality: "PENDING_OWNER_DEVICE",
             merge_status: "NOT_MERGED",
