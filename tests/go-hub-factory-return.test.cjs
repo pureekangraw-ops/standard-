@@ -77,7 +77,7 @@ test("Factory work context binds the Code task to the exact Centre identity", as
     task: "Ship GO City roundtrip",
     requestedResult: "Return exact Factory reality evidence",
     roleReference: "role://city-roundtrip",
-    roleReference: "role://city-roundtrip",
+    lensReference: "role://city-roundtrip",
     repository: "pureekangraw-ops/standard-",
     factoryTaskId: "active-code-task",
   });
