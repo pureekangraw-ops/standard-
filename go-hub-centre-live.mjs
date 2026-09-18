@@ -110,6 +110,7 @@ export class GoHubCentreState {
         task: input.task,
         requestedResult: input.requestedResult,
         authority: input.authority,
+        targetId: input.targetId,
       });
       state.phase = "REVIEW";
       await this.save(state);
@@ -133,6 +134,7 @@ export class GoHubCentreState {
     if (action === "leave") {
       const result = this.centre.leave(state.work, {
         destination: required(input.destination, "Destination"),
+        targetId: input.targetId,
       });
       state.work = result.work;
       state.phase = "AWAY";
