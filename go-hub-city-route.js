@@ -1,4 +1,5 @@
 import { CITY_DESTINATIONS, getCityDestination } from "./go-hub-route-contract.js";
+import { resolveWorkInterruption } from "./go-hub-work-lifecycle.js";
 
 const HEIMDALL = Object.freeze({
   id: "heimdall",
@@ -166,5 +167,74 @@ export function routeExit({ done = false, exitReady = false } = {}) {
     destination: "big-chat",
     via: "bifrost",
     reason: "READY_TO_RETURN",
+  });
+}
+
+
+export function routeInterruptionReturn({
+  requested,
+  realityExists = false,
+  merged = false,
+  deployed = false,
+} = {}) {
+  const interruption = resolveWorkInterruption({
+    requested,
+    realityExists,
+    merged,
+    deployed,
+  });
+  return Object.freeze({
+    destination: "centre",
+    via: "destination-return",
+    reason: interruption.state,
+    interruption,
+  });
+}
+
+export function routeInterruptionFromCentre({
+  interruption,
+  needsOptician = false,
+  heimdall = {},
+} = {}) {
+  if (!interruption || typeof interruption !== "object") {
+    throw new Error("interruption resolution is required");
+  }
+  if (interruption.state === "RECOVERY_REQUIRED") {
+    return Object.freeze({
+      destination: "go-work-loop",
+      via: "centre",
+      reason: "RECOVERY_REQUIRED",
+      actions: interruption.actions,
+    });
+  }
+  if (interruption.state === "BLOCKED") {
+    return Object.freeze({
+      destination: "centre",
+      via: "centre",
+      reason: "BLOCKED",
+      actions: interruption.actions,
+    });
+  }
+  if (needsOptician) {
+    return Object.freeze({
+      destination: "optician",
+      via: "centre",
+      reason: interruption.state,
+    });
+  }
+  const passage = heimdallDecision(heimdall);
+  if (passage.decision !== "PASS") {
+    return Object.freeze({
+      destination: "heimdall",
+      via: "centre",
+      reason: passage.reason,
+      interruption: interruption.state,
+    });
+  }
+  return Object.freeze({
+    destination: "bifrost",
+    via: "heimdall",
+    next: "big-chat",
+    reason: interruption.state,
   });
 }
