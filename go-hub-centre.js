@@ -14,6 +14,11 @@ function required(value, label) {
   return normalized;
 }
 
+function optional(value) {
+  const normalized = String(value || "").trim();
+  return normalized || null;
+}
+
 function freeze(value) {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     Object.values(value).forEach(freeze);
@@ -43,6 +48,7 @@ export function createCheckpoint(input = {}) {
     task: null,
     requestedResult: null,
     authority: null,
+    targetId: null,
     role: null,
     handoff: null,
     returnedPayload: null,
@@ -55,6 +61,7 @@ export function intakeTask(work, input = {}) {
   next.task = String(input.task || "").trim() || null;
   next.requestedResult = String(input.requestedResult || "").trim() || null;
   next.authority = String(input.authority || "").trim() || null;
+  next.targetId = optional(input.targetId ?? work.targetId);
   next.status = next.task && next.requestedResult && next.authority
     ? CENTRE_STATES.READY
     : CENTRE_STATES.WAIT;
@@ -69,6 +76,7 @@ export function resumeIntake(work, input = {}) {
     task: input.task ?? work.task,
     requestedResult: input.requestedResult ?? work.requestedResult,
     authority: input.authority ?? work.authority,
+    targetId: input.targetId ?? work.targetId,
   });
 }
 
@@ -96,17 +104,20 @@ export function createHandoff(work, input = {}) {
   const fit = activeFit(work);
   if (!fit) throw new Error("fitted Role is required before handoff");
   const destination = required(input.destination, "Destination");
+  const targetId = optional(input.targetId ?? work.targetId);
   const envelope = {
     workId: work.workId,
     checkpointId: work.checkpointId,
     task: work.task,
     requestedResult: work.requestedResult,
+    targetId,
     roleReference: fit.roleReference,
     workingView: fit.workingView,
     destination,
     returnAddress: work.checkpointId,
   };
   const next = structuredClone(work);
+  next.targetId = targetId;
   next.handoff = envelope;
   next.status = CENTRE_STATES.AWAY;
   return snapshot({ work: next, envelope });
@@ -151,36 +162,19 @@ export function createTestDestinationAdapter(handler = envelope => ({ received: 
   });
 }
 
-
 export function createCentrePassage() {
   return freeze({
-    enter(input = {}) {
-      return createCheckpoint(input);
-    },
-
+    enter(input = {}) { return createCheckpoint(input); },
     review(work, input = {}) {
       if (work?.status === CENTRE_STATES.WAIT) return resumeIntake(work, input);
       return intakeTask(work, input);
     },
-
-    fit(work, input = {}) {
-      return fitRole(work, input);
-    },
-
-    leave(work, input = {}) {
-      return createHandoff(work, input);
-    },
-
-    return(work, returned = {}) {
-      return receiveReturn(work, returned);
-    },
-
-    resume(work, input = {}) {
-      return resumeReturnedWork(work, input);
-    },
+    fit(work, input = {}) { return fitRole(work, input); },
+    leave(work, input = {}) { return createHandoff(work, input); },
+    return(work, returned = {}) { return receiveReturn(work, returned); },
+    resume(work, input = {}) { return resumeReturnedWork(work, input); },
   });
 }
-
 
 export function validateCentreWork(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -198,6 +192,9 @@ export function validateCentreWork(value) {
         value.handoff.returnAddress !== value.checkpointId) {
       throw new Error("AWAY work requires an exact Centre handoff");
     }
+    if (value.targetId && value.handoff.targetId !== value.targetId) {
+      throw new Error("AWAY work target does not match Centre handoff");
+    }
   }
   return snapshot(value);
 }
@@ -212,7 +209,6 @@ export function createCentreSession({ persistence, initial = {}, passage = creat
       const stored = await persistence.loadState();
       return stored ? validateCentreWork(stored) : passage.enter(initial);
     },
-
     async save(work, commandType = "SAVE_CENTRE_WORK") {
       const proposed = validateCentreWork(work);
       return persistence.commitState({
