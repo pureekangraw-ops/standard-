@@ -1,3 +1,10 @@
+> [!CAUTION]
+> **SUPERSEDED GOVERNANCE / HISTORICAL DESIGN**
+> This document is preserved as implementation-history evidence, not as the current GO City/Centre operating contract.
+> Current Centre fitting uses **Role** (`roleId / roleReference / workingView`) and rejects the legacy Lens fit contract.
+> Current governance pointer: `docs/go-hub/current-governance.md`.
+> Historical snapshot is preserved in the owner's Drive archive: **GO Governance — Superseded Rules — 2026-09-19**.
+>
 # GO City Optician v1 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
