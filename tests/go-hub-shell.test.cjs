@@ -135,8 +135,8 @@ test("Centre Review is not blocked by fit-only Role fields", () => {
   }
 
   const source = read("go-hub-shell.js");
-  assert.match(source, /field\("roleReference"\)\.required = reviewed && !fitted/);
-  assert.match(source, /field\("workingView"\)\.required = reviewed && !fitted/);
+  assert.match(source, /\["roleReference", "workingView"\]\.forEach/);
+  assert.match(source, /field\(name\)\.required = reviewed && !fitted/);
   assert.match(source, /FIT_ROLE/);
   assert.match(source, /CENTRE_STATES\.READY && !centreWork\.role && !centreWork\.lens/);
 });
