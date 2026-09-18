@@ -21,6 +21,10 @@ function parsePointer(storage) {
   }
 }
 
+function clearPointer(storage) {
+  storage?.removeItem?.(CENTRE_POINTER_KEY);
+}
+
 function savePointer(storage, work) {
   if (!storage || typeof storage.setItem !== "function") return;
   const workId = clean(work?.workId);
@@ -78,24 +82,33 @@ export function createCentreLiveClient({
     return post(inspectInput(workId, checkpointId));
   }
 
+  async function startNew() {
+    const id = clean(idFactory());
+    if (!id) throw new Error("CENTRE_LIVE_ID_FACTORY_EMPTY");
+    const workId = `WORK-${id}`;
+    const checkpointId = `CENTRE-${id}`;
+    const started = await post({
+      action: "start",
+      workId,
+      checkpointId,
+      returnAddress: checkpointId,
+    });
+    const readback = await inspect(started.workId, started.checkpointId);
+    return readback.work;
+  }
+
   return Object.freeze({
     async restoreOrStart() {
       const pointer = parsePointer(storage);
       if (pointer) {
-        return (await inspect(pointer.workId, pointer.checkpointId)).work;
+        try {
+          return (await inspect(pointer.workId, pointer.checkpointId)).work;
+        } catch (error) {
+          if (!(error instanceof Error) || error.message !== "CENTRE_WORK_NOT_FOUND") throw error;
+          clearPointer(storage);
+        }
       }
-      const id = clean(idFactory());
-      if (!id) throw new Error("CENTRE_LIVE_ID_FACTORY_EMPTY");
-      const workId = `WORK-${id}`;
-      const checkpointId = `CENTRE-${id}`;
-      const started = await post({
-        action: "start",
-        workId,
-        checkpointId,
-        returnAddress: checkpointId,
-      });
-      const readback = await inspect(started.workId, started.checkpointId);
-      return readback.work;
+      return startNew();
     },
 
     async command(input = {}) {
