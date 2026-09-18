@@ -55,6 +55,31 @@ test("edge creates owner-approved LIGHTHOUSE bootstrap and routes device pull", 
   assert.equal(calls.at(-1).op, "pull");
 });
 
+test("pairing runtime exceptions are returned as JSON instead of leaking HTML/text", async () => {
+  const { createEdgeWorkerHandler } = await load("runtime-error");
+  const handler = createEdgeWorkerHandler({
+    delegate:{ async fetch(){ return new Response("delegate"); } },
+    factoryMcp:{ async fetch(){ return new Response("mcp"); } },
+  });
+  const namespace = {
+    getByName() {
+      return {
+        async start() { throw new Error("rpc boom"); },
+      };
+    },
+  };
+  const response = await handler.fetch(new Request("https://hub.example/hub/api/lighthouse-control-port/session/start", {
+    method:"POST",
+    headers:{ "content-type":"application/json", "x-go-owner-passcode":"owner-pass", origin:"https://hub.example" },
+    body:JSON.stringify({ device_label:"Xiaomi 15T" }),
+  }), { LIGHTHOUSE_CONTROL_PORT_SESSIONS:namespace, GOHUB_OWNER_PASSCODE:"owner-pass" });
+  assert.equal(response.status, 500);
+  assert.match(response.headers.get("content-type"), /application\/json/);
+  const body = await response.json();
+  assert.equal(body.code, "PAIRING_RUNTIME_ERROR");
+  assert.match(body.reason, /rpc boom/);
+});
+
 test("edge refuses owner bootstrap with wrong passcode and blocks unknown browser origin", async () => {
   const { createEdgeWorkerHandler } = await load("closed");
   const handler = createEdgeWorkerHandler({
