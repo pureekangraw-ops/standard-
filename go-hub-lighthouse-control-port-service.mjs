@@ -32,7 +32,32 @@ function statusFor(code) {
 }
 function stub(namespace) {
   if (!namespace || typeof namespace.getByName !== "function") return null;
-  return namespace.getByName(SESSION_NAME);
+  const durable = namespace.getByName(SESSION_NAME);
+  if (!durable || typeof durable.fetch !== "function") return null;
+
+  async function call(path, input = {}) {
+    const response = await durable.fetch(new Request(`https://lighthouse-control-port.internal/${path}`, {
+      method:"POST",
+      headers:{ "content-type":"application/json" },
+      body:JSON.stringify(input),
+    }));
+    const raw = await response.text();
+    let body;
+    try { body = raw ? JSON.parse(raw) : {}; }
+    catch { throw new Error("DURABLE_OBJECT_NON_JSON"); }
+    if (!response.ok) throw new Error(body?.code || "DURABLE_OBJECT_ERROR");
+    return body;
+  }
+
+  return Object.freeze({
+    start:input => call("start", input),
+    enqueue:input => call("enqueue", input),
+    pull:input => call("pull", input),
+    pushReceipts:input => call("receipts", input),
+    pushState:input => call("state", input),
+    latest:() => call("latest"),
+    stop:input => call("stop", input),
+  });
 }
 function credentials(request) {
   return {
