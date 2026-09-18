@@ -16,17 +16,31 @@
       {
         "name": "GO_HUB_FACTORY_STATE",
         "class_name": "GoHubFactoryState"
+      },
+      {
+        "name": "OBSERVER_SESSIONS",
+        "class_name": "ObserverSessionRegistry"
       }
     ]
   },
   "migrations": [
     {
       "tag": "v1-hephaestus-foreman",
-      "new_sqlite_classes": ["HephaestusForeman"]
+      "new_sqlite_classes": [
+        "HephaestusForeman"
+      ]
     },
     {
       "tag": "v2-factory-task-state",
-      "new_sqlite_classes": ["GoHubFactoryState"]
+      "new_sqlite_classes": [
+        "GoHubFactoryState"
+      ]
+    },
+    {
+      "tag": "v3-browser-observer-sessions",
+      "new_sqlite_classes": [
+        "ObserverSessionRegistry"
+      ]
     }
   ],
   "vars": {
@@ -45,6 +59,7 @@
     "run_worker_first": [
       "/hub/api/browser/*",
       "/hub/api/github-workspace/*",
+      "/hub/observer",
       "/mcp",
       "/oauth/*",
       "/.well-known/*"
