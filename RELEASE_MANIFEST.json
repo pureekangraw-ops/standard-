@@ -12,13 +12,14 @@
     "GitHub-backed Code workspace through trusted same-origin gateway",
     "durable CENTRE checkpoint before destination access",
     "canonical Optician and City Route gate before Factory handoff",
-    "single CENTRE entry and return passage for GO"
+    "single CENTRE entry and return passage for GO",
+    "explicit repository-neutral Work Target routing into LIGHTHOUSE through Factory"
   ],
   "serviceWorker": {
     "file": "go-hub-sw.js",
     "mode": "go-hub-exclusive",
     "cachePrefix": "go-hub-app-",
-    "cacheGeneration": "v9-centre-live-publication-closure",
+    "cacheGeneration": "v10-lighthouse-target-route",
     "autoActivate": true
   },
   "validation": {
@@ -144,6 +145,9 @@
     },
     {
       "path": "go-hub-station-monitors.js"
+    },
+    {
+      "path": "go-hub-work-targets.js"
     }
   ]
 }
