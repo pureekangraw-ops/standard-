@@ -132,7 +132,7 @@ test("all GO work leaves and returns through the same Centre passage", async () 
 
   assert.throws(
     () => centre.leave(reviewed, { destination: "destination://factory" }),
-    /fitted Lens/,
+    /fitted Role/,
     "GO cannot bypass the Centre fitting step",
   );
 
@@ -260,4 +260,27 @@ test("Destination capability is admitted only by an exact AWAY handoff", async (
   assert.equal(access.capability.run(), "real method");
   assert.equal(returned.status, "RETURNED");
   assert.equal(returned.checkpointId, "CENTRE-001");
+});
+
+
+test("current Role fit is first-class while legacy Lens fit remains compatible", async () => {
+  const { createCentrePassage } = await load();
+  const centre = createCentrePassage();
+  const reviewed = centre.review(
+    centre.enter({ checkpointId: "CENTRE-ROLE-001", workId: "WORK-ROLE-A" }),
+    { task: "Task Role", requestedResult: "Role result", authority: "BIG" },
+  );
+
+  const fitted = centre.fit(reviewed, {
+    roleId: "ROLE-DETECTIVE",
+    roleReference: "role://detective",
+    workingView: "Trace the first broken truth",
+  });
+
+  assert.equal(fitted.role.roleReference, "role://detective");
+  assert.equal(fitted.lens, null);
+
+  const outbound = centre.leave(fitted, { destination: "destination://factory" });
+  assert.equal(outbound.envelope.roleReference, "role://detective");
+  assert.equal(outbound.envelope.lensReference, null);
 });

@@ -86,7 +86,7 @@ test("CENTRE is the durable entry and exit gate before Code capability access", 
     "runtime.register(\"Code\", createCodeCapability({ workspace, task, workContext }))",
     "runtime.unregister(\"Code\")",
     "REVIEW_AT_CENTRE",
-    "FIT_LENS",
+    "FIT_ROLE",
     "LEAVE_CENTRE",
     "RETURN_TO_CENTRE",
   ]) {
@@ -123,4 +123,20 @@ test("active shell must pass Optician and canonical city route before leaving Ce
   const leaveIndex = source.indexOf("centre.leave(centreWork");
   assert.ok(fitIndex >= 0 && routeIndex > fitIndex && leaveIndex > routeIndex,
     "Optician fit and city route must run before Centre handoff");
+});
+
+
+test("Centre Review is not blocked by fit-only Role fields", () => {
+  for (const html of [read("index.html"), read("go-hub.html")]) {
+    assert.match(html, /name="roleReference"/);
+    assert.match(html, /name="workingView"/);
+    assert.doesNotMatch(html, /name="roleReference"[^>]*required/);
+    assert.doesNotMatch(html, /name="workingView"[^>]*required/);
+  }
+
+  const source = read("go-hub-shell.js");
+  assert.match(source, /\["roleReference", "workingView"\]\.forEach/);
+  assert.match(source, /field\(name\)\.required = reviewed && !fitted/);
+  assert.match(source, /FIT_ROLE/);
+  assert.match(source, /CENTRE_STATES\.READY && !centreWork\.role && !centreWork\.lens/);
 });

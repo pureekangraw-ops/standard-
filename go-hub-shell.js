@@ -84,7 +84,7 @@ function fitFactoryRoute() {
       successCondition: centreWork.requestedResult,
     },
     reality: task.snapshot(),
-    lens: { reference: centreWork.lens?.lensReference },
+    role: { reference: centreWork.role?.roleReference || centreWork.lens?.lensReference },
     destination: canonicalFactory,
   });
   if (fit.gate !== "PASS") {
@@ -160,23 +160,24 @@ function renderCentre() {
   field("task").value = centreWork.task || "";
   field("requestedResult").value = centreWork.requestedResult || "";
   field("authority").value = centreWork.authority || "BIG";
-  field("lensReference").value = centreWork.lens?.lensReference || "";
-  field("fittedView").value = centreWork.lens?.fittedView || "";
+  field("roleReference").value = centreWork.role?.roleReference || centreWork.lens?.lensReference || "";
+  field("workingView").value = centreWork.role?.workingView || centreWork.lens?.fittedView || "";
 
   const reviewed = centreWork.status !== CENTRE_STATES.ARRIVED
     && centreWork.status !== CENTRE_STATES.WAIT;
-  const fitted = Boolean(centreWork.lens);
+  const fitted = Boolean(centreWork.role || centreWork.lens);
   ["task", "requestedResult", "authority"].forEach(name => {
     field(name).disabled = reviewed;
   });
-  ["lensReference", "fittedView"].forEach(name => {
+  ["roleReference", "workingView"].forEach(name => {
     field(name).disabled = !reviewed || fitted;
+    field(name).required = reviewed && !fitted && centreWork.status === CENTRE_STATES.READY;
   });
 
   const labels = {
     [CENTRE_STATES.ARRIVED]: "Review task",
     [CENTRE_STATES.WAIT]: "Review task",
-    [CENTRE_STATES.READY]: fitted ? "Leave for Factory" : "Fit Lens",
+    [CENTRE_STATES.READY]: fitted ? "Leave for Factory" : "Fit Role",
     [CENTRE_STATES.AWAY]: "Receive return",
     [CENTRE_STATES.RETURNED]: "Returned to checkpoint",
   };
@@ -218,13 +219,13 @@ centreForm?.addEventListener("submit", async event => {
         authority: field("authority").value,
       });
       await centreSession.save(centreWork, "REVIEW_AT_CENTRE");
-    } else if (centreWork.status === CENTRE_STATES.READY && !centreWork.lens) {
+    } else if (centreWork.status === CENTRE_STATES.READY && !centreWork.role && !centreWork.lens) {
       centreWork = centre.fit(centreWork, {
-        lensId: field("lensReference").value,
-        lensReference: field("lensReference").value,
-        fittedView: field("fittedView").value,
+        roleId: field("roleReference").value,
+        roleReference: field("roleReference").value,
+        workingView: field("workingView").value,
       });
-      await centreSession.save(centreWork, "FIT_LENS");
+      await centreSession.save(centreWork, "FIT_ROLE");
     } else if (centreWork.status === CENTRE_STATES.READY) {
       const route = fitFactoryRoute();
       centreWork = centre.leave(centreWork, {
