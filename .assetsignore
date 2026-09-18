@@ -33,3 +33,11 @@ node_modules/**
 !/go-hub-persistence.js
 !/go-hub-sw-bootstrap.js
 !/go-hub-sw.js
+!/go-hub-operator-model.js
+!/go-hub-factory-authority.js
+!/go-hub-work-lifecycle.js
+!/go-hub-route-contract.js
+!/go-hub-utils.js
+!/go-hub-traffic.js
+!/go-hub-dashboard-model.js
+!/go-hub-station-monitors.js

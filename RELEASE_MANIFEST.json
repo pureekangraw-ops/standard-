@@ -18,7 +18,7 @@
     "file": "go-hub-sw.js",
     "mode": "go-hub-exclusive",
     "cachePrefix": "go-hub-app-",
-    "cacheGeneration": "v8-centre-live-client",
+    "cacheGeneration": "v9-centre-live-publication-closure",
     "autoActivate": true
   },
   "validation": {
@@ -120,6 +120,30 @@
     },
     {
       "path": "go-hub-sw.js"
+    },
+    {
+      "path": "go-hub-operator-model.js"
+    },
+    {
+      "path": "go-hub-factory-authority.js"
+    },
+    {
+      "path": "go-hub-work-lifecycle.js"
+    },
+    {
+      "path": "go-hub-route-contract.js"
+    },
+    {
+      "path": "go-hub-utils.js"
+    },
+    {
+      "path": "go-hub-traffic.js"
+    },
+    {
+      "path": "go-hub-dashboard-model.js"
+    },
+    {
+      "path": "go-hub-station-monitors.js"
     }
   ]
 }
