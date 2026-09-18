@@ -31,3 +31,13 @@ jobs:
           path: dist/go-browser-local-v1
           if-no-files-found: error
           retention-days: 7
+
+      - name: Build unsigned GO Browser Observer review artifact
+        run: npm run build:go-browser-observer-extension
+      - name: Upload unsigned GO Browser Observer review artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-browser-local-observer-v1-unsigned-${{ github.event.pull_request.head.sha || github.sha }}
+          path: dist/go-browser-local-observer-v1
+          if-no-files-found: error
+          retention-days: 7
