@@ -117,10 +117,11 @@ export class GoHubCentreState {
     }
 
     if (action === "fit") {
+      const roleReference = input.roleReference ?? input.lensReference;
       state.work = this.centre.fit(state.work, {
-        lensId: input.lensId,
-        lensReference: input.lensReference,
-        fittedView: input.fittedView,
+        roleId: input.roleId ?? input.lensId ?? roleReference,
+        roleReference,
+        workingView: input.workingView ?? input.fittedView,
       });
       state.phase = "FIT";
       await this.save(state);
