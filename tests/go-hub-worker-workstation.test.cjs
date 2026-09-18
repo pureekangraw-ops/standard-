@@ -156,10 +156,16 @@ test("Worker writes and deletes only on a non-default branch with optimistic SHA
   assert.equal(calls.filter(call => call.url === `https://api.github.com/repos/${repository}`).length, 2);
 });
 
-test("Worker compares branch against base and returns diff evidence", async () => {
+test("Worker compares exact resolved commits and returns SHA-bound diff evidence", async () => {
   const fetchImpl = async url => {
     const value = String(url);
-    if (value === `https://api.github.com/repos/${repository}/compare/main...feature-b`) {
+    if (value === `https://api.github.com/repos/${repository}/commits/main`) {
+      return jsonResponse({ sha: "base-exact" });
+    }
+    if (value === `https://api.github.com/repos/${repository}/commits/feature-b`) {
+      return jsonResponse({ sha: "head-exact" });
+    }
+    if (value === `https://api.github.com/repos/${repository}/compare/base-exact...head-exact`) {
       return jsonResponse({ status: "ahead", ahead_by: 2, behind_by: 0, files: [
         { filename: "src/app.js", status: "modified", additions: 3, deletions: 1, patch: "@@" },
       ] });
@@ -172,6 +178,7 @@ test("Worker compares branch against base and returns diff evidence", async () =
   const response = await handler.fetch(request, { GITHUB_TOKEN: "token" });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
+    baseRef: "main", headRef: "feature-b", baseSha: "base-exact", headSha: "head-exact",
     status: "ahead", aheadBy: 2, behindBy: 0,
     files: [{ path: "src/app.js", status: "modified", additions: 3, deletions: 1, patch: "@@" }],
   });
@@ -214,17 +221,25 @@ test("Worker opens or updates a pull request while preserving exact head/base", 
   }
 });
 
-test("Worker reads one pull request with exact head evidence", async () => {
+test("Worker reads one pull request with exact head and merged Reality evidence", async () => {
   const fetchImpl = async url => {
     assert.equal(String(url), `https://api.github.com/repos/${repository}/pulls/19`);
-    return jsonResponse({ number: 19, html_url: "https://github.test/pr/19", state: "open", mergeable: true, head: { ref: "feature-c", sha: "head-c" }, base: { ref: "main", sha: "base-c" } });
+    return jsonResponse({
+      number: 19,
+      html_url: "https://github.test/pr/19",
+      state: "closed",
+      merged: true,
+      mergeable: false,
+      head: { ref: "feature-c", sha: "head-c" },
+      base: { ref: "main", sha: "base-c" },
+    });
   };
   const { createWorkerHandler } = await import(`${workerUrl}?getpr=${Date.now()}`);
   const handler = createWorkerHandler({ fetchImpl });
   const response = await handler.fetch(new Request(`https://hub.example/hub/api/github-workspace/pull-request?repository=${encodeURIComponent(repository)}&number=19`), { GITHUB_TOKEN: "token" });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
-    number: 19, url: "https://github.test/pr/19", state: "open", mergeable: true,
+    number: 19, url: "https://github.test/pr/19", state: "closed", merged: true, mergeable: false,
     headBranch: "feature-c", headSha: "head-c", baseBranch: "main", baseSha: "base-c",
   });
 });
