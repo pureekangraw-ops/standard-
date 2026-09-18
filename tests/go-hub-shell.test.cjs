@@ -147,7 +147,7 @@ test("Centre Review is not blocked by fit-only Role fields", () => {
 test("Centre bootstrap remains available when persisted Workbench state cannot load", () => {
   const source = read("go-hub-shell.js");
   const loadIndex = source.indexOf("task = await taskSession.load()");
-  const catchIndex = source.indexOf("taskLoadError =");
+  const catchIndex = source.indexOf("taskLoadError = error instanceof Error");
   const centreIndex = source.indexOf("await centreLive.restoreOrStart()");
   const renderIndex = source.lastIndexOf("render();");
 
