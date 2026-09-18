@@ -33,7 +33,7 @@ test("edge creates owner-approved LIGHTHOUSE bootstrap and routes device pull", 
 
   const start = await handler.fetch(new Request("https://hub.example/hub/api/lighthouse-control-port/session/start", {
     method:"POST",
-    headers:{ "content-type":"application/json", "x-go-owner-passcode":"owner-pass", origin:"https://localhost" },
+    headers:{ "content-type":"application/json", "x-go-owner-passcode":"owner-pass", origin:"https://hub.example" },
     body:JSON.stringify({ device_label:"Xiaomi 15T" }),
   }), env);
   assert.equal(start.status, 200);
