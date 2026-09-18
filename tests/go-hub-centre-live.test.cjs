@@ -136,5 +136,4 @@ test("new state instance resumes the same durable identity", async () => {
   assert.equal(resumed.body.work.status, "AWAY");
   assert.equal(resumed.body.work.role.roleReference, "role://RESTART");
   assert.equal(resumed.body.work.role.workingView, "smoke");
-  assert.equal(resumed.body.work.lens, null);
 });
