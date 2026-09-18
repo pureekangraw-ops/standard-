@@ -132,7 +132,7 @@ test("all GO work leaves and returns through the same Centre passage", async () 
 
   assert.throws(
     () => centre.leave(reviewed, { destination: "destination://factory" }),
-    /fitted Lens/,
+    /fitted Role/,
     "GO cannot bypass the Centre fitting step",
   );
 
