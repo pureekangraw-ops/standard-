@@ -80,7 +80,6 @@ export function fitRole(work, input = {}) {
     roleReference: required(input.roleReference, "Role Reference"),
     workingView: required(input.workingView, "Working View"),
   };
-  next.lens = null;
   return snapshot(next);
 }
 
