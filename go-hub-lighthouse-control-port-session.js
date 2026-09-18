@@ -233,16 +233,31 @@ export function createLighthouseControlPortSessionService({
   });
 }
 
+function internalJson(payload, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers:{ "content-type":"application/json; charset=utf-8", "cache-control":"no-store" },
+  });
+}
+
 export class LighthouseControlPortSessionRegistry {
   constructor(ctx) { this.ctx = ctx; }
   service() { return createLighthouseControlPortSessionService({ storage:this.ctx.storage }); }
-  async start(input) { return this.service().start(input); }
-  async enqueue(input) { return this.service().enqueue(input); }
-  async pull(input) { return this.service().pull(input); }
-  async pushReceipts(input) { return this.service().pushReceipts(input); }
-  async pushState(input) { return this.service().pushState(input); }
-  async latest() { return this.service().latest(); }
-  async stop(input) { return this.service().stop(input); }
+
+  async fetch(request) {
+    if (request.method !== "POST") return internalJson({ ok:false, code:"METHOD_NOT_ALLOWED" }, 405);
+    const url = new URL(request.url);
+    const input = await request.json().catch(() => ({}));
+    const service = this.service();
+    if (url.pathname === "/start") return internalJson(await service.start(input));
+    if (url.pathname === "/enqueue") return internalJson(await service.enqueue(input));
+    if (url.pathname === "/pull") return internalJson(await service.pull(input));
+    if (url.pathname === "/receipts") return internalJson(await service.pushReceipts(input));
+    if (url.pathname === "/state") return internalJson(await service.pushState(input));
+    if (url.pathname === "/latest") return internalJson(await service.latest());
+    if (url.pathname === "/stop") return internalJson(await service.stop(input));
+    return internalJson({ ok:false, code:"NOT_FOUND" }, 404);
+  }
 }
 
 export { DEFAULT_SESSION_TTL_MS, MAX_SESSION_TTL_MS };
