@@ -4,10 +4,16 @@ import { createFactoryMcpWorker } from "./go-hub-factory-mcp-worker.mjs";
 import { createFactoryActionService } from "./go-hub-factory-service.mjs";
 import { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
+import {
+  createLighthouseControlPortHttpService,
+  LIGHTHOUSE_CONTROL_PORT_API_ROOT,
+  LIGHTHOUSE_CONTROL_PORT_OWNER_PATH,
+} from "./go-hub-lighthouse-control-port-service.mjs";
 export { HephaestusForeman } from "./go-hub-factory-controller.mjs";
 export { GoHubFactoryState } from "./go-hub-factory-state.mjs";
 export { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 export { GoHubCentreState } from "./go-hub-centre-live.mjs";
+export { LighthouseControlPortSessionRegistry } from "./go-hub-lighthouse-control-port-session.js";
 
 const CENTRE_API_ROOT = "/hub/api/centre";
 const BROWSER_API_ROOT = "/hub/api/browser";
@@ -151,6 +157,13 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
       }
       if (request.method === "GET" && url.pathname === "/hub/observer") {
         return observerOwnerPage();
+      }
+      if (url.pathname === LIGHTHOUSE_CONTROL_PORT_OWNER_PATH ||
+          url.pathname.startsWith(LIGHTHOUSE_CONTROL_PORT_API_ROOT + "/")) {
+        return createLighthouseControlPortHttpService({
+          namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS,
+          ownerPasscode:env?.GOHUB_OWNER_PASSCODE,
+        }).fetch(request);
       }
       if (url.pathname === `${CENTRE_API_ROOT}/action`) {
         if (request.method !== "POST") return json({ code: "METHOD_NOT_ALLOWED" }, 405);
