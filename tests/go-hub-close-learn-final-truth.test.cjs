@@ -12,7 +12,7 @@ const centreUrl=pathToFileURL(path.join(root,"go-hub-centre.js")).href;
 async function factoryAccess(){
   const {createCentrePassage,admitDestination}=await import(`${centreUrl}?close=${Date.now()}-${Math.random()}`);
   const centre=createCentrePassage();
-  const ready=centre.fit(centre.review(centre.enter({checkpointId:"CENTRE-CLOSE",workId:"WORK-CLOSE"}),{task:"Close Factory truth",requestedResult:"Return final product truth",authority:"BIG"}),{lensId:"LENS-CLOSE",lensReference:"lens://close",fittedView:"Return canonical final truth"});
+  const ready=centre.fit(centre.review(centre.enter({checkpointId:"CENTRE-CLOSE",workId:"WORK-CLOSE"}),{task:"Close Factory truth",requestedResult:"Return final product truth",authority:"BIG"}),{roleId:"LENS-CLOSE",roleReference:"lens://close",workingView:"Return canonical final truth"});
   const away=centre.leave(ready,{destination:"destination://factory"}).work;
   return admitDestination(away,{destination:"destination://factory",capability:{id:"code",status:"ready"}});
 }
