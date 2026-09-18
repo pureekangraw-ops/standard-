@@ -8,7 +8,7 @@ function requireFactoryAccess(access){if(!access||access.destination!==FACTORY_D
 function returnStatus(task={}){if(task.blocker)return "WAIT";if(["CONFLICT","DEPLOY_FAILED","VERIFY_FAILED"].includes(String(task.state||"")))return "FAIL";if(task.closeout?.status==="CLOSEOUT_READY"||["CLOSED","LEARNED"].includes(String(task.factoryStage||""))||String(task.state||"")==="VERIFIED")return "PASS";return "RETURNED";}
 function finalProductArtifact(task={}){return String(task.buildArtifact?.kind||"").toLowerCase()==="apk"?task.signedArtifact:task.buildArtifact;}
 
-export function createFactoryWorkContext(access,taskSnapshot={}){const envelope=requireFactoryAccess(access);return snapshot({workId:access.workId,checkpointId:access.checkpointId,returnAddress:access.returnAddress,destination:access.destination,task:envelope.task,requestedResult:envelope.requestedResult,lensReference:envelope.lensReference,repository:String(taskSnapshot.repository||"")||null,factoryTaskId:String(taskSnapshot.id||"")||null});}
+export function createFactoryWorkContext(access,taskSnapshot={}){const envelope=requireFactoryAccess(access);const roleReference=envelope.roleReference??envelope.lensReference??null;return snapshot({workId:access.workId,checkpointId:access.checkpointId,returnAddress:access.returnAddress,destination:access.destination,task:envelope.task,requestedResult:envelope.requestedResult,roleReference,lensReference:envelope.lensReference??roleReference,repository:String(taskSnapshot.repository||"")||null,factoryTaskId:String(taskSnapshot.id||"")||null});}
 
 export function createFactoryRealityReturn(access,taskSnapshot={}){
   requireFactoryAccess(access);const task=clone(taskSnapshot)||{},artifact=finalProductArtifact(task);
