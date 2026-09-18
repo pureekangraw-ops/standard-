@@ -34,13 +34,13 @@ test("Operator view exposes recovery instead of cancellation after Reality exist
 });
 
 test("Operator surface contains evidence fields but no direct inspect or transition control",()=>{
-  const html=fs.readFileSync(path.join(root,"go-hub.html"),"utf8");
+  const surfaces=["go-hub.html","index.html"].map(file=>fs.readFileSync(path.join(root,file),"utf8"));
   const shell=fs.readFileSync(path.join(root,"go-hub-shell.js"),"utf8");
   for(const marker of[
     "data-code-operator","data-code-state","data-code-repository","data-code-base",
     "data-code-work-branch","data-code-head","data-code-pr","data-code-ci",
     "data-code-deploy","data-code-verification","data-code-blocker","data-code-next-action"
-  ]) assert.match(html,new RegExp(marker));
-  assert.doesNotMatch(html,/data-code-inspect/);
+  ]) for(const html of surfaces) assert.match(html,new RegExp(marker));
+  for(const html of surfaces) assert.doesNotMatch(html,/data-code-inspect/);
   assert.doesNotMatch(shell,/task\.transition\("BRANCH_READY"/);
 });
