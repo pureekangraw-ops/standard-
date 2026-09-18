@@ -113,7 +113,6 @@ test("browser workspace calls Factory action through same-origin gateway without
   });
 });
 
-
 test("current edge worker owns the governed Factory action route and durable binding", () => {
   const fs = require("node:fs");
   const edge = fs.readFileSync(path.join(root, "go-hub-edge-worker.mjs"), "utf8");
@@ -125,4 +124,12 @@ test("current edge worker owns the governed Factory action route and durable bin
   assert.match(wrangler, /"name": "GO_HUB_FACTORY_STATE"/);
   assert.match(wrangler, /"class_name": "GoHubFactoryState"/);
   assert.match(wrangler, /"tag": "v2-factory-task-state"/);
+});
+
+test("Factory state class is RPC-capable for Durable Object stub methods", () => {
+  const fs = require("node:fs");
+  const source = fs.readFileSync(path.join(root, "go-hub-factory-state.mjs"), "utf8");
+  assert.match(source, /import\s*\{\s*DurableObject\s*\}\s*from\s*["']cloudflare:workers["']/);
+  assert.match(source, /export\s+class\s+GoHubFactoryState\s+extends\s+DurableObject/);
+  assert.match(source, /super\(ctx,\s*env\)/);
 });
