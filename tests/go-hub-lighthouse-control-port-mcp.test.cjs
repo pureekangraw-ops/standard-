@@ -14,13 +14,18 @@ test("LIGHTHOUSE Control Port MCP service reads paired state and queues commands
     getByName(name) {
       assert.equal(name, "lighthouse-control-port-v1");
       return {
-        async latest() {
-          calls.push({ op:"latest" });
-          return { ok:true, latest:{ snapshot:{ freshness:"LIVE", revision:9 } }, commands:[], receipts:[] };
-        },
-        async enqueue(input) {
-          calls.push({ op:"enqueue", input });
-          return { ok:true, duplicate:false, command:{ ...input, status:"QUEUED" } };
+        async fetch(request) {
+          const url = new URL(request.url);
+          const input = await request.json();
+          if (url.pathname === "/latest") {
+            calls.push({ op:"latest" });
+            return new Response(JSON.stringify({ ok:true, latest:{ snapshot:{ freshness:"LIVE", revision:9 } }, commands:[], receipts:[] }), { status:200, headers:{ "content-type":"application/json" } });
+          }
+          if (url.pathname === "/enqueue") {
+            calls.push({ op:"enqueue", input });
+            return new Response(JSON.stringify({ ok:true, duplicate:false, command:{ ...input, status:"QUEUED" } }), { status:200, headers:{ "content-type":"application/json" } });
+          }
+          return new Response(JSON.stringify({ ok:false, code:"NOT_FOUND" }), { status:404, headers:{ "content-type":"application/json" } });
         },
       };
     },

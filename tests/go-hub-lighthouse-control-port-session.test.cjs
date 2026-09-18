@@ -12,6 +12,25 @@ class MemoryStorage {
 }
 async function load(tag) { return import(`${moduleUrl}?lhcp=${tag}-${Date.now()}`); }
 
+test("Durable Object fetch bridge exposes session operations without RPC", async () => {
+  const m = await load("fetch-bridge");
+  const storage = new MemoryStorage();
+  const registry = new m.LighthouseControlPortSessionRegistry({ storage });
+  const response = await registry.fetch(new Request("https://lighthouse-control-port.internal/start", {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body:JSON.stringify({ deviceLabel:"Xiaomi 15T", ttlMs:60_000 }),
+  }));
+  assert.equal(response.status, 200);
+  const started = await response.json();
+  assert.equal(started.ok, true);
+  assert.equal(typeof started.session_id, "string");
+  assert.equal(typeof started.session_token, "string");
+  const stored = await storage.get("state");
+  assert.equal(stored.session.deviceLabel, "Xiaomi 15T");
+  assert.equal(JSON.stringify(stored).includes(started.session_token), false);
+});
+
 test("owner bootstrap stores only token hash and issues runtime credential", async () => {
   const m = await load("start");
   const storage = new MemoryStorage();
