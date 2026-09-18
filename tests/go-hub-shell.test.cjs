@@ -58,7 +58,7 @@ test("GO Hub shell mounts the six truths from the restored Code task projection"
   const goHubHtml = read("go-hub.html");
   const indexHtml = read("index.html");
   assert.match(source, /createWorkbenchView/);
-  assert.match(source, /renderWorkbench\(task\.snapshot\(\)\)/);
+  assert.match(source, /renderWorkbench\(taskSnapshot\(\)\)/);
   [
     "data-workbench-mission",
     "data-workbench-blueprint",
@@ -141,4 +141,29 @@ test("Centre Review is not blocked by fit-only Role fields", () => {
   assert.match(source, /field\(name\)\.required = reviewed && !fitted/);
   assert.match(source, /action:\s*"fit"/);
   assert.match(source, /CENTRE_STATES\.READY && !centreWork\.role/);
+});
+
+
+test("Centre bootstrap remains available when persisted Workbench state cannot load", () => {
+  const source = read("go-hub-shell.js");
+  const loadIndex = source.indexOf("task = await taskSession.load()");
+  const catchIndex = source.indexOf("taskLoadError =");
+  const centreIndex = source.indexOf("await centreLive.restoreOrStart()");
+  const renderIndex = source.lastIndexOf("render();");
+
+  assert.ok(loadIndex >= 0, "shell must attempt to restore persisted Workbench state");
+  assert.ok(catchIndex > loadIndex, "Workbench load failure must be caught");
+  assert.ok(centreIndex > catchIndex, "Centre bootstrap must continue after isolated Workbench load");
+  assert.ok(renderIndex > centreIndex, "Centre must still render after bootstrap");
+  assert.match(source, /const baseCodeCapability = task \? createCodeCapability/);
+  assert.match(source, /function assertWorkbenchReady\(\)/);
+  assert.match(source, /WORKBENCH_STATE_UNAVAILABLE/);
+  assert.match(source, /renderCentre\(\)/);
+});
+
+test("Workbench load failure never silently opens Factory capability", () => {
+  const source = read("go-hub-shell.js");
+  assert.match(source, /if \(shouldOpen && \(!task \|\| !baseCodeCapability\)\)/);
+  assert.match(source, /if \(runtime\.get\("Code"\)\) runtime\.unregister\("Code"\)/);
+  assert.match(source, /assertWorkbenchReady\(\);/);
 });
