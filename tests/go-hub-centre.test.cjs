@@ -281,5 +281,4 @@ test("current Role fit is first-class and handoff is Role-only", async () => {
 
   const outbound = centre.leave(fitted, { destination: "destination://factory" });
   assert.equal(outbound.envelope.roleReference, "role://detective");
-  assert.equal(outbound.envelope.roleReference, null);
 });
