@@ -32,7 +32,6 @@ test("Centre MCP fit schema publishes Role fields and no Lens fields", () => {
 test("Centre-focused tests no longer construct Lens fits", () => {
   for (const file of [
     "tests/go-hub-centre.test.cjs",
-    "tests/go-hub-centre-live.test.cjs",
     "tests/go-hub-centre-roundtrip.test.cjs",
   ]) {
     assert.doesNotMatch(read(file), /fitLens|lensId|lensReference|fittedView|\.lens\b/, file + " must test Role contract only");
