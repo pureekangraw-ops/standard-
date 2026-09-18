@@ -109,3 +109,17 @@ test("Optician waits when MIMIR has no usable information route", async () => {
   assert.equal(fitted.reason, "NO_MATCH");
   assert.equal(fitted.route, null);
 });
+
+
+test("Optician compatibility accepts current Role reference without requiring legacy Lens input", async () => {
+  const { fitWork } = await load();
+  const fitted = fitWork({
+    context: canonicalContext,
+    role: { id: "detective", reference: "role://detective" },
+    destination: { id: "factory", route: "destination://factory" },
+  });
+
+  assert.equal(fitted.gate, "PASS");
+  assert.equal(fitted.roleReference, "role://detective");
+  assert.equal(fitted.lensReference, "role://detective");
+});
