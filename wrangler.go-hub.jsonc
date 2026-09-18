@@ -22,6 +22,10 @@
         "class_name": "GoHubCentreState"
       },
       {
+        "name": "LIGHTHOUSE_CONTROL_PORT_SESSIONS",
+        "class_name": "LighthouseControlPortSessionRegistry"
+      },
+      {
         "name": "OBSERVER_SESSIONS",
         "class_name": "ObserverSessionRegistry"
       }
@@ -51,6 +55,12 @@
       "new_sqlite_classes": [
         "GoHubCentreState"
       ]
+    },
+    {
+      "tag": "v5-lighthouse-control-port-session",
+      "new_sqlite_classes": [
+        "LighthouseControlPortSessionRegistry"
+      ]
     }
   ],
   "vars": {
@@ -68,6 +78,8 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": [
       "/hub/api/centre/*",
+      "/hub/api/lighthouse-control-port/*",
+      "/hub/lighthouse",
       "/hub/api/browser/*",
       "/hub/api/github-workspace/*",
       "/hub/observer",
