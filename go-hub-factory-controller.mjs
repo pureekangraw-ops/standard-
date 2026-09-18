@@ -1,5 +1,5 @@
 import { createHephaestusState, createMergeAdmissionTruth, evaluateFactoryAdmission, requestFactorySlot } from "./go-hub-hephaestus.js";
-import { admitQueuedFactorySlot, releaseFactorySlot } from "./go-hub-hephaestus-queue.js";
+import { admitQueuedFactorySlot, releaseFactorySlot, retireQueuedFactoryWork } from "./go-hub-hephaestus-queue.js";
 import { completeMergeAndReturn, parkMergedWork, completeWaitingRoomVerification } from "./go-hub-hephaestus-return.js";
 
 const STATE_KEY = "state";
@@ -39,6 +39,31 @@ function assertClosedUnmergedCancellation(input = {}) {
     throw new Error("closed unmerged pull request evidence is required");
   }
   return { reason: "PULL_REQUEST_CLOSED_UNMERGED", observedAt: String(cancellation.observedAt), pullRequest: structuredClone(pr) };
+}
+
+function assertIntegratedQueuedRecovery(input = {}) {
+  const recovery = input.cancellation;
+  const pr = recovery?.pullRequest;
+  const comparison = recovery?.comparison;
+  const mainSha = String(recovery?.mainSha || "").trim();
+  const compareStatus = String(comparison?.status || "").toLowerCase();
+  if (String(recovery?.reason || "") !== "PULL_REQUEST_HEAD_IN_MAIN" ||
+      !String(recovery?.observedAt || "").trim() ||
+      String(pr?.state || "").toLowerCase() !== "closed" ||
+      !Number.isInteger(pr?.number) || pr.number < 1 || !String(pr?.headSha || "").trim() ||
+      !mainSha || (compareStatus !== "ahead" && compareStatus !== "identical") ||
+      String(comparison?.baseSha || "") !== String(pr.headSha) ||
+      String(comparison?.headSha || "") !== mainSha ||
+      Number(comparison?.behindBy) !== 0) {
+    throw new Error("integrated queued pull request evidence is required");
+  }
+  return {
+    reason: "PULL_REQUEST_HEAD_IN_MAIN",
+    observedAt: String(recovery.observedAt),
+    pullRequest: structuredClone(pr),
+    mainSha,
+    comparison: structuredClone(comparison),
+  };
 }
 
 export class HephaestusForeman {
@@ -103,8 +128,42 @@ export class HephaestusForeman {
     const slot = validSlot(input.slot);
     const goId = required(input.goId, "goId");
     const jobId = required(input.jobId, "jobId");
-    const cancellation = assertClosedUnmergedCancellation(input);
     const current = await this.loadState();
+
+    if (String(input.cancellation?.reason || "") === "PULL_REQUEST_HEAD_IN_MAIN") {
+      const recovery = assertIntegratedQueuedRecovery(input);
+      if (slot !== "merge") throw new Error("integrated queue recovery is merge-only");
+      const target = current?.repositories?.[repository]?.merge;
+      if (target?.active) throw new Error("integrated queued work cannot retire while merge slot is active");
+      const head = target?.queue?.[0];
+      if (!head || head.goId !== goId || head.jobId !== jobId) {
+        throw new Error("integrated recovery must match merge queue head");
+      }
+      if (Number(head?.jobId?.match(/\d+/)?.[0] || 0) !== recovery.pullRequest.number) {
+        throw new Error("integrated recovery pull request does not match queued merge work");
+      }
+      if (input.workContext && !sameWork(head.workContext, input.workContext)) {
+        throw new Error("Factory work context does not match queued merge work");
+      }
+      const retired = retireQueuedFactoryWork(current, { repository, slot, goId, jobId });
+      const result = {
+        state: retired.state,
+        outcome: Object.freeze({
+          status: "RECOVERY_REQUIRED",
+          reason: recovery.reason,
+          realityExists: true,
+          observedAt: recovery.observedAt,
+          mainSha: recovery.mainSha,
+          retiredJobId: retired.outcome.retiredJobId,
+          promotedJobId: retired.outcome.promotedJobId,
+          nextAction: retired.outcome.nextAction,
+        }),
+      };
+      await this.saveState(result.state);
+      return result;
+    }
+
+    const cancellation = assertClosedUnmergedCancellation(input);
     const active = current?.repositories?.[repository]?.[slot]?.active;
     if (!active || active.goId !== goId || active.jobId !== jobId) {
       throw new Error("active slot owner does not match cancellation");
