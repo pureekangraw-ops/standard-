@@ -32,8 +32,14 @@ const taskSession = createCodeTaskSession({
     repository: workspace.repository,
   },
 });
-const task = await taskSession.load();
-const baseCodeCapability = createCodeCapability({ workspace, task });
+let task = null;
+let taskLoadError = null;
+try {
+  task = await taskSession.load();
+} catch (error) {
+  taskLoadError = error instanceof Error ? error.message : String(error);
+}
+const baseCodeCapability = task ? createCodeCapability({ workspace, task }) : null;
 
 const centreLive = createCentreLiveClient({
   fetchImpl: globalThis.fetch.bind(globalThis),
@@ -59,7 +65,18 @@ function field(name) {
   return centreForm?.elements.namedItem(name) || null;
 }
 
+function taskSnapshot() {
+  return task && typeof task.snapshot === "function" ? task.snapshot() : {};
+}
+
+function assertWorkbenchReady() {
+  if (!task || !baseCodeCapability) {
+    throw new Error(taskLoadError || "WORKBENCH_STATE_UNAVAILABLE");
+  }
+}
+
 function createFactoryAccess() {
+  assertWorkbenchReady();
   if (!centreWork) throw new Error("CENTRE_LIVE_UNAVAILABLE");
   return admitDestination(centreWork, {
     destination: FACTORY_DESTINATION,
@@ -78,7 +95,7 @@ function fitFactoryRoute() {
       purpose: centreWork.task,
       successCondition: centreWork.requestedResult,
     },
-    reality: task.snapshot(),
+    reality: taskSnapshot(),
     role: { reference: centreWork.role?.roleReference },
     destination: canonicalFactory,
   });
@@ -95,9 +112,13 @@ function fitFactoryRoute() {
 function syncFactoryAccess() {
   const shouldOpen = centreWork.status === CENTRE_STATES.AWAY
     && centreWork.handoff?.destination === FACTORY_DESTINATION;
+  if (shouldOpen && (!task || !baseCodeCapability)) {
+    if (runtime.get("Code")) runtime.unregister("Code");
+    return;
+  }
   if (shouldOpen && !runtime.get("Code")) {
     const access = createFactoryAccess();
-    const workContext = createFactoryWorkContext(access, task.snapshot());
+    const workContext = createFactoryWorkContext(access, taskSnapshot());
     runtime.register("Code", createCodeCapability({ workspace, task, workContext }));
   } else if (!shouldOpen && runtime.get("Code")) {
     runtime.unregister("Code");
@@ -195,9 +216,11 @@ function render() {
   const capabilities = runtime.list();
   status.textContent = !centreWork
     ? "Centre live unavailable."
-    : centreWork.status === CENTRE_STATES.AWAY
-      ? "GO is away from Centre."
-      : "GO is at Centre.";
+    : taskLoadError
+      ? "GO is at Centre. Workbench state unavailable."
+      : centreWork.status === CENTRE_STATES.AWAY
+        ? "GO is away from Centre."
+        : "GO is at Centre.";
   empty.hidden = capabilities.length > 0;
   workbenchShell.hidden = !runtime.get("Code");
   list.replaceChildren(
@@ -211,8 +234,8 @@ function render() {
     }),
   );
   renderCentre();
-  renderWorkbench(task.snapshot());
-  renderOperator(task.snapshot());
+  renderWorkbench(taskSnapshot());
+  renderOperator(taskSnapshot());
 }
 
 centreForm?.addEventListener("submit", async event => {
@@ -250,7 +273,7 @@ centreForm?.addEventListener("submit", async event => {
       });
     } else if (centreWork.status === CENTRE_STATES.AWAY) {
       const access = createFactoryAccess();
-      const packet = createFactoryRealityReturn(access, task.snapshot());
+      const packet = createFactoryRealityReturn(access, taskSnapshot());
       centreWork = await centreLive.command({
         action: "return",
         ...identity,
