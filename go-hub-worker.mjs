@@ -474,8 +474,9 @@ async function mergePullRequest(fetchImpl, token, repository, number, expectedHe
   const ci = await exactHeadCI(fetchImpl, token, repository, expectedHeadSha);
   if (ci.error) return ci.error;
   const signals = [...ci.runs, ...ci.checks];
+  const acceptedTerminalConclusions = new Set(["success", "skipped", "neutral"]);
   const green = signals.length > 0 && signals.every(item =>
-    item.status === "completed" && item.conclusion === "success"
+    item.status === "completed" && acceptedTerminalConclusions.has(item.conclusion)
   );
   if (!green) return json({ code: "CURRENT_HEAD_CI_NOT_GREEN" }, 409);
   const result = await githubRequest(

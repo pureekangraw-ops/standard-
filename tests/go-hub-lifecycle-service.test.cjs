@@ -41,3 +41,66 @@ test("shared lifecycle service exposes the guarded workstation contract", async 
   assert.deepEqual(await response.json(), { code: "DEFAULT_BRANCH_WRITE_BLOCKED" });
   assert.deepEqual(calls, ["https://api.github.com/repos/pureekangraw-ops/standard-"]);
 });
+
+
+test("exact-head merge accepts completed success/skipped/neutral signals and still rejects real failure", async () => {
+  const module = await import(workerUrl + "?ci-terminal=" + Date.now());
+  const sha = "abc123";
+  const repository = "pureekangraw-ops/example";
+  const pullUrl = `https://api.github.com/repos/${repository}/pulls/7`;
+  const runsUrl = `https://api.github.com/repos/${repository}/actions/runs?head_sha=${sha}`;
+  const checksUrl = `https://api.github.com/repos/${repository}/commits/${sha}/check-runs`;
+
+  function response(payload, status = 200) {
+    return new Response(JSON.stringify(payload), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  let failed = false;
+  const fetchImpl = async (url, init = {}) => {
+    const target = String(url);
+    if (target === pullUrl && String(init.method || "GET") === "GET") {
+      return response({ head: { sha } });
+    }
+    if (target === runsUrl) {
+      return response({ workflow_runs: [
+        { id:1, head_sha:sha, status:"completed", conclusion:"success" },
+      ] });
+    }
+    if (target === checksUrl) {
+      return response({ check_runs: failed
+        ? [{ id:2, head_sha:sha, status:"completed", conclusion:"failure" }]
+        : [
+            { id:2, head_sha:sha, status:"completed", conclusion:"success" },
+            { id:3, head_sha:sha, status:"completed", conclusion:"skipped" },
+            { id:4, head_sha:sha, status:"completed", conclusion:"neutral" },
+          ] });
+    }
+    if (target === `${pullUrl}/merge` && String(init.method || "") === "PUT") {
+      return response({ merged:true, sha:"merge-sha" });
+    }
+    throw new Error("unexpected upstream " + target);
+  };
+
+  const lifecycle = module.createGithubLifecycleService({ fetchImpl, token:"token" });
+  const accepted = await lifecycle.mergePullRequest({
+    repository,
+    number:7,
+    expectedHeadSha:sha,
+    method:"squash",
+  });
+  assert.equal(accepted.status, 200);
+  assert.deepEqual(await accepted.json(), { merged:true, mergeSha:"merge-sha", headSha:sha });
+
+  failed = true;
+  const rejected = await lifecycle.mergePullRequest({
+    repository,
+    number:7,
+    expectedHeadSha:sha,
+    method:"squash",
+  });
+  assert.equal(rejected.status, 409);
+  assert.deepEqual(await rejected.json(), { code:"CURRENT_HEAD_CI_NOT_GREEN" });
+});
