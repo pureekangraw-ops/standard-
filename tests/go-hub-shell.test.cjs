@@ -138,4 +138,5 @@ test("Centre Review is not blocked by fit-only Role fields", () => {
   assert.match(source, /field\("roleReference"\)\.required = reviewed && !fitted/);
   assert.match(source, /field\("workingView"\)\.required = reviewed && !fitted/);
   assert.match(source, /FIT_ROLE/);
+  assert.match(source, /CENTRE_STATES\.READY && !centreWork\.role && !centreWork\.lens/);
 });
