@@ -66,6 +66,70 @@ test("Centre client restores durable work by identity pointer and does not repla
   });
 });
 
+test("Centre client discards a stale missing-work pointer then starts and reads back a fresh durable work", async () => {
+  const { createCentreLiveClient, CENTRE_POINTER_KEY } = await import(moduleUrl + "?stale=" + Date.now());
+  const storage = memoryStorage({
+    [CENTRE_POINTER_KEY]: JSON.stringify({ workId: "WORK-OLD", checkpointId: "CENTRE-OLD" }),
+  });
+  const calls = [];
+  const client = createCentreLiveClient({
+    storage,
+    idFactory: () => "ID-RECOVERED",
+    fetchImpl: async (_url, options) => {
+      const input = JSON.parse(options.body);
+      calls.push(input);
+      if (input.action === "inspect" && input.workId === "WORK-OLD") {
+        return response({ code: "CENTRE_WORK_NOT_FOUND" }, 404);
+      }
+      if (input.action === "start") {
+        return response({
+          ok: true,
+          phase: "ARRIVED",
+          workId: "WORK-ID-RECOVERED",
+          checkpointId: "CENTRE-ID-RECOVERED",
+          returnAddress: "CENTRE-ID-RECOVERED",
+          work: { workId: "WORK-ID-RECOVERED", checkpointId: "CENTRE-ID-RECOVERED", status: "ARRIVED" },
+        });
+      }
+      return response({
+        ok: true,
+        phase: "ARRIVED",
+        workId: "WORK-ID-RECOVERED",
+        checkpointId: "CENTRE-ID-RECOVERED",
+        returnAddress: "CENTRE-ID-RECOVERED",
+        work: { workId: "WORK-ID-RECOVERED", checkpointId: "CENTRE-ID-RECOVERED", status: "ARRIVED", authority: null },
+      });
+    },
+  });
+
+  const work = await client.restoreOrStart();
+  assert.equal(work.workId, "WORK-ID-RECOVERED");
+  assert.deepEqual(calls.map(item => item.action), ["inspect", "start", "inspect"]);
+  assert.deepEqual(JSON.parse(storage.snapshot()[CENTRE_POINTER_KEY]), {
+    workId: "WORK-ID-RECOVERED",
+    checkpointId: "CENTRE-ID-RECOVERED",
+  });
+});
+
+test("Centre client does not discard a pointer or start replacement work for live service failure", async () => {
+  const { createCentreLiveClient, CENTRE_POINTER_KEY } = await import(moduleUrl + "?failclosed=" + Date.now());
+  const original = JSON.stringify({ workId: "WORK-A", checkpointId: "CENTRE-A" });
+  const storage = memoryStorage({ [CENTRE_POINTER_KEY]: original });
+  const calls = [];
+  const client = createCentreLiveClient({
+    storage,
+    idFactory: () => "SHOULD-NOT-START",
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return response({ code: "CENTRE_STATE_NOT_CONFIGURED" }, 503);
+    },
+  });
+
+  await assert.rejects(client.restoreOrStart(), /CENTRE_STATE_NOT_CONFIGURED/);
+  assert.deepEqual(calls.map(item => item.action), ["inspect"]);
+  assert.equal(storage.snapshot()[CENTRE_POINTER_KEY], original);
+});
+
 test("Centre client starts once then reads back the durable state before returning it", async () => {
   const { createCentreLiveClient, CENTRE_POINTER_KEY } = await import(moduleUrl + "?start=" + Date.now());
   const storage = memoryStorage();
