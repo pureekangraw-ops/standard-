@@ -31,10 +31,17 @@
         <label>Task<textarea name="task" rows="2" required></textarea></label>
         <label>Requested Result<textarea name="requestedResult" rows="2" required></textarea></label>
         <label>Authority<input name="authority" value="BIG" required></label>
+        <label>Work Target
+          <select name="targetId" required>
+            <option value="">Choose target</option>
+            <option value="lighthouse">LIGHTHOUSE</option>
+            <option value="standard">STANDARD / GO Hub</option>
+          </select>
+        </label>
         <label>Role Reference<input name="roleReference" placeholder="role://…"></label>
         <label>Working View<textarea name="workingView" rows="2"></textarea></label>
         <input type="hidden" name="destination" value="destination://factory">
-        <p class="centre-route">Destination: <strong>Factory</strong> · Return: <strong data-centre-return>this checkpoint</strong></p>
+        <p class="centre-route">Target: <strong data-centre-target>—</strong> · Via: <strong>Factory</strong> · Return: <strong data-centre-return>this checkpoint</strong></p>
         <p class="centre-error" data-centre-error role="alert"></p>
         <button type="submit" data-centre-action>Review task</button>
       </form>

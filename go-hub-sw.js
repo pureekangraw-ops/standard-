@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "go-hub-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v9-centre-live-publication-closure`;
+const CACHE_NAME = `${CACHE_PREFIX}v10-lighthouse-target-route`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -9,6 +9,7 @@ const APP_SHELL = [
   "./go-hub.webmanifest",
   "./go-hub-shell.css",
   "./go-hub-shell.js",
+  "./go-hub-work-targets.js",
   "./go-hub-runtime.js",
   "./go-hub-operator-model.js",
   "./go-hub-factory-authority.js",

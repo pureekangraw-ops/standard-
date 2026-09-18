@@ -6,11 +6,16 @@ const assert = require("node:assert/strict");
 
 const root = path.resolve(__dirname, "..");
 
-test("GO Hub shell wires a GitHub workspace into Code", () => {
+test("GO Hub shell binds a GitHub workspace only from the explicit Work Target", () => {
   const source = fs.readFileSync(path.join(root, "go-hub-shell.js"), "utf8");
+  const targets = fs.readFileSync(path.join(root, "go-hub-work-targets.js"), "utf8");
   assert.match(source, /go-hub-github-workspace\.js/);
   assert.match(source, /gatewayBase:\s*["']\/hub\/api\/github-workspace["']/);
-  assert.match(source, /repository:\s*["']pureekangraw-ops\/standard-["']/);
+  assert.match(source, /repository:\s*target\.repository/);
+  assert.doesNotMatch(source, /repository:\s*["']pureekangraw-ops\/standard-["']/);
+  assert.match(source, /centreWork\?\.status === CENTRE_STATES\.AWAY/);
+  assert.match(targets, /lighthouse/);
+  assert.match(targets, /pureekangraw-ops\/ygph-metropolis/);
   assert.match(source, /createCodeCapability\(\{\s*workspace,\s*task\s*\}\)/);
 });
 

@@ -282,3 +282,32 @@ test("current Role fit is first-class and handoff is Role-only", async () => {
   const outbound = centre.leave(fitted, { destination: "destination://factory" });
   assert.equal(outbound.envelope.roleReference, "role://detective");
 });
+
+
+test("explicit Work Target survives Review and Factory handoff without becoming a default", async () => {
+  const { createCentrePassage } = await load();
+  const centre = createCentrePassage();
+  const reviewed = centre.review(
+    centre.enter({ checkpointId: "CENTRE-LH", workId: "WORK-LH" }),
+    {
+      task: "Work on LIGHTHOUSE",
+      requestedResult: "Verified LIGHTHOUSE result",
+      authority: "BIG",
+      targetId: "lighthouse",
+    },
+  );
+  assert.equal(reviewed.targetId, "lighthouse");
+
+  const fitted = centre.fit(reviewed, {
+    roleId: "ROLE-LH",
+    roleReference: "role://lighthouse",
+    workingView: "Follow the explicit target",
+  });
+  const outbound = centre.leave(fitted, {
+    destination: "destination://factory",
+    targetId: "lighthouse",
+  });
+  assert.equal(outbound.work.targetId, "lighthouse");
+  assert.equal(outbound.envelope.targetId, "lighthouse");
+  assert.equal(outbound.envelope.destination, "destination://factory");
+});

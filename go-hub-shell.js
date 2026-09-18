@@ -9,44 +9,25 @@ import { createCityRoute, routeInbound } from "./go-hub-city-route.js";
 import { fitWork } from "./go-hub-optician.js";
 import { CENTRE_STATES, admitDestination } from "./go-hub-centre.js";
 import { createCentreLiveClient } from "./go-hub-centre-client.js";
+import { getWorkTarget } from "./go-hub-work-targets.js";
 
 const FACTORY_DESTINATION = "destination://factory";
 const cityRoute = createCityRoute();
 const runtime = createHubRuntime();
-const workspace = createGitHubWorkspace({
-  gatewayBase: "/hub/api/github-workspace",
-  repository: "pureekangraw-ops/standard-",
-});
-const taskPersistence = createStatePersistence({
-  store: createLocalStorageKeyValueStore({
-    storage: globalThis.localStorage,
-    namespace: "go-hub-code",
-  }),
-  key: "active-task",
-});
-const taskSession = createCodeTaskSession({
-  persistence: taskPersistence,
-  initial: {
-    id: "active-code-task",
-    intent: "GO Hub Code workstation",
-    repository: workspace.repository,
-  },
-});
-let task = null;
-let taskLoadError = null;
-try {
-  task = await taskSession.load();
-} catch (error) {
-  taskLoadError = error instanceof Error ? error.message : String(error);
-}
-const baseCodeCapability = task ? createCodeCapability({ workspace, task }) : null;
 
 const centreLive = createCentreLiveClient({
   fetchImpl: globalThis.fetch.bind(globalThis),
   storage: globalThis.localStorage,
 });
+
 let centreWork = null;
 let centreLoadError = null;
+let workspace = null;
+let task = null;
+let baseCodeCapability = null;
+let taskLoadError = null;
+let activeWorkbenchKey = null;
+
 try {
   centreWork = await centreLive.restoreOrStart();
 } catch (error) {
@@ -60,24 +41,105 @@ const workbenchShell = document.querySelector("[data-workbench-shell]");
 const centreForm = document.querySelector("[data-centre-form]");
 const centreAction = document.querySelector("[data-centre-action]");
 const centreError = document.querySelector("[data-centre-error]");
+const centreTarget = document.querySelector("[data-centre-target]");
 
 function field(name) {
   return centreForm?.elements.namedItem(name) || null;
 }
 
-function taskSnapshot() {
-  return task && typeof task.snapshot === "function" ? task.snapshot() : {};
+function activeTarget() {
+  return getWorkTarget(centreWork?.handoff?.targetId || centreWork?.targetId);
 }
 
+function hasActiveWorkbench() {
+  return Boolean(
+    centreWork?.status === CENTRE_STATES.AWAY &&
+    centreWork?.handoff?.destination === FACTORY_DESTINATION &&
+    activeTarget() &&
+    task &&
+    workspace &&
+    baseCodeCapability
+  );
+}
+
+function taskSnapshot() {
+  return hasActiveWorkbench() && typeof task.snapshot === "function" ? task.snapshot() : {};
+}
+
+function resetWorkbenchMemory() {
+  if (runtime.get("Code")) runtime.unregister("Code");
+  workspace = null;
+  task = null;
+  baseCodeCapability = null;
+  taskLoadError = null;
+  activeWorkbenchKey = null;
+}
+
+async function ensureWorkbenchForCentre() {
+  const target = activeTarget();
+  const shouldOpen = centreWork?.status === CENTRE_STATES.AWAY &&
+    centreWork?.handoff?.destination === FACTORY_DESTINATION;
+
+  if (!shouldOpen) {
+    resetWorkbenchMemory();
+    return;
+  }
+
+  if (!target) {
+    resetWorkbenchMemory();
+    taskLoadError = "WORK_TARGET_REQUIRED";
+    return;
+  }
+
+  const key = `${centreWork.workId}:${target.id}`;
+  if (activeWorkbenchKey === key && task && workspace && baseCodeCapability) return;
+
+  resetWorkbenchMemory();
+  activeWorkbenchKey = key;
+  workspace = createGitHubWorkspace({
+    gatewayBase: "/hub/api/github-workspace",
+    repository: target.repository,
+  });
+
+  const taskPersistence = createStatePersistence({
+    store: createLocalStorageKeyValueStore({
+      storage: globalThis.localStorage,
+      namespace: `go-hub-code:${target.id}`,
+    }),
+    key: `work:${centreWork.workId}`,
+  });
+  const taskSession = createCodeTaskSession({
+    persistence: taskPersistence,
+    initial: {
+      id: `code:${centreWork.workId}`,
+      intent: centreWork.task || `GO Hub work for ${target.label}`,
+      repository: workspace.repository,
+    },
+  });
+
+  try {
+    task = await taskSession.load();
+    if (task.snapshot().repository !== target.repository) {
+      throw new Error("WORKBENCH_TARGET_MISMATCH");
+    }
+    baseCodeCapability = createCodeCapability({ workspace, task });
+  } catch (error) {
+    taskLoadError = error instanceof Error ? error.message : String(error);
+    task = null;
+    baseCodeCapability = null;
+  }
+}
+
+await ensureWorkbenchForCentre();
+
 function assertWorkbenchReady() {
-  if (!task || !baseCodeCapability) {
+  if (!hasActiveWorkbench()) {
     throw new Error(taskLoadError || "WORKBENCH_STATE_UNAVAILABLE");
   }
 }
 
 function createFactoryAccess() {
   assertWorkbenchReady();
-  if (!centreWork) throw new Error("CENTRE_LIVE_UNAVAILABLE");
   return admitDestination(centreWork, {
     destination: FACTORY_DESTINATION,
     capability: baseCodeCapability,
@@ -90,12 +152,15 @@ function fitFactoryRoute() {
   if (destination !== FACTORY_DESTINATION || destination !== canonicalFactory.route) {
     throw new Error("Factory destination does not match canonical city route");
   }
+  if (!getWorkTarget(centreWork?.targetId || field("targetId")?.value)) {
+    throw new Error("WORK_TARGET_REQUIRED");
+  }
   const fit = fitWork({
     context: {
       purpose: centreWork.task,
       successCondition: centreWork.requestedResult,
     },
-    reality: taskSnapshot(),
+    reality: { targetId: centreWork.targetId || null },
     role: { reference: centreWork.role?.roleReference },
     destination: canonicalFactory,
   });
@@ -110,18 +175,14 @@ function fitFactoryRoute() {
 }
 
 function syncFactoryAccess() {
-  const shouldOpen = centreWork.status === CENTRE_STATES.AWAY
-    && centreWork.handoff?.destination === FACTORY_DESTINATION;
-  if (shouldOpen && (!task || !baseCodeCapability)) {
+  if (!hasActiveWorkbench()) {
     if (runtime.get("Code")) runtime.unregister("Code");
     return;
   }
-  if (shouldOpen && !runtime.get("Code")) {
+  if (!runtime.get("Code")) {
     const access = createFactoryAccess();
     const workContext = createFactoryWorkContext(access, taskSnapshot());
     runtime.register("Code", createCodeCapability({ workspace, task, workContext }));
-  } else if (!shouldOpen && runtime.get("Code")) {
-    runtime.unregister("Code");
   }
 }
 
@@ -137,16 +198,39 @@ function renderWorkbench(snapshot) {
   if (mission) mission.textContent = view.mission?.summary || "—";
   if (blueprint) blueprint.textContent = view.blueprint?.title || view.blueprint?.ref || "—";
   if (piece) piece.textContent = view.currentPiece?.title || view.currentPiece?.id || "—";
-  if (workbenchStatus) workbenchStatus.textContent = view.status || "UNKNOWN";
+  if (workbenchStatus) workbenchStatus.textContent = hasActiveWorkbench() ? (view.status || "UNKNOWN") : "IDLE";
   if (evidence) {
     evidence.textContent = view.evidence.length
       ? view.evidence.map(item => item.label || item.kind || String(item.value || "evidence")).join(" · ")
       : "—";
   }
-  if (next) next.textContent = view.blocker ? `BLOCKED — ${view.blocker}` : (view.next || "—");
+  if (next) next.textContent = hasActiveWorkbench()
+    ? (view.blocker ? `BLOCKED — ${view.blocker}` : (view.next || "—"))
+    : "NO ACTIVE WORK";
 }
 
 function renderOperator(snapshot) {
+  if (!hasActiveWorkbench()) {
+    const idle = {
+      state: "IDLE",
+      repository: null,
+      base: null,
+      "work-branch": null,
+      head: null,
+      pr: null,
+      ci: null,
+      deploy: null,
+      verification: null,
+      blocker: taskLoadError,
+      "next-action": "NO ACTIVE WORK",
+    };
+    for (const [key, value] of Object.entries(idle)) {
+      const node = document.querySelector(`[data-code-${key}]`);
+      if (node) node.textContent = value || "—";
+    }
+    return;
+  }
+
   const view = createOperatorView(snapshot || {});
   const values = {
     state: view.state,
@@ -173,11 +257,13 @@ function renderCentre() {
     document.querySelector("[data-centre-checkpoint]").textContent = "—";
     document.querySelector("[data-centre-work]").textContent = "—";
     document.querySelector("[data-centre-return]").textContent = "—";
+    if (centreTarget) centreTarget.textContent = "—";
     centreAction.textContent = "Centre unavailable";
     centreAction.disabled = true;
     centreError.textContent = centreLoadError || "CENTRE_LIVE_UNAVAILABLE";
     return;
   }
+
   document.querySelector("[data-centre-state]").textContent = centreWork.status;
   document.querySelector("[data-centre-checkpoint]").textContent = centreWork.checkpointId;
   document.querySelector("[data-centre-work]").textContent = centreWork.workId;
@@ -186,13 +272,18 @@ function renderCentre() {
   field("task").value = centreWork.task || "";
   field("requestedResult").value = centreWork.requestedResult || "";
   field("authority").value = centreWork.authority || "BIG";
+  field("targetId").value = centreWork.targetId || "";
   field("roleReference").value = centreWork.role?.roleReference || "";
   field("workingView").value = centreWork.role?.workingView || "";
+
+  const target = getWorkTarget(centreWork.targetId);
+  if (centreTarget) centreTarget.textContent = target?.label || "—";
 
   const reviewed = centreWork.status !== CENTRE_STATES.ARRIVED
     && centreWork.status !== CENTRE_STATES.WAIT;
   const fitted = Boolean(centreWork.role);
-  ["task", "requestedResult", "authority"].forEach(name => {
+
+  ["task", "requestedResult", "authority", "targetId"].forEach(name => {
     field(name).disabled = reviewed;
   });
   ["roleReference", "workingView"].forEach(name => {
@@ -200,10 +291,11 @@ function renderCentre() {
     field(name).required = reviewed && !fitted && centreWork.status === CENTRE_STATES.READY;
   });
 
+  const leaveTarget = target?.label || "selected target";
   const labels = {
     [CENTRE_STATES.ARRIVED]: "Review task",
     [CENTRE_STATES.WAIT]: "Review task",
-    [CENTRE_STATES.READY]: fitted ? "Leave for Factory" : "Fit Role",
+    [CENTRE_STATES.READY]: fitted ? `Leave for ${leaveTarget} via Factory` : "Fit Role",
     [CENTRE_STATES.AWAY]: "Receive return",
     [CENTRE_STATES.RETURNED]: "Returned to checkpoint",
   };
@@ -212,15 +304,17 @@ function renderCentre() {
 }
 
 function render() {
-  if (centreWork) syncFactoryAccess();
+  syncFactoryAccess();
   const capabilities = runtime.list();
+  const target = activeTarget();
   status.textContent = !centreWork
     ? "Centre live unavailable."
-    : taskLoadError
-      ? "GO is at Centre. Workbench state unavailable."
-      : centreWork.status === CENTRE_STATES.AWAY
-        ? "GO is away from Centre."
-        : "GO is at Centre.";
+    : centreWork.status === CENTRE_STATES.AWAY
+      ? taskLoadError
+        ? "GO is away from Centre. Workbench target unavailable."
+        : `GO is working on ${target?.label || "target"} via Factory.`
+      : "GO is at Centre.";
+
   empty.hidden = capabilities.length > 0;
   workbenchShell.hidden = !runtime.get("Code");
   list.replaceChildren(
@@ -248,13 +342,17 @@ centreForm?.addEventListener("submit", async event => {
       checkpointId: centreWork.checkpointId,
       returnAddress: centreWork.checkpointId,
     };
+
     if (centreWork.status === CENTRE_STATES.ARRIVED || centreWork.status === CENTRE_STATES.WAIT) {
+      const target = getWorkTarget(field("targetId").value);
+      if (!target) throw new Error("WORK_TARGET_REQUIRED");
       centreWork = await centreLive.command({
         action: "review",
         ...identity,
         task: field("task").value,
         requestedResult: field("requestedResult").value,
         authority: field("authority").value,
+        targetId: target.id,
       });
     } else if (centreWork.status === CENTRE_STATES.READY && !centreWork.role) {
       centreWork = await centreLive.command({
@@ -270,7 +368,9 @@ centreForm?.addEventListener("submit", async event => {
         action: "leave",
         ...identity,
         destination: route.destination,
+        targetId: centreWork.targetId,
       });
+      await ensureWorkbenchForCentre();
     } else if (centreWork.status === CENTRE_STATES.AWAY) {
       const access = createFactoryAccess();
       const packet = createFactoryRealityReturn(access, taskSnapshot());
@@ -279,7 +379,9 @@ centreForm?.addEventListener("submit", async event => {
         ...identity,
         payload: packet.payload,
       });
+      await ensureWorkbenchForCentre();
     }
+
     render();
   } catch (error) {
     centreError.textContent = error instanceof Error ? error.message : String(error);

@@ -112,7 +112,8 @@ h1 { margin: 8px 0; font-size: clamp(2rem, 8vw, 4rem); }
   letter-spacing: .04em;
 }
 .centre-form input,
-.centre-form textarea {
+.centre-form textarea,
+.centre-form select {
   width: 100%;
   border: 1px solid rgba(244, 246, 248, .35);
   border-radius: 10px;

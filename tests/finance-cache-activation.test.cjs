@@ -10,7 +10,7 @@ const release = JSON.parse(fs.readFileSync(path.join(root, 'RELEASE_MANIFEST.jso
 test('GO Hub hard cutover owns a fresh cache generation and activates immediately', () => {
   assert.match(sw, /const CACHE_PREFIX = "go-hub-app-";/,
     'hard cutover requires the dedicated GO Hub cache namespace');
-  assert.match(sw, /v9-centre-live-publication-closure/,
+  assert.match(sw, /v10-lighthouse-target-route/,
     'Centre Live publication requires its own cache generation');
   assert.match(sw, /skipWaiting\(\)/,
     'hard cutover intentionally activates the new GO Hub worker');

@@ -41,3 +41,4 @@ node_modules/**
 !/go-hub-traffic.js
 !/go-hub-dashboard-model.js
 !/go-hub-station-monitors.js
+!/go-hub-work-targets.js
