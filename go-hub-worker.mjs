@@ -278,13 +278,35 @@ async function mutateFile(fetchImpl, token, repository, filePath, branch, expect
   });
 }
 
-async function compareRefs(fetchImpl, token, repository, base, head) {
+async function resolveCommitSha(fetchImpl, token, repository, ref) {
   const result = await githubRequest(
     fetchImpl, token,
-    `https://api.github.com/repos/${repository}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+    `https://api.github.com/repos/${repository}/commits/${encodeURIComponent(ref)}`,
+  );
+  if (!result.response.ok) return { error: upstreamError(result.response) };
+  const sha = String(result.payload?.sha || "").trim();
+  if (!sha) return { error: json({ code: "COMMIT_SHA_MISSING" }, 502) };
+  return { sha };
+}
+
+async function compareRefs(fetchImpl, token, repository, base, head) {
+  const [baseCommit, headCommit] = await Promise.all([
+    resolveCommitSha(fetchImpl, token, repository, base),
+    resolveCommitSha(fetchImpl, token, repository, head),
+  ]);
+  if (baseCommit.error) return baseCommit.error;
+  if (headCommit.error) return headCommit.error;
+
+  const result = await githubRequest(
+    fetchImpl, token,
+    `https://api.github.com/repos/${repository}/compare/${encodeURIComponent(baseCommit.sha)}...${encodeURIComponent(headCommit.sha)}`,
   );
   if (!result.response.ok) return upstreamError(result.response);
   return json({
+    baseRef: base,
+    headRef: head,
+    baseSha: baseCommit.sha,
+    headSha: headCommit.sha,
     status: result.payload.status || null,
     aheadBy: Number(result.payload.ahead_by || 0),
     behindBy: Number(result.payload.behind_by || 0),
@@ -305,6 +327,7 @@ function pullRequestPayload(payload) {
     number: payload.number,
     url: payload.html_url || null,
     state: payload.state || null,
+    merged: payload.merged === true,
     mergeable: payload.mergeable ?? null,
     headBranch: payload.head?.ref || null,
     headSha: payload.head?.sha || null,
