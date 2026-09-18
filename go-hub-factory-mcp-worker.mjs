@@ -8,6 +8,7 @@ import { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createFactoryControllerService } from "./go-hub-factory-controller.mjs";
 import { createFactoryActionService } from "./go-hub-factory-service.mjs";
 import { createMaintenanceService } from "./go-hub-maintenance.js";
+import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -194,6 +195,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         teamKey: env?.LINEAR_TEAM_KEY,
       });
       const observer = createObserverEvidenceService({ namespace: env?.OBSERVER_SESSIONS });
+      const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
       const registry = createMcpRegistry({
         lifecycle: Object.freeze({
           ...lifecycle,
@@ -203,6 +205,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           searchKnowledge: input => knowledge.searchKnowledge(input),
           observerLatest: () => observer.latest(),
           observerScreenshot: input => observer.screenshot(input),
+          centreLiveAction: input => centreLive.action(input),
           linearListProjects: input => linear.listProjects(input),
           linearGetIssue: input => linear.getIssue(input),
           linearCreateIssue: input => linear.createIssue(input),

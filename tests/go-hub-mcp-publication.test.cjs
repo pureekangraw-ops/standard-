@@ -19,6 +19,7 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
   assert.deepEqual(wrangler.durable_objects?.bindings, [
     { name: "HEPHAESTUS", class_name: "HephaestusForeman" },
     { name: "GO_HUB_FACTORY_STATE", class_name: "GoHubFactoryState" },
+    { name: "GO_HUB_CENTRE_STATE", class_name: "GoHubCentreState" },
     { name: "OBSERVER_SESSIONS", class_name: "ObserverSessionRegistry" },
   ]);
   assert.ok(wrangler.migrations?.some(item =>
@@ -27,6 +28,8 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
     Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("GoHubFactoryState")));
   assert.ok(wrangler.migrations?.some(item =>
     Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("ObserverSessionRegistry")));
+  assert.ok(wrangler.migrations?.some(item =>
+    Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("GoHubCentreState")));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   for (const file of [
@@ -39,6 +42,7 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
     "go-hub-factory-service.mjs",
     "go-hub-factory-state-core.mjs",
     "go-hub-factory-state.mjs",
+    "go-hub-centre-live.mjs",
     "go-hub-reality-receipt.mjs",
     "go-hub-maintenance.js",
     "go-hub-factory-mcp-worker.mjs",

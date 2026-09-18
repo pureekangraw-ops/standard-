@@ -18,6 +18,10 @@
         "class_name": "GoHubFactoryState"
       },
       {
+        "name": "GO_HUB_CENTRE_STATE",
+        "class_name": "GoHubCentreState"
+      },
+      {
         "name": "OBSERVER_SESSIONS",
         "class_name": "ObserverSessionRegistry"
       }
@@ -40,6 +44,12 @@
       "tag": "v3-browser-observer-sessions",
       "new_sqlite_classes": [
         "ObserverSessionRegistry"
+      ]
+    },
+    {
+      "tag": "v4-centre-live-state",
+      "new_sqlite_classes": [
+        "GoHubCentreState"
       ]
     }
   ],
