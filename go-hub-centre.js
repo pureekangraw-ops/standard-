@@ -43,6 +43,7 @@ export function createCheckpoint(input = {}) {
     task: null,
     requestedResult: null,
     authority: null,
+    role: null,
     lens: null,
     handoff: null,
     returnedPayload: null,
@@ -72,9 +73,26 @@ export function resumeIntake(work, input = {}) {
   });
 }
 
-export function fitLens(work, input = {}) {
+export function fitRole(work, input = {}) {
   assertState(work, CENTRE_STATES.READY);
   const next = structuredClone(work);
+  next.role = {
+    roleId: required(input.roleId, "Role ID"),
+    roleReference: required(input.roleReference, "Role Reference"),
+    workingView: required(input.workingView, "Working View"),
+  };
+  next.lens = null;
+  return snapshot(next);
+}
+
+export function fitLens(work, input = {}) {
+  const fitted = fitRole(work, {
+    roleId: input.lensId,
+    roleReference: input.lensReference,
+    workingView: input.fittedView,
+  });
+  const next = structuredClone(fitted);
+  next.role = null;
   next.lens = {
     lensId: required(input.lensId, "Lens ID"),
     lensReference: required(input.lensReference, "Lens Reference"),
@@ -83,16 +101,37 @@ export function fitLens(work, input = {}) {
   return snapshot(next);
 }
 
+function activeFit(work) {
+  if (work?.role) {
+    return {
+      roleReference: work.role.roleReference,
+      workingView: work.role.workingView,
+      legacyLensReference: null,
+    };
+  }
+  if (work?.lens) {
+    return {
+      roleReference: work.lens.lensReference,
+      workingView: work.lens.fittedView,
+      legacyLensReference: work.lens.lensReference,
+    };
+  }
+  return null;
+}
+
 export function createHandoff(work, input = {}) {
   assertState(work, CENTRE_STATES.READY);
-  if (!work.lens) throw new Error("fitted Lens is required before handoff");
+  const fit = activeFit(work);
+  if (!fit) throw new Error("fitted Role is required before handoff");
   const destination = required(input.destination, "Destination");
   const envelope = {
     workId: work.workId,
     checkpointId: work.checkpointId,
     task: work.task,
     requestedResult: work.requestedResult,
-    lensReference: work.lens.lensReference,
+    roleReference: fit.roleReference,
+    workingView: fit.workingView,
+    lensReference: fit.legacyLensReference,
     destination,
     returnAddress: work.checkpointId,
   };
@@ -123,7 +162,7 @@ export function resumeReturnedWork(work, { reuseFit = false } = {}) {
   const next = structuredClone(work);
   next.status = CENTRE_STATES.READY;
   next.handoff = null;
-  if (!reuseFit) next.lens = null;
+  if (!reuseFit) { next.role = null; next.lens = null; }
   return snapshot(next);
 }
 
@@ -154,6 +193,9 @@ export function createCentrePassage() {
     },
 
     fit(work, input = {}) {
+      if (input.roleReference != null || input.roleId != null || input.workingView != null) {
+        return fitRole(work, input);
+      }
       return fitLens(work, input);
     },
 
