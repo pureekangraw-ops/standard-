@@ -203,9 +203,8 @@ function render() {
     }),
   );
   renderCentre();
-  const snapshot = task.snapshot();
-  renderWorkbench(snapshot);
-  renderOperator(snapshot);
+  renderWorkbench(task.snapshot());
+  renderOperator(task.snapshot());
 }
 
 centreForm?.addEventListener("submit", async event => {
