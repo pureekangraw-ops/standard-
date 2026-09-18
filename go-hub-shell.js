@@ -219,7 +219,7 @@ centreForm?.addEventListener("submit", async event => {
         authority: field("authority").value,
       });
       await centreSession.save(centreWork, "REVIEW_AT_CENTRE");
-    } else if (centreWork.status === CENTRE_STATES.READY && !centreWork.lens) {
+    } else if (centreWork.status === CENTRE_STATES.READY && !centreWork.role && !centreWork.lens) {
       centreWork = centre.fit(centreWork, {
         roleId: field("roleReference").value,
         roleReference: field("roleReference").value,
