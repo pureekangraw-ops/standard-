@@ -73,25 +73,27 @@ test("GO Hub shell mounts the six truths from the restored Code task projection"
 });
 
 
-test("CENTRE is the durable entry and exit gate before Code capability access", () => {
+test("CENTRE is the live durable entry and exit gate before Code capability access", () => {
   const source = read("go-hub-shell.js");
   const htmlFiles = [read("index.html"), read("go-hub.html")];
 
   for (const marker of [
-    "createCentreSession",
-    "await centreSession.load()",
+    "createCentreLiveClient",
+    "await centreLive.restoreOrStart()",
     "admitDestination",
     "destination://factory",
     "createFactoryWorkContext",
     "runtime.register(\"Code\", createCodeCapability({ workspace, task, workContext }))",
     "runtime.unregister(\"Code\")",
-    "REVIEW_AT_CENTRE",
-    "FIT_ROLE",
-    "LEAVE_CENTRE",
-    "RETURN_TO_CENTRE",
+    'action: "review"',
+    'action: "fit"',
+    'action: "leave"',
+    'action: "return"',
   ]) {
     assert.equal(source.includes(marker), true, `shell must include ${marker}`);
   }
+  assert.doesNotMatch(source, /namespace:\s*"go-hub-centre"/);
+  assert.doesNotMatch(source, /createCentreSession/);
 
   for (const html of htmlFiles) {
     for (const marker of [
@@ -116,13 +118,13 @@ test("active shell must pass Optician and canonical city route before leaving Ce
   assert.match(source, /routeInbound/);
   assert.match(source, /fit\.gate !== "PASS"/);
   assert.match(source, /route\.destination !== "go-work-loop"/);
-  assert.match(source, /centre\.leave\(centreWork/);
+  assert.match(source, /action:\s*"leave"/);
 
   const fitIndex = source.indexOf("fitWork(");
   const routeIndex = source.indexOf("routeInbound(");
-  const leaveIndex = source.indexOf("centre.leave(centreWork");
+  const leaveIndex = source.indexOf('action: "leave"');
   assert.ok(fitIndex >= 0 && routeIndex > fitIndex && leaveIndex > routeIndex,
-    "Optician fit and city route must run before Centre handoff");
+    "Optician fit and city route must run before live Centre handoff");
 });
 
 
@@ -137,6 +139,6 @@ test("Centre Review is not blocked by fit-only Role fields", () => {
   const source = read("go-hub-shell.js");
   assert.match(source, /\["roleReference", "workingView"\]\.forEach/);
   assert.match(source, /field\(name\)\.required = reviewed && !fitted/);
-  assert.match(source, /FIT_ROLE/);
-  assert.match(source, /CENTRE_STATES\.READY && !centreWork\.role && !centreWork\.lens/);
+  assert.match(source, /action:\s*"fit"/);
+  assert.match(source, /CENTRE_STATES\.READY && !centreWork\.role/);
 });

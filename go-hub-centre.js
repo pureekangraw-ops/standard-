@@ -44,7 +44,6 @@ export function createCheckpoint(input = {}) {
     requestedResult: null,
     authority: null,
     role: null,
-    lens: null,
     handoff: null,
     returnedPayload: null,
   });
@@ -81,42 +80,15 @@ export function fitRole(work, input = {}) {
     roleReference: required(input.roleReference, "Role Reference"),
     workingView: required(input.workingView, "Working View"),
   };
-  next.lens = null;
-  return snapshot(next);
-}
-
-export function fitLens(work, input = {}) {
-  const fitted = fitRole(work, {
-    roleId: input.lensId,
-    roleReference: input.lensReference,
-    workingView: input.fittedView,
-  });
-  const next = structuredClone(fitted);
-  next.role = null;
-  next.lens = {
-    lensId: required(input.lensId, "Lens ID"),
-    lensReference: required(input.lensReference, "Lens Reference"),
-    fittedView: required(input.fittedView, "Fitted View"),
-  };
   return snapshot(next);
 }
 
 function activeFit(work) {
-  if (work?.role) {
-    return {
-      roleReference: work.role.roleReference,
-      workingView: work.role.workingView,
-      legacyLensReference: null,
-    };
-  }
-  if (work?.lens) {
-    return {
-      roleReference: work.lens.lensReference,
-      workingView: work.lens.fittedView,
-      legacyLensReference: work.lens.lensReference,
-    };
-  }
-  return null;
+  if (!work?.role) return null;
+  return {
+    roleReference: work.role.roleReference,
+    workingView: work.role.workingView,
+  };
 }
 
 export function createHandoff(work, input = {}) {
@@ -131,7 +103,6 @@ export function createHandoff(work, input = {}) {
     requestedResult: work.requestedResult,
     roleReference: fit.roleReference,
     workingView: fit.workingView,
-    lensReference: fit.legacyLensReference,
     destination,
     returnAddress: work.checkpointId,
   };
@@ -162,7 +133,7 @@ export function resumeReturnedWork(work, { reuseFit = false } = {}) {
   const next = structuredClone(work);
   next.status = CENTRE_STATES.READY;
   next.handoff = null;
-  if (!reuseFit) { next.role = null; next.lens = null; }
+  if (!reuseFit) next.role = null;
   return snapshot(next);
 }
 
@@ -193,10 +164,7 @@ export function createCentrePassage() {
     },
 
     fit(work, input = {}) {
-      if (input.roleReference != null || input.roleId != null || input.workingView != null) {
-        return fitRole(work, input);
-      }
-      return fitLens(work, input);
+      return fitRole(work, input);
     },
 
     leave(work, input = {}) {

@@ -30,3 +30,53 @@ test("live edge routes MCP through Factory MCP gate instead of legacy delegate",
   assert.equal(factoryCalls, 1);
   assert.equal(delegateCalls, 0);
 });
+
+test("live edge routes Centre API into durable Centre binding", async () => {
+  const { createEdgeWorkerHandler } = await import(edgeUrl + "?centre-edge=" + Date.now());
+  let delegateCalls = 0;
+  let received = null;
+  const namespace = {
+    getByName(name) {
+      assert.equal(name, "WORK-EDGE");
+      return {
+        async fetch(request) {
+          received = await request.json();
+          return new Response(JSON.stringify({
+            ok: true,
+            phase: "ARRIVED",
+            workId: received.workId,
+          }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        },
+      };
+    },
+  };
+  const delegate = {
+    async fetch() {
+      delegateCalls += 1;
+      return new Response("delegate", { status: 200 });
+    },
+  };
+  const handler = createEdgeWorkerHandler({
+    delegate,
+    factoryMcp: { async fetch() { return new Response("factory"); } },
+  });
+  const response = await handler.fetch(new Request("https://hub.example/hub/api/centre/action", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "inspect", workId: "WORK-EDGE" }),
+  }), {
+    GO_HUB_CENTRE_STATE: namespace,
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    phase: "ARRIVED",
+    workId: "WORK-EDGE",
+  });
+  assert.equal(received.action, "inspect");
+  assert.equal(delegateCalls, 0);
+});

@@ -3,11 +3,13 @@ import { createBrowserInterface } from "./go-hub-browser-interface.js";
 import { createFactoryMcpWorker } from "./go-hub-factory-mcp-worker.mjs";
 import { createFactoryActionService } from "./go-hub-factory-service.mjs";
 import { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
+import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 export { HephaestusForeman } from "./go-hub-factory-controller.mjs";
 export { GoHubFactoryState } from "./go-hub-factory-state.mjs";
 export { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 export { GoHubCentreState } from "./go-hub-centre-live.mjs";
 
+const CENTRE_API_ROOT = "/hub/api/centre";
 const BROWSER_API_ROOT = "/hub/api/browser";
 const OBSERVER_API_ROOT = `${BROWSER_API_ROOT}/observer`;
 const FACTORY_ACTION_PATH = "/hub/api/github-workspace/factory-action";
@@ -149,6 +151,12 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
       }
       if (request.method === "GET" && url.pathname === "/hub/observer") {
         return observerOwnerPage();
+      }
+      if (url.pathname === `${CENTRE_API_ROOT}/action`) {
+        if (request.method !== "POST") return json({ code: "METHOD_NOT_ALLOWED" }, 405);
+        const body = await request.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code: "INVALID_JSON" }, 400);
+        return createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE }).action(body);
       }
       if (request.method === "POST" && url.pathname === FACTORY_ACTION_PATH) {
         if (!env?.GITHUB_TOKEN) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);

@@ -21,14 +21,22 @@ async function call(instance, input) {
   return { status: response.status, body: await response.json() };
 }
 
-async function prepared(instance, suffix) {
+async function reviewed(instance, suffix) {
   const id = { workId: "WORK-" + suffix, checkpointId: "CP-" + suffix, returnAddress: "CP-" + suffix };
   assert.equal((await call(instance, { action: "start", ...id })).status, 200);
   assert.equal((await call(instance, {
     action: "review", ...id, task: "Smoke", requestedResult: "Verified", authority: "BIG",
   })).status, 200);
+  return id;
+}
+
+async function prepared(instance, suffix) {
+  const id = await reviewed(instance, suffix);
   assert.equal((await call(instance, {
-    action: "fit", ...id, lensId: "L-" + suffix, lensReference: "lens://" + suffix, fittedView: "smoke",
+    action: "fit", ...id,
+    roleId: "ROLE-" + suffix,
+    roleReference: "role://" + suffix,
+    workingView: "smoke",
   })).status, 200);
   assert.equal((await call(instance, {
     action: "leave", ...id, destination: "destination://factory",
@@ -55,6 +63,20 @@ test("Centre live round-trip keeps exact identity through return", async () => {
   assert.equal(returned.body.workId, id.workId);
   assert.equal(returned.body.checkpointId, id.checkpointId);
   assert.equal(returned.body.returnAddress, id.returnAddress);
+});
+
+test("Centre live rejects legacy Lens fit fields", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?legacy-lens=" + Date.now());
+  const instance = new GoHubCentreState({ storage: new MemoryStorage() }, {});
+  const id = await reviewed(instance, "LEGACY");
+  const result = await call(instance, {
+    action: "fit", ...id,
+    lensId: "L-LEGACY",
+    lensReference: "lens://legacy",
+    fittedView: "legacy",
+  });
+  assert.equal(result.status, 400);
+  assert.equal(result.body.code, "LEGACY_LENS_CONTRACT_REJECTED");
 });
 
 test("pre-Reality cancel cancels, post-Reality cancel requires recovery", async () => {
@@ -112,4 +134,6 @@ test("new state instance resumes the same durable identity", async () => {
   assert.equal(resumed.body.checkpointId, id.checkpointId);
   assert.equal(resumed.body.returnAddress, id.returnAddress);
   assert.equal(resumed.body.work.status, "AWAY");
+  assert.equal(resumed.body.work.role.roleReference, "role://RESTART");
+  assert.equal(resumed.body.work.role.workingView, "smoke");
 });

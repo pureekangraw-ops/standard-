@@ -21,12 +21,12 @@ test("Optician fits relevant intake without forcing irrelevant 5W fields", async
   const factory = { id: "factory", route: "destination://factory", run() { executions += 1; } };
   const fitted = fitWork({
     context: canonicalContext,
-    lens: { id: "crystallize", reference: "lens://crystallize" },
+    role: { id: "crystallize", reference: "role://crystallize" },
     destination: factory,
   });
 
   assert.equal(fitted.gate, "PASS");
-  assert.equal(fitted.lensReference, "lens://crystallize");
+  assert.equal(fitted.roleReference, "role://crystallize");
   assert.equal(fitted.route, "destination://factory");
   assert.equal(executions, 0);
   assert.equal("capability" in fitted, false);
@@ -36,12 +36,12 @@ test("Optician waits only for materially blocking canonical intake fields", asyn
   const { fitWork } = await load();
   const noPurpose = fitWork({
     context: { ...canonicalContext, purpose: "" },
-    lens: { id: "crystallize", reference: "lens://crystallize" },
+    role: { id: "crystallize", reference: "role://crystallize" },
     destination: { id: "factory", route: "destination://factory" },
   });
   const noSuccess = fitWork({
     context: { ...canonicalContext, successCondition: "" },
-    lens: { id: "crystallize", reference: "lens://crystallize" },
+    role: { id: "crystallize", reference: "role://crystallize" },
     destination: { id: "factory", route: "destination://factory" },
   });
 
@@ -56,7 +56,7 @@ test("Optician round gate reuses an unchanged fit and requests refit when Realit
   const fitted = fitWork({
     context: canonicalContext,
     reality: { head: "abc", status: "working" },
-    lens: { id: "crystallize", reference: "lens://crystallize" },
+    role: { id: "crystallize", reference: "role://crystallize" },
     destination: { id: "factory", route: "destination://factory" },
   });
 
@@ -77,7 +77,7 @@ test("Optician consumes MIMIR information then rechecks the fitted view before c
   const fitted = fitFromInformation({
     context: canonicalContext,
     reality,
-    lens: { id: "crystallize", reference: "lens://crystallize" },
+    role: { id: "crystallize", reference: "role://crystallize" },
     information: {
       status: "PASS",
       route: "destination://factory",
@@ -101,7 +101,7 @@ test("Optician waits when MIMIR has no usable information route", async () => {
   const { fitFromInformation } = await load();
   const fitted = fitFromInformation({
     context: canonicalContext,
-    lens: { id: "crystallize", reference: "lens://crystallize" },
+    role: { id: "crystallize", reference: "role://crystallize" },
     information: { status: "WAIT", waitReason: "NO_MATCH", records: [], route: null },
   });
 
@@ -111,7 +111,7 @@ test("Optician waits when MIMIR has no usable information route", async () => {
 });
 
 
-test("Optician compatibility accepts current Role reference without requiring legacy Lens input", async () => {
+test("Optician accepts current Role reference as the only fit identity", async () => {
   const { fitWork } = await load();
   const fitted = fitWork({
     context: canonicalContext,
@@ -121,5 +121,4 @@ test("Optician compatibility accepts current Role reference without requiring le
 
   assert.equal(fitted.gate, "PASS");
   assert.equal(fitted.roleReference, "role://detective");
-  assert.equal(fitted.lensReference, "role://detective");
 });

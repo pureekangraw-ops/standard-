@@ -117,11 +117,13 @@ export class GoHubCentreState {
     }
 
     if (action === "fit") {
-      const roleReference = input.roleReference ?? input.lensReference;
+      if (input.lensId != null || input.lensReference != null || input.fittedView != null) {
+        throw Object.assign(new Error("LEGACY_LENS_CONTRACT_REJECTED"), { status: 400 });
+      }
       state.work = this.centre.fit(state.work, {
-        roleId: input.roleId ?? input.lensId ?? roleReference,
-        roleReference,
-        workingView: input.workingView ?? input.fittedView,
+        roleId: input.roleId,
+        roleReference: input.roleReference,
+        workingView: input.workingView,
       });
       state.phase = "FIT";
       await this.save(state);

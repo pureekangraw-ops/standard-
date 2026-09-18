@@ -7,12 +7,8 @@ import { createOperatorView } from "./go-hub-operator-model.js";
 import { createFactoryRealityReturn, createFactoryWorkContext } from "./go-hub-factory-return.js";
 import { createCityRoute, routeInbound } from "./go-hub-city-route.js";
 import { fitWork } from "./go-hub-optician.js";
-import {
-  CENTRE_STATES,
-  admitDestination,
-  createCentrePassage,
-  createCentreSession,
-} from "./go-hub-centre.js";
+import { CENTRE_STATES, admitDestination } from "./go-hub-centre.js";
+import { createCentreLiveClient } from "./go-hub-centre-client.js";
 
 const FACTORY_DESTINATION = "destination://factory";
 const cityRoute = createCityRoute();
@@ -39,19 +35,17 @@ const taskSession = createCodeTaskSession({
 const task = await taskSession.load();
 const baseCodeCapability = createCodeCapability({ workspace, task });
 
-const centre = createCentrePassage();
-const centrePersistence = createStatePersistence({
-  store: createLocalStorageKeyValueStore({
-    storage: globalThis.localStorage,
-    namespace: "go-hub-centre",
-  }),
-  key: "active-checkpoint",
+const centreLive = createCentreLiveClient({
+  fetchImpl: globalThis.fetch.bind(globalThis),
+  storage: globalThis.localStorage,
 });
-const centreSession = createCentreSession({
-  persistence: centrePersistence,
-  passage: centre,
-});
-let centreWork = await centreSession.load();
+let centreWork = null;
+let centreLoadError = null;
+try {
+  centreWork = await centreLive.restoreOrStart();
+} catch (error) {
+  centreLoadError = error instanceof Error ? error.message : String(error);
+}
 
 const status = document.querySelector("[data-hub-status]");
 const list = document.querySelector("[data-hub-capabilities]");
@@ -66,6 +60,7 @@ function field(name) {
 }
 
 function createFactoryAccess() {
+  if (!centreWork) throw new Error("CENTRE_LIVE_UNAVAILABLE");
   return admitDestination(centreWork, {
     destination: FACTORY_DESTINATION,
     capability: baseCodeCapability,
@@ -84,7 +79,7 @@ function fitFactoryRoute() {
       successCondition: centreWork.requestedResult,
     },
     reality: task.snapshot(),
-    role: { reference: centreWork.role?.roleReference || centreWork.lens?.lensReference },
+    role: { reference: centreWork.role?.roleReference },
     destination: canonicalFactory,
   });
   if (fit.gate !== "PASS") {
@@ -152,6 +147,16 @@ function renderOperator(snapshot) {
 }
 
 function renderCentre() {
+  if (!centreWork) {
+    document.querySelector("[data-centre-state]").textContent = "UNAVAILABLE";
+    document.querySelector("[data-centre-checkpoint]").textContent = "—";
+    document.querySelector("[data-centre-work]").textContent = "—";
+    document.querySelector("[data-centre-return]").textContent = "—";
+    centreAction.textContent = "Centre unavailable";
+    centreAction.disabled = true;
+    centreError.textContent = centreLoadError || "CENTRE_LIVE_UNAVAILABLE";
+    return;
+  }
   document.querySelector("[data-centre-state]").textContent = centreWork.status;
   document.querySelector("[data-centre-checkpoint]").textContent = centreWork.checkpointId;
   document.querySelector("[data-centre-work]").textContent = centreWork.workId;
@@ -160,12 +165,12 @@ function renderCentre() {
   field("task").value = centreWork.task || "";
   field("requestedResult").value = centreWork.requestedResult || "";
   field("authority").value = centreWork.authority || "BIG";
-  field("roleReference").value = centreWork.role?.roleReference || centreWork.lens?.lensReference || "";
-  field("workingView").value = centreWork.role?.workingView || centreWork.lens?.fittedView || "";
+  field("roleReference").value = centreWork.role?.roleReference || "";
+  field("workingView").value = centreWork.role?.workingView || "";
 
   const reviewed = centreWork.status !== CENTRE_STATES.ARRIVED
     && centreWork.status !== CENTRE_STATES.WAIT;
-  const fitted = Boolean(centreWork.role || centreWork.lens);
+  const fitted = Boolean(centreWork.role);
   ["task", "requestedResult", "authority"].forEach(name => {
     field(name).disabled = reviewed;
   });
@@ -186,11 +191,13 @@ function renderCentre() {
 }
 
 function render() {
-  syncFactoryAccess();
+  if (centreWork) syncFactoryAccess();
   const capabilities = runtime.list();
-  status.textContent = centreWork.status === CENTRE_STATES.AWAY
-    ? "GO is away from Centre."
-    : "GO is at Centre.";
+  status.textContent = !centreWork
+    ? "Centre live unavailable."
+    : centreWork.status === CENTRE_STATES.AWAY
+      ? "GO is away from Centre."
+      : "GO is at Centre.";
   empty.hidden = capabilities.length > 0;
   workbenchShell.hidden = !runtime.get("Code");
   list.replaceChildren(
@@ -212,33 +219,43 @@ centreForm?.addEventListener("submit", async event => {
   event.preventDefault();
   centreError.textContent = "";
   try {
+    if (!centreWork) throw new Error("CENTRE_LIVE_UNAVAILABLE");
+    const identity = {
+      workId: centreWork.workId,
+      checkpointId: centreWork.checkpointId,
+      returnAddress: centreWork.checkpointId,
+    };
     if (centreWork.status === CENTRE_STATES.ARRIVED || centreWork.status === CENTRE_STATES.WAIT) {
-      centreWork = centre.review(centreWork, {
+      centreWork = await centreLive.command({
+        action: "review",
+        ...identity,
         task: field("task").value,
         requestedResult: field("requestedResult").value,
         authority: field("authority").value,
       });
-      await centreSession.save(centreWork, "REVIEW_AT_CENTRE");
-    } else if (centreWork.status === CENTRE_STATES.READY && !centreWork.role && !centreWork.lens) {
-      centreWork = centre.fit(centreWork, {
+    } else if (centreWork.status === CENTRE_STATES.READY && !centreWork.role) {
+      centreWork = await centreLive.command({
+        action: "fit",
+        ...identity,
         roleId: field("roleReference").value,
         roleReference: field("roleReference").value,
         workingView: field("workingView").value,
       });
-      await centreSession.save(centreWork, "FIT_ROLE");
     } else if (centreWork.status === CENTRE_STATES.READY) {
       const route = fitFactoryRoute();
-      centreWork = centre.leave(centreWork, {
+      centreWork = await centreLive.command({
+        action: "leave",
+        ...identity,
         destination: route.destination,
-      }).work;
-      await centreSession.save(centreWork, "LEAVE_CENTRE");
+      });
     } else if (centreWork.status === CENTRE_STATES.AWAY) {
       const access = createFactoryAccess();
-      centreWork = centre.return(
-        centreWork,
-        createFactoryRealityReturn(access, task.snapshot()),
-      );
-      await centreSession.save(centreWork, "RETURN_TO_CENTRE");
+      const packet = createFactoryRealityReturn(access, task.snapshot());
+      centreWork = await centreLive.command({
+        action: "return",
+        ...identity,
+        payload: packet.payload,
+      });
     }
     render();
   } catch (error) {

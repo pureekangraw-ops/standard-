@@ -32,30 +32,30 @@ test("unclear intake waits and can resume without replacing identity", async () 
   assert.equal(ready.workId, arrived.workId);
 });
 
-test("Lens changes fitted view without changing task truth", async () => {
-  const { createCheckpoint, intakeTask, fitLens } = await load();
+test("Role changes working view without changing task truth", async () => {
+  const { createCheckpoint, intakeTask, fitRole } = await load();
   const ready = intakeTask(
     createCheckpoint({ checkpointId: "CENTRE-001", workId: "WORK-A" }),
     { task: "Task A", requestedResult: "Result A", authority: "BIG" },
   );
-  const fitted = fitLens(ready, {
-    lensId: "LENS-CRYSTALLIZE",
-    lensReference: "lens://crystallize",
-    fittedView: "Find the smallest testable truth",
+  const fitted = fitRole(ready, {
+    roleId: "LENS-CRYSTALLIZE",
+    roleReference: "lens://crystallize",
+    workingView: "Find the smallest testable truth",
   });
   assert.equal(fitted.task, "Task A");
   assert.equal(fitted.requestedResult, "Result A");
-  assert.equal(fitted.lens.lensReference, "lens://crystallize");
+  assert.equal(fitted.role.roleReference, "lens://crystallize");
 });
 
 test("handoff uses an abstract destination and the original checkpoint as return address", async () => {
-  const { createCheckpoint, intakeTask, fitLens, createHandoff, CENTRE_STATES } = await load();
-  const fitted = fitLens(
+  const { createCheckpoint, intakeTask, fitRole, createHandoff, CENTRE_STATES } = await load();
+  const fitted = fitRole(
     intakeTask(
       createCheckpoint({ checkpointId: "CENTRE-001", workId: "WORK-A" }),
       { task: "Task A", requestedResult: "Result A", authority: "BIG" },
     ),
-    { lensId: "LENS-1", lensReference: "lens://1", fittedView: "View A" },
+    { roleId: "LENS-1", roleReference: "lens://1", workingView: "View A" },
   );
   const { work, envelope } = createHandoff(fitted, { destination: "destination://factory" });
   assert.equal(work.status, CENTRE_STATES.AWAY);
@@ -66,7 +66,7 @@ test("handoff uses an abstract destination and the original checkpoint as return
 
 test("Reality Test: Work A returns to Centre 001 and does not create Centre 002", async () => {
   const {
-    createCheckpoint, intakeTask, fitLens, createHandoff,
+    createCheckpoint, intakeTask, fitRole, createHandoff,
     createTestDestinationAdapter, receiveReturn, CENTRE_STATES,
   } = await load();
 
@@ -75,16 +75,16 @@ test("Reality Test: Work A returns to Centre 001 and does not create Centre 002"
     workId: "WORK-A",
     createdAt: "2026-09-14T15:00:00.000Z",
   });
-  const ready = fitLens(
+  const ready = fitRole(
     intakeTask(checkpoint, {
       task: "Task A",
       requestedResult: "Return the same work identity",
       authority: "BIG",
     }),
     {
-      lensId: "LENS-1",
-      lensReference: "lens://first-fit",
-      fittedView: "Track identity and return address",
+      roleId: "LENS-1",
+      roleReference: "lens://first-fit",
+      workingView: "Track identity and return address",
     },
   );
   const sent = createHandoff(ready, { destination: "test://destination" });
@@ -99,13 +99,13 @@ test("Reality Test: Work A returns to Centre 001 and does not create Centre 002"
 });
 
 test("return receiver rejects mismatched work or checkpoint identity", async () => {
-  const { createCheckpoint, intakeTask, fitLens, createHandoff, receiveReturn } = await load();
-  const fitted = fitLens(
+  const { createCheckpoint, intakeTask, fitRole, createHandoff, receiveReturn } = await load();
+  const fitted = fitRole(
     intakeTask(
       createCheckpoint({ checkpointId: "CENTRE-001", workId: "WORK-A" }),
       { task: "Task A", requestedResult: "Result A", authority: "BIG" },
     ),
-    { lensId: "LENS-1", lensReference: "lens://1", fittedView: "View A" },
+    { roleId: "LENS-1", roleReference: "lens://1", workingView: "View A" },
   );
   const sent = createHandoff(fitted, { destination: "test://destination" });
   assert.throws(
@@ -137,9 +137,9 @@ test("all GO work leaves and returns through the same Centre passage", async () 
   );
 
   const fitted = centre.fit(reviewed, {
-    lensId: "LENS-FIT",
-    lensReference: "lens://fit",
-    fittedView: "Build only the requested result",
+    roleId: "LENS-FIT",
+    roleReference: "lens://fit",
+    workingView: "Build only the requested result",
   });
   const outbound = centre.leave(fitted, { destination: "destination://factory" });
   const factory = createTestDestinationAdapter(() => ({ result: "verified" }));
@@ -159,9 +159,9 @@ test("the Centre passage rejects a second entry while work is already in flight"
     { task: "Task A", requestedResult: "Result A", authority: "BIG" },
   );
   const fitted = centre.fit(reviewed, {
-    lensId: "LENS-1",
-    lensReference: "lens://1",
-    fittedView: "View A",
+    roleId: "LENS-1",
+    roleReference: "lens://1",
+    workingView: "View A",
   });
   const outbound = centre.leave(fitted, { destination: "destination://factory" });
 
@@ -199,9 +199,9 @@ test("Centre session restores the exact checkpoint after reload", async () => {
     authority: "BIG",
   });
   const fitted = centre.fit(reviewed, {
-    lensId: "LENS-1",
-    lensReference: "lens://1",
-    fittedView: "View A",
+    roleId: "LENS-1",
+    roleReference: "lens://1",
+    workingView: "View A",
   });
   const away = centre.leave(fitted, { destination: "destination://factory" }).work;
   await session.save(away, "LEAVE_CENTRE");
@@ -233,9 +233,9 @@ test("Destination capability is admitted only by an exact AWAY handoff", async (
   );
 
   const fitted = centre.fit(reviewed, {
-    lensId: "LENS-1",
-    lensReference: "lens://1",
-    fittedView: "Build against repository truth",
+    roleId: "LENS-1",
+    roleReference: "lens://1",
+    workingView: "Build against repository truth",
   });
   const away = centre.leave(fitted, { destination: "destination://factory" }).work;
 
@@ -263,7 +263,7 @@ test("Destination capability is admitted only by an exact AWAY handoff", async (
 });
 
 
-test("current Role fit is first-class while legacy Lens fit remains compatible", async () => {
+test("current Role fit is first-class and handoff is Role-only", async () => {
   const { createCentrePassage } = await load();
   const centre = createCentrePassage();
   const reviewed = centre.review(
@@ -278,9 +278,7 @@ test("current Role fit is first-class while legacy Lens fit remains compatible",
   });
 
   assert.equal(fitted.role.roleReference, "role://detective");
-  assert.equal(fitted.lens, null);
 
   const outbound = centre.leave(fitted, { destination: "destination://factory" });
   assert.equal(outbound.envelope.roleReference, "role://detective");
-  assert.equal(outbound.envelope.lensReference, null);
 });
