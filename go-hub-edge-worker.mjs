@@ -5,7 +5,8 @@ import { createFactoryActionService } from "./go-hub-factory-service.mjs";
 import { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 export { HephaestusForeman } from "./go-hub-factory-controller.mjs";
 export { GoHubFactoryState } from "./go-hub-factory-state.mjs";
-export { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";\nexport { GoHubCentreState } from "./go-hub-centre-live.mjs";
+export { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
+export { GoHubCentreState } from "./go-hub-centre-live.mjs";
 
 const BROWSER_API_ROOT = "/hub/api/browser";
 const OBSERVER_API_ROOT = `${BROWSER_API_ROOT}/observer`;
