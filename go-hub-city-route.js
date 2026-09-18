@@ -55,6 +55,20 @@ function snapshot(value) {
   return freeze(copy);
 }
 
+function workIdentity(input = {}) {
+  const workId = required(input.workId, "Work ID");
+  const checkpointId = required(input.checkpointId, "Checkpoint ID");
+  const returnAddress = required(input.returnAddress, "Return Address");
+  if (checkpointId !== returnAddress) {
+    throw new Error("Work identity Return Address does not match Checkpoint ID");
+  }
+  return snapshot({ workId, checkpointId, returnAddress });
+}
+
+function attachWorkIdentity(route, identity) {
+  return Object.freeze({ ...route, ...identity });
+}
+
 function canonicalFitDestination(fit = {}) {
   const byRoute = getCityDestination(fit.route);
   const byId = getCityDestination(fit.destinationId);
@@ -176,65 +190,74 @@ export function routeInterruptionReturn({
   realityExists = false,
   merged = false,
   deployed = false,
+  workId,
+  checkpointId,
+  returnAddress,
 } = {}) {
+  const identity = workIdentity({ workId, checkpointId, returnAddress });
   const interruption = resolveWorkInterruption({
     requested,
     realityExists,
     merged,
     deployed,
   });
-  return Object.freeze({
+  return attachWorkIdentity({
     destination: "centre",
     via: "destination-return",
     reason: interruption.state,
     interruption,
-  });
+  }, identity);
 }
 
 export function routeInterruptionFromCentre({
   interruption,
   needsOptician = false,
   heimdall = {},
+  workId,
+  checkpointId,
+  returnAddress,
 } = {}) {
+  const identity = workIdentity({ workId, checkpointId, returnAddress });
   if (!interruption || typeof interruption !== "object") {
     throw new Error("interruption resolution is required");
   }
   if (interruption.state === "RECOVERY_REQUIRED") {
-    return Object.freeze({
+    return attachWorkIdentity({
       destination: "go-work-loop",
       via: "centre",
       reason: "RECOVERY_REQUIRED",
       actions: interruption.actions,
-    });
+    }, identity);
   }
   if (interruption.state === "BLOCKED") {
-    return Object.freeze({
+    return attachWorkIdentity({
       destination: "centre",
       via: "centre",
       reason: "BLOCKED",
       actions: interruption.actions,
-    });
+    }, identity);
   }
   if (needsOptician) {
-    return Object.freeze({
+    return attachWorkIdentity({
       destination: "optician",
       via: "centre",
       reason: interruption.state,
-    });
+    }, identity);
   }
   const passage = heimdallDecision(heimdall);
   if (passage.decision !== "PASS") {
-    return Object.freeze({
+    return attachWorkIdentity({
       destination: "heimdall",
       via: "centre",
       reason: passage.reason,
       interruption: interruption.state,
-    });
+    }, identity);
   }
-  return Object.freeze({
+  return attachWorkIdentity({
     destination: "bifrost",
     via: "heimdall",
     next: "big-chat",
     reason: interruption.state,
-  });
+  }, identity);
 }
+
