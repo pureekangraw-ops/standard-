@@ -24,9 +24,9 @@ async function createFactoryAccess() {
       },
     ),
     {
-      lensId: "LENS-CITY",
-      lensReference: "lens://city-roundtrip",
-      fittedView: "Preserve work identity and return real evidence",
+      roleId: "ROLE-CITY",
+      roleReference: "role://city-roundtrip",
+      workingView: "Preserve work identity and return real evidence",
     },
   );
   const away = centre.leave(ready, { destination: "destination://factory" }).work;
@@ -76,8 +76,8 @@ test("Factory work context binds the Code task to the exact Centre identity", as
     destination: "destination://factory",
     task: "Ship GO City roundtrip",
     requestedResult: "Return exact Factory reality evidence",
-    roleReference: "lens://city-roundtrip",
-    lensReference: "lens://city-roundtrip",
+    roleReference: "role://city-roundtrip",
+    roleReference: "role://city-roundtrip",
     repository: "pureekangraw-ops/standard-",
     factoryTaskId: "active-code-task",
   });
