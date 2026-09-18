@@ -25,6 +25,15 @@ function findActiveByGo(state, goId) {
   return false;
 }
 
+function markQueueHeadForRecheck(target) {
+  const next = target.queue?.[0] || null;
+  if (next) {
+    next.status = "NEEDS_RECHECK";
+    next.risk = { status: "RECHECK", reasons: ["QUEUE_ADVANCED"] };
+  }
+  return next;
+}
+
 export function releaseFactorySlot(current, input = {}) {
   const state = clone(current || { version: 1, repositories: {} });
   const repository = required(input.repository, "repository");
@@ -36,15 +45,37 @@ export function releaseFactorySlot(current, input = {}) {
     throw new Error("active slot owner does not match release");
   }
   target.active = null;
-  const next = target.queue?.[0] || null;
-  if (next) {
-    next.status = "NEEDS_RECHECK";
-    next.risk = { status: "RECHECK", reasons: ["QUEUE_ADVANCED"] };
-  }
+  const next = markQueueHeadForRecheck(target);
   return Object.freeze({
     state: Object.freeze(state),
     outcome: Object.freeze({
       status: "RELEASED",
+      promotedJobId: next?.jobId || null,
+      nextAction: next ? "RECHECK_QUEUE_HEAD" : "SLOT_IDLE",
+    }),
+  });
+}
+
+export function retireQueuedFactoryWork(current, input = {}) {
+  const state = clone(current || { version: 1, repositories: {} });
+  const repository = required(input.repository, "repository");
+  const slot = assertSlot(input.slot);
+  const goId = required(input.goId, "goId");
+  const jobId = required(input.jobId, "jobId");
+  const target = state.repositories?.[repository]?.[slot];
+  if (!target) throw new Error("queue lane not found");
+  if (target.active) throw new Error("queued work cannot retire while slot is active");
+  const head = target.queue?.[0];
+  if (!head || head.goId !== goId || head.jobId !== jobId) {
+    throw new Error("only queue head can retire");
+  }
+  const retired = target.queue.shift();
+  const next = markQueueHeadForRecheck(target);
+  return Object.freeze({
+    state: Object.freeze(state),
+    outcome: Object.freeze({
+      status: "RETIRED",
+      retiredJobId: retired.jobId,
       promotedJobId: next?.jobId || null,
       nextAction: next ? "RECHECK_QUEUE_HEAD" : "SLOT_IDLE",
     }),
