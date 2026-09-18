@@ -44,13 +44,13 @@ test("GO Hub shell bootstrap uses the neutral runtime registry", () => {
 });
 
 
-test("GO Hub shell restores the durable Code task before capability registration", () => {
+test("idle GO Hub does not pre-bind any repository and opens a workspace only for explicit AWAY target", () => {
   const source = read("go-hub-shell.js");
-  assert.match(source, /go-hub-persistence\.js/);
-  assert.match(source, /createLocalStorageKeyValueStore/);
-  assert.match(source, /createCodeTaskSession/);
-  assert.match(source, /await taskSession\.load\(\)/);
-  assert.match(source, /createCodeCapability\(\{ workspace, task \}\)/);
+  assert.match(source, /go-hub-work-targets\.js/);
+  assert.match(source, /centreWork\?\.status === CENTRE_STATES\.AWAY/);
+  assert.match(source, /repository: target\.repository/);
+  assert.match(source, /key: `work:\$\{centreWork\.workId\}`/);
+  assert.doesNotMatch(source, /repository:\s*"pureekangraw-ops\/standard-"/);
 });
 
 test("GO Hub shell mounts the six truths from the restored Code task projection", () => {
@@ -144,26 +144,37 @@ test("Centre Review is not blocked by fit-only Role fields", () => {
 });
 
 
-test("Centre bootstrap remains available when persisted Workbench state cannot load", () => {
+test("Centre boots before any Workbench restore and remains the authority for target binding", () => {
   const source = read("go-hub-shell.js");
-  const loadIndex = source.indexOf("task = await taskSession.load()");
-  const catchIndex = source.indexOf("taskLoadError = error instanceof Error");
   const centreIndex = source.indexOf("await centreLive.restoreOrStart()");
+  const ensureIndex = source.indexOf("await ensureWorkbenchForCentre()");
+  const loadIndex = source.indexOf("task = await taskSession.load()");
   const renderIndex = source.lastIndexOf("render();");
 
-  assert.ok(loadIndex >= 0, "shell must attempt to restore persisted Workbench state");
-  assert.ok(catchIndex > loadIndex, "Workbench load failure must be caught");
-  assert.ok(centreIndex > catchIndex, "Centre bootstrap must continue after isolated Workbench load");
-  assert.ok(renderIndex > centreIndex, "Centre must still render after bootstrap");
-  assert.match(source, /const baseCodeCapability = task \? createCodeCapability/);
-  assert.match(source, /function assertWorkbenchReady\(\)/);
-  assert.match(source, /WORKBENCH_STATE_UNAVAILABLE/);
+  assert.ok(centreIndex >= 0, "Centre must restore");
+  assert.ok(ensureIndex > centreIndex, "Workbench decision must happen after Centre restore");
+  assert.ok(loadIndex > centreIndex, "Code task cannot load before Centre truth");
+  assert.ok(renderIndex > ensureIndex, "shell renders after target-aware Workbench decision");
+  assert.match(source, /WORKBENCH_TARGET_MISMATCH/);
+  assert.match(source, /WORK_TARGET_REQUIRED/);
   assert.match(source, /renderCentre\(\)/);
 });
 
-test("Workbench load failure never silently opens Factory capability", () => {
+test("Workbench target failure never silently opens Factory capability", () => {
   const source = read("go-hub-shell.js");
-  assert.match(source, /if \(shouldOpen && \(!task \|\| !baseCodeCapability\)\)/);
+  assert.match(source, /if \(!target\) \{/);
   assert.match(source, /if \(runtime\.get\("Code"\)\) runtime\.unregister\("Code"\)/);
   assert.match(source, /assertWorkbenchReady\(\);/);
+  assert.match(source, /state: "IDLE"/);
+  assert.match(source, /"next-action": "NO ACTIVE WORK"/);
+});
+
+test("owner must choose a Work Target explicitly and LIGHTHOUSE is available without being selected by default", () => {
+  for (const html of [read("index.html"), read("go-hub.html")]) {
+    assert.match(html, /name="targetId" required/);
+    assert.match(html, /<option value="">Choose target<\/option>/);
+    assert.match(html, /<option value="lighthouse">LIGHTHOUSE<\/option>/);
+    assert.doesNotMatch(html, /<option value="lighthouse"[^>]*selected/);
+    assert.match(html, /data-centre-target/);
+  }
 });
