@@ -12,19 +12,19 @@ function fingerprint(context, reality) {
   return stable({ context: context || {}, reality: reality || {} });
 }
 
-export function fitWork({ context = {}, reality = {}, role = {}, lens = {}, destination = {} } = {}) {
+export function fitWork({ context = {}, reality = {}, role = {}, destination = {} } = {}) {
   const missing = REQUIRED_CONTEXT.filter(key => !String(context?.[key] ?? "").trim());
   if (missing.length) {
     return Object.freeze({
       gate: "WAIT",
       missing: Object.freeze(missing),
-      lensReference: null,
+      roleReference: null,
       route: null,
       fingerprint: fingerprint(context, reality),
     });
   }
 
-  const roleReference = String(role.reference || lens.reference || "").trim();
+  const roleReference = String(role.reference || "").trim();
   const route = String(destination.route || "").trim();
   if (!roleReference || !route) {
     return Object.freeze({
@@ -34,7 +34,6 @@ export function fitWork({ context = {}, reality = {}, role = {}, lens = {}, dest
         ...(!route ? ["route"] : []),
       ]),
       roleReference: roleReference || null,
-      lensReference: roleReference || null,
       route: route || null,
       fingerprint: fingerprint(context, reality),
     });
@@ -44,14 +43,13 @@ export function fitWork({ context = {}, reality = {}, role = {}, lens = {}, dest
     gate: "PASS",
     missing: Object.freeze([]),
     roleReference,
-    lensReference: roleReference,
     route,
     destinationId: String(destination.id || "").trim() || null,
     fingerprint: fingerprint(context, reality),
   });
 }
 
-export function fitFromInformation({ context = {}, reality = {}, role = {}, lens = {}, information = {} } = {}) {
+export function fitFromInformation({ context = {}, reality = {}, role = {}, information = {} } = {}) {
   const status = String(information.status || "").toUpperCase();
   const route = String(information.route || "").trim();
   if (status !== "PASS" || !route) {
@@ -72,7 +70,6 @@ export function fitFromInformation({ context = {}, reality = {}, role = {}, lens
     context,
     reality,
     role,
-    lens,
     destination: { id: destinationId, route },
   });
   return Object.freeze({
