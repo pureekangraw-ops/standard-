@@ -364,7 +364,7 @@ export function createMimirSearchDestination({ search } = {}) {
       const query = snapshot({
         task: envelope.task,
         requestedResult: envelope.requestedResult,
-        lensReference: envelope.lensReference,
+        lensReference: envelope.roleReference,
       });
 
       try {
