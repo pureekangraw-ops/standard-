@@ -137,3 +137,38 @@ test("new state instance resumes the same durable identity", async () => {
   assert.equal(resumed.body.work.role.roleReference, "role://RESTART");
   assert.equal(resumed.body.work.role.workingView, "smoke");
 });
+
+
+test("live Work Target survives durable inspect and Factory leave", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?target=" + Date.now());
+  const instance = new GoHubCentreState({ storage: new MemoryStorage() }, {});
+  const id = { workId: "WORK-TARGET", checkpointId: "CP-TARGET", returnAddress: "CP-TARGET" };
+  assert.equal((await call(instance, { action: "start", ...id })).status, 200);
+  const reviewed = await call(instance, {
+    action: "review", ...id,
+    task: "LIGHTHOUSE task",
+    requestedResult: "LIGHTHOUSE result",
+    authority: "BIG",
+    targetId: "lighthouse",
+  });
+  assert.equal(reviewed.body.work.targetId, "lighthouse");
+
+  assert.equal((await call(instance, {
+    action: "fit", ...id,
+    roleId: "ROLE-LH",
+    roleReference: "role://lighthouse",
+    workingView: "target-aware",
+  })).status, 200);
+
+  const left = await call(instance, {
+    action: "leave", ...id,
+    destination: "destination://factory",
+    targetId: "lighthouse",
+  });
+  assert.equal(left.body.work.targetId, "lighthouse");
+  assert.equal(left.body.envelope.targetId, "lighthouse");
+
+  const inspected = await call(instance, { action: "inspect", ...id });
+  assert.equal(inspected.body.work.targetId, "lighthouse");
+  assert.equal(inspected.body.work.handoff.targetId, "lighthouse");
+});
