@@ -156,7 +156,7 @@ async function registerClient(fetchImpl, metadata, redirectUri, clientUri) {
 function parseMcpPayload(raw, requestId) {
   if (!raw) return null;
   const contentType = raw.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) return raw.json();
+  if (contentType.includes("application/json")) return raw.json().catch(() => null);
   return raw.text().then(body => {
     const messages = body.split(/\r?\n/).filter(line => line.startsWith("data:")).map(line => line.slice(5).trim()).filter(Boolean);
     for (const message of messages.reverse()) {
@@ -380,7 +380,7 @@ export class GoHubNotionLightState {
     const selfPayload = contentJson(selfResult);
     const self = selfPayload?.self || {};
     const aiSearch = self?.current_tool_access?.ai_search;
-    if (aiSearch?.status !== "available") {
+    if (!["available","available_with_limit"].includes(aiSearch?.status)) {
       return {
         ok:false,
         code:"NOTION_AI_SEARCH_UNAVAILABLE",
