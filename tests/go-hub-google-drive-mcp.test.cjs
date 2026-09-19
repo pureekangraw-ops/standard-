@@ -37,7 +37,7 @@ function rpc(token, name, args = {}) {
   });
 }
 
-test("registry publishes eight governed Drive bridge tools", async () => {
+test("registry publishes nine governed Drive bridge tools", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?drive-tools=" + Date.now());
   const lifecycle = new Proxy({}, {
     get: (_, name) => async input => new Response(JSON.stringify({ operation: name, input }), {
@@ -50,13 +50,14 @@ test("registry publishes eight governed Drive bridge tools", async () => {
     "go_hub_drive_capabilities",
     "go_hub_drive_health",
     "go_hub_drive_diagnostics",
+    "go_hub_drive_root",
     "go_hub_drive_get_item",
     "go_hub_drive_list_children",
     "go_hub_drive_create_folder",
     "go_hub_drive_move_item",
     "go_hub_drive_rename_item",
   ]);
-  assert.deepEqual(tools.map(tool => tool.annotations.readOnlyHint), [true, true, true, true, true, false, false, false]);
+  assert.deepEqual(tools.map(tool => tool.annotations.readOnlyHint), [true, true, true, true, true, true, false, false, false]);
 
   await registry.callTool("go_hub_drive_move_item", {
     fileId: "file-a",
