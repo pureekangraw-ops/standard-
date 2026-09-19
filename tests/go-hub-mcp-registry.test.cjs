@@ -94,17 +94,17 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(tools.find(tool => tool.name === "go_hub_board_pin_route").inputSchema.required.includes("workContext"), false);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_root").inputSchema.required.includes("workContext"), false);
 
+  await registry.callTool("go_hub_inspect_repository", { repository: "pureekangraw-ops/standard-", branch: "main" });
+  await registry.callTool("go_hub_factory_foreman", { action: "state", repository: "pureekangraw-ops/standard-" });
+  assert.equal(calls[0].name, "inspect");
+  assert.equal(calls[1].name, "factoryForeman");
+
   await registry.callTool("go_hub_counter_create", {
     counterId: "COUNTER-0001", request: "Find GO Hub source", context: {}, workContext: counterWorkContext,
   });
   assert.equal(calls.at(-1).name, "counterCreate");
   await registry.callTool("go_hub_counter_get", { counterId: "COUNTER-0001", workContext: counterWorkContext });
   assert.equal(calls.at(-1).name, "counterGet");
-
-  await registry.callTool("go_hub_inspect_repository", { repository: "pureekangraw-ops/standard-", branch: "main" });
-  await registry.callTool("go_hub_factory_foreman", { action: "state", repository: "pureekangraw-ops/standard-" });
-  assert.equal(calls[0].name, "inspect");
-  assert.equal(calls[1].name, "factoryForeman");
   await registry.callTool("go_hub_audit_history", { workId: "WORK-LIVE", afterSequence: 0, limit: 50 });
   assert.equal(calls.at(-1).name, "auditHistory");
   await registry.callTool("go_hub_centre_live_action", { action: "inspect", workId: "WORK-LIVE" });
