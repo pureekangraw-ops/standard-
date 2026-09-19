@@ -27,6 +27,7 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
     { name: "OBSERVER_SESSIONS", class_name: "ObserverSessionRegistry" },
     { name: "GO_HUB_GLOBAL_AUDIT", class_name: "GoHubGlobalAuditLog" },
     { name: "GO_HUB_COUNTER_STATE", class_name: "GoHubCounterState" },
+    { name: "GO_HUB_COUNTER_DISPATCH_STATE", class_name: "GoHubCounterDispatchState" },
   ]);
   assert.ok(wrangler.migrations?.some(item =>
     Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("HephaestusForeman")));
@@ -42,6 +43,8 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
     Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("GoHubGlobalAuditLog")));
   assert.ok(wrangler.migrations?.some(item =>
     Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("GoHubCounterState")));
+  assert.ok(wrangler.migrations?.some(item =>
+    Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("GoHubCounterDispatchState")));
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   for (const file of [
@@ -57,6 +60,7 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
     "go-hub-centre-live.mjs",
     "go-hub-global-audit.mjs",
     "go-hub-counter.mjs",
+    "go-hub-counter-dispatcher.mjs",
     "go-hub-lighthouse-control-port-session.js",
     "go-hub-lighthouse-control-port-service.mjs",
     "go-hub-reality-receipt.mjs",
