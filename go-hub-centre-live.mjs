@@ -93,6 +93,54 @@ function assertLeaseForMutation(state, input) {
   }
 }
 
+const SECRET_FIELD = /(authorization|token|secret|passcode|master.?key)/i;
+
+function rejectSecretFields(value, path = "root") {
+  if (!value || typeof value !== "object") return;
+  for (const [key, nested] of Object.entries(value)) {
+    if (SECRET_FIELD.test(key)) {
+      throw Object.assign(new Error("SECRET_FIELD_REJECTED:" + path + "." + key), { status: 400 });
+    }
+    rejectSecretFields(nested, path + "." + key);
+  }
+}
+
+function revisionField(value, label) {
+  const revision = Number(value);
+  if (!Number.isSafeInteger(revision) || revision < 0) {
+    throw Object.assign(new Error(label + " is required"), { status: 400 });
+  }
+  return revision;
+}
+
+function effectLedgerState(state) {
+  const source = state?.effectLedger && typeof state.effectLedger === "object" ? state.effectLedger : {};
+  return {
+    revision: Number.isSafeInteger(source.revision) && source.revision >= 0 ? source.revision : 0,
+    entries: Array.isArray(source.entries) ? clone(source.entries) : [],
+  };
+}
+
+function executionCheckpointState(state) {
+  const source = state?.executionCheckpoint && typeof state.executionCheckpoint === "object" ? state.executionCheckpoint : {};
+  return {
+    revision: Number.isSafeInteger(source.revision) && source.revision >= 0 ? source.revision : 0,
+    latest: source.latest && typeof source.latest === "object" ? clone(source.latest) : null,
+  };
+}
+
+function assertEvidence(value, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw Object.assign(new Error(label + " is required"), { status: 400 });
+  }
+  rejectSecretFields(value, label);
+  return {
+    kind: required(value.kind, label + " kind"),
+    reference: required(value.reference, label + " reference"),
+    observedAt: String(value.observedAt || new Date().toISOString()),
+  };
+}
+
 function stateView(state, extra = {}) {
   const work = clone(state.work);
   return {
@@ -106,6 +154,9 @@ function stateView(state, extra = {}) {
     realityEvidence: clone(state.realityEvidence || null),
     interruption: clone(state.interruption || null),
     ownership: ownershipView(state),
+    effectLedger: effectLedgerState(state),
+    executionCheckpoint: executionCheckpointState(state),
+    executionResume: clone(state.executionResume || null),
     ...extra,
   };
 }
@@ -182,6 +233,9 @@ export class GoHubCentreState {
           renewedAt: null,
           releasedAt: null,
         },
+        effectLedger: { revision: 0, entries: [] },
+        executionCheckpoint: { revision: 0, latest: null },
+        executionResume: null,
       });
       return stateView(state, { resumed: false });
     }
@@ -258,6 +312,112 @@ export class GoHubCentreState {
       };
       await this.save(state);
       return stateView(state, { ownershipChanged: "RELEASED" });
+    }
+
+    if (action === "record_effect") {
+      assertLeaseForMutation(state, input);
+      const ledger = effectLedgerState(state);
+      const expected = revisionField(input.expectedEffectRevision, "expected effect revision");
+      if (expected !== ledger.revision) {
+        throw Object.assign(new Error("CENTRE_EFFECT_STALE_REVISION"), { status: 409 });
+      }
+      const effect = {
+        effectId: required(input.effectId, "Effect ID"),
+        tool: required(input.effectTool, "Effect tool"),
+        receiptRef: required(input.effectReceiptRef, "Effect receipt reference"),
+        status: required(input.effectStatus, "Effect status").toUpperCase(),
+      };
+      if (!["DONE", "NOOP"].includes(effect.status)) {
+        throw Object.assign(new Error("invalid effect status"), { status: 400 });
+      }
+      const existing = ledger.entries.find(item => item.effectId === effect.effectId);
+      if (existing) {
+        if (existing.tool !== effect.tool || existing.receiptRef !== effect.receiptRef || existing.status !== effect.status) {
+          throw Object.assign(new Error("CENTRE_EFFECT_ID_CONFLICT"), { status: 409 });
+        }
+        return stateView(state, { effectRecorded: "IDEMPOTENT", effect: clone(existing) });
+      }
+      const entry = { ...effect, recordedAt: new Date().toISOString() };
+      state.effectLedger = {
+        revision: ledger.revision + 1,
+        entries: [...ledger.entries, entry],
+      };
+      await this.save(state);
+      return stateView(state, { effectRecorded: "RECORDED", effect: clone(entry) });
+    }
+
+    if (action === "save_checkpoint") {
+      assertLeaseForMutation(state, input);
+      const checkpoint = executionCheckpointState(state);
+      const expectedCheckpoint = revisionField(
+        input.expectedExecutionCheckpointRevision,
+        "expected execution checkpoint revision",
+      );
+      if (expectedCheckpoint !== checkpoint.revision) {
+        throw Object.assign(new Error("CENTRE_EXEC_CHECKPOINT_STALE_REVISION"), { status: 409 });
+      }
+      const ledger = effectLedgerState(state);
+      const expectedEffects = revisionField(input.expectedEffectRevision, "expected effect revision");
+      if (expectedEffects !== ledger.revision) {
+        throw Object.assign(new Error("CENTRE_EFFECT_STALE_REVISION"), { status: 409 });
+      }
+      if (input.safePoint !== true) {
+        throw Object.assign(new Error("execution checkpoint must be a safe point"), { status: 409 });
+      }
+      if (!input.snapshot || typeof input.snapshot !== "object" || Array.isArray(input.snapshot)) {
+        throw Object.assign(new Error("Execution snapshot is required"), { status: 400 });
+      }
+      rejectSecretFields(input.snapshot, "snapshot");
+      const latest = {
+        executionCheckpointId: required(input.executionCheckpointId, "Execution Checkpoint ID"),
+        createdAt: new Date().toISOString(),
+        safePoint: true,
+        resumeFrom: required(input.resumeFrom, "Resume From"),
+        snapshot: clone(input.snapshot),
+        effectRevision: ledger.revision,
+        effectIds: ledger.entries.map(item => item.effectId),
+      };
+      state.executionCheckpoint = { revision: checkpoint.revision + 1, latest };
+      state.executionResume = null;
+      await this.save(state);
+      return stateView(state, { executionCheckpointChanged: "SAVED" });
+    }
+
+    if (action === "resume_checkpoint") {
+      assertLeaseForMutation(state, input);
+      const checkpoint = executionCheckpointState(state);
+      const expectedCheckpoint = revisionField(
+        input.expectedExecutionCheckpointRevision,
+        "expected execution checkpoint revision",
+      );
+      if (expectedCheckpoint !== checkpoint.revision) {
+        throw Object.assign(new Error("CENTRE_EXEC_CHECKPOINT_STALE_REVISION"), { status: 409 });
+      }
+      if (!checkpoint.latest) {
+        throw Object.assign(new Error("CENTRE_EXEC_CHECKPOINT_NOT_FOUND"), { status: 404 });
+      }
+      const executionCheckpointId = required(input.executionCheckpointId, "Execution Checkpoint ID");
+      if (executionCheckpointId !== checkpoint.latest.executionCheckpointId) {
+        throw Object.assign(new Error("CENTRE_EXEC_CHECKPOINT_ID_MISMATCH"), { status: 409 });
+      }
+      const reconciliationEvidence = assertEvidence(input.reconciliationEvidence, "Reconciliation evidence");
+      const ledger = effectLedgerState(state);
+      const resumePlan = {
+        executionCheckpointId,
+        resumeFrom: checkpoint.latest.resumeFrom,
+        snapshot: clone(checkpoint.latest.snapshot),
+        checkpointEffectRevision: checkpoint.latest.effectRevision,
+        currentEffectRevision: ledger.revision,
+        skipEffectIds: ledger.entries.map(item => item.effectId),
+        reconciliationEvidence,
+      };
+      state.executionResume = {
+        ...clone(resumePlan),
+        resumedAt: new Date().toISOString(),
+      };
+      state.phase = "EXECUTION_RESUME";
+      await this.save(state);
+      return stateView(state, { resumePlan });
     }
 
     if (action === "review") {
