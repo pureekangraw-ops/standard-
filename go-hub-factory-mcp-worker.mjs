@@ -11,6 +11,7 @@ import { createMaintenanceService } from "./go-hub-maintenance.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { createLighthouseControlPortMcpService } from "./go-hub-lighthouse-control-port-service.mjs";
 import { createGoogleDriveService } from "./go-hub-google-drive-service.mjs";
+import { createWorkflowArtifactService } from "./go-hub-workflow-artifact-service.mjs";
 import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
 import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
 
@@ -219,6 +220,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         clientSecret: firstEnv(env, ["GOOGLE_DRIVE_CLIENT_SECRET", "DRIVE_CLIENT_SECRET", "GDRIVE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET", "GOOGLE_OAUTH_CLIENT_SECRET", "GDRIVE_OAUTH_CLIENT_SECRET"]),
         rootFolderId: firstEnv(env, ["GOOGLE_DRIVE_ROOT_FOLDER_ID", "DRIVE_ROOT_FOLDER_ID", "GDRIVE_ROOT_FOLDER_ID", "GOOGLE_DRIVE_FOLDER_ID", "DRIVE_FOLDER_ID", "GDRIVE_FOLDER_ID", "GOOGLE_ROOT_FOLDER_ID"]),
       });
+      const artifactDelivery = createWorkflowArtifactService({ fetchImpl, token: env.GITHUB_TOKEN, drive });
       const registry = createMcpRegistry({
         lifecycle: Object.freeze({
           ...lifecycle,
@@ -245,6 +247,8 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           driveCreateFolder: input => drive.createFolder(input),
           driveMoveItem: input => drive.moveItem(input),
           driveRenameItem: input => drive.renameItem(input),
+          listWorkflowArtifacts: input => artifactDelivery.listArtifacts(input),
+          archiveWorkflowArtifact: input => artifactDelivery.archiveArtifact(input),
         }),
       });
 
