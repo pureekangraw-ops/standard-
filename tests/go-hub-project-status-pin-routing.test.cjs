@@ -215,3 +215,25 @@ test("Project Status read service rejects cross-target Factory state instead of 
     /PROJECT_STATUS_FACTORY_TARGET_MISMATCH/,
   );
 });
+
+
+test("Work ID remains the durable identity and Room ID is not required by Centre or Factory work context", async () => {
+  const registryUrl = pathToFileURL(path.join(root, "go-hub-mcp-registry.mjs")).href;
+  const { createMcpRegistry } = await import(registryUrl + "?work-id=" + Date.now());
+  const lifecycle = new Proxy({}, {
+    get: () => async () => new Response(JSON.stringify({ ok:true }), { status:200 }),
+  });
+  const tools = createMcpRegistry({ lifecycle }).listTools();
+
+  const centre = tools.find(tool => tool.name === "go_hub_centre_live_action");
+  assert.deepEqual(centre.inputSchema.required, ["action", "workId"]);
+  assert.equal(Object.hasOwn(centre.inputSchema.properties, "roomId"), false);
+
+  const putFile = tools.find(tool => tool.name === "go_hub_put_file");
+  const context = putFile.inputSchema.properties.workContext;
+  assert.equal(context.required.includes("workId"), true);
+  assert.equal(context.required.includes("checkpointId"), true);
+  assert.equal(context.required.includes("returnAddress"), true);
+  assert.equal(context.required.includes("roomId"), false);
+  assert.equal(Object.hasOwn(context.properties, "roomId"), false);
+});
