@@ -28,6 +28,10 @@
       {
         "name": "OBSERVER_SESSIONS",
         "class_name": "ObserverSessionRegistry"
+      },
+      {
+        "name": "GO_HUB_GLOBAL_AUDIT",
+        "class_name": "GoHubGlobalAuditLog"
       }
     ]
   },
@@ -60,6 +64,12 @@
       "tag": "v5-lighthouse-control-port-session",
       "new_sqlite_classes": [
         "LighthouseControlPortSessionRegistry"
+      ]
+    },
+    {
+      "tag": "v6-global-audit-log",
+      "new_sqlite_classes": [
+        "GoHubGlobalAuditLog"
       ]
     }
   ],

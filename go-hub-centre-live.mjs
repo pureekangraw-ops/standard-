@@ -1,5 +1,6 @@
 import { CENTRE_STATES, createCentrePassage } from "./go-hub-centre.js";
 import { routeInterruptionReturn } from "./go-hub-city-route.js";
+import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -157,6 +158,8 @@ function stateView(state, extra = {}) {
     effectLedger: effectLedgerState(state),
     executionCheckpoint: executionCheckpointState(state),
     executionResume: clone(state.executionResume || null),
+    lastGlobalAuditSequence: state.lastGlobalAuditSequence == null ? null : Number(state.lastGlobalAuditSequence),
+    auditPending: Boolean(state.auditPendingEvent),
     ...extra,
   };
 }
@@ -189,20 +192,74 @@ export class GoHubCentreState {
     this.ctx = ctx;
     this.env = env;
     this.centre = createCentrePassage();
+    this.audit = createGlobalAuditService({ namespace: env?.GO_HUB_GLOBAL_AUDIT });
+    this.currentAction = null;
   }
 
   async load() {
     return (await this.ctx.storage.get("state")) || null;
   }
 
+  auditEvent(state) {
+    const work = state?.work || {};
+    return {
+      eventId: "AUDIT-" + crypto.randomUUID(),
+      type: "CENTRE_" + String(this.currentAction || "MUTATION").toUpperCase(),
+      workId: work.workId,
+      checkpointId: work.checkpointId,
+      phase: state?.phase || null,
+      targetId: work.targetId || null,
+      at: new Date().toISOString(),
+      details: {
+        workStatus: work.status || null,
+        ownershipRevision: ownershipState(state).revision,
+        ownerId: ownershipState(state).ownerId,
+        effectRevision: effectLedgerState(state).revision,
+        executionCheckpointId: executionCheckpointState(state).latest?.executionCheckpointId || null,
+        realityReference: state?.realityEvidence?.reference || null,
+      },
+    };
+  }
+
+  async flushPendingAudit(state) {
+    if (!state?.auditPendingEvent || !this.audit.configured()) return state;
+    const response = await this.audit.append(state.auditPendingEvent);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw Object.assign(new Error("CENTRE_AUDIT_RECONCILIATION_REQUIRED"), { status: 502 });
+    }
+    const next = clone(state);
+    next.lastGlobalAuditSequence = Number(payload.sequence);
+    next.auditPendingEvent = null;
+    state.lastGlobalAuditSequence = next.lastGlobalAuditSequence;
+    state.auditPendingEvent = null;
+    await this.ctx.storage.put("state", clone(next));
+    return next;
+  }
+
   async save(state) {
-    await this.ctx.storage.put("state", clone(state));
-    return state;
+    const next = clone(state);
+    if (this.audit.configured()) next.auditPendingEvent = this.auditEvent(next);
+    await this.ctx.storage.put("state", clone(next));
+    if (!this.audit.configured()) return next;
+    const response = await this.audit.append(next.auditPendingEvent);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw Object.assign(new Error("CENTRE_AUDIT_RECONCILIATION_REQUIRED"), { status: 502 });
+    }
+    next.lastGlobalAuditSequence = Number(payload.sequence);
+    next.auditPendingEvent = null;
+    state.lastGlobalAuditSequence = next.lastGlobalAuditSequence;
+    state.auditPendingEvent = null;
+    await this.ctx.storage.put("state", clone(next));
+    return next;
   }
 
   async act(input = {}) {
     const action = required(input.action, "Centre action");
+    this.currentAction = action;
     let state = await this.load();
+    if (state?.auditPendingEvent) state = await this.flushPendingAudit(state);
 
     if (action === "start") {
       const workId = required(input.workId, "Work ID");

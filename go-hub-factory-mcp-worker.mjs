@@ -14,6 +14,7 @@ import { createGoogleDriveService } from "./go-hub-google-drive-service.mjs";
 import { createWorkflowArtifactService } from "./go-hub-workflow-artifact-service.mjs";
 import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
 import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
+import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -209,6 +210,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       });
       const observer = createObserverEvidenceService({ namespace: env?.OBSERVER_SESSIONS });
       const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
+      const globalAudit = createGlobalAuditService({ namespace: env?.GO_HUB_GLOBAL_AUDIT });
       const lighthouseControlPort = createLighthouseControlPortMcpService({ namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS });
       const projectStatus = createProjectStatusReadService({ lifecycle, factoryBinding:env?.GO_HUB_FACTORY_STATE });
       const boardPinRoute = createBoardPinRouteReadService();
@@ -230,6 +232,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           searchKnowledge: input => knowledge.searchKnowledge(input),
           observerLatest: () => observer.latest(),
           observerScreenshot: input => observer.screenshot(input),
+          auditHistory: input => globalAudit.history(input),
           centreLiveAction: input => centreLive.action(input),
           lighthouseControlPortState: input => lighthouseControlPort.state(input),
           lighthouseControlPortCommand: input => lighthouseControlPort.command(input),

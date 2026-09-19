@@ -386,3 +386,39 @@ test("Execution checkpoint refuses stale revisions, unsafe points and secret-bea
   assert.equal(secret.status, 400);
   assert.match(secret.body.code, /SECRET_FIELD_REJECTED/);
 });
+
+
+test("Centre automatically emits global audit events for state-changing transitions", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?global-audit=" + Date.now());
+  const events = [];
+  const namespace = {
+    getByName() {
+      return {
+        async fetch(request) {
+          const body = await request.json();
+          if (body.action === "append") {
+            events.push(body.event);
+            return new Response(JSON.stringify({ ok: true, sequence: events.length, event: body.event }), {
+              headers: { "content-type": "application/json" },
+            });
+          }
+          return new Response(JSON.stringify({ ok: true, events: [] }), { headers: { "content-type": "application/json" } });
+        },
+      };
+    },
+  };
+  const instance = new GoHubCentreState({ storage: new MemoryStorage() }, { GO_HUB_GLOBAL_AUDIT: namespace });
+  const id = { workId: "WORK-AUDIT", checkpointId: "CP-AUDIT", returnAddress: "CP-AUDIT" };
+  const started = await call(instance, { action: "start", ...id });
+  assert.equal(started.status, 200);
+  const reviewed = await call(instance, {
+    action: "review", ...id, task: "Audit", requestedResult: "Trace", authority: "BIG",
+  });
+  assert.equal(reviewed.status, 200);
+  assert.equal(events.length, 2);
+  assert.equal(events[0].type, "CENTRE_START");
+  assert.equal(events[1].type, "CENTRE_REVIEW");
+  assert.equal(events[1].workId, "WORK-AUDIT");
+  assert.equal(reviewed.body.auditPending, false);
+  assert.equal(reviewed.body.lastGlobalAuditSequence, 2);
+});
