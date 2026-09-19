@@ -57,6 +57,7 @@ function stub(namespace) {
     pushState:input => call("state", input),
     latest:() => call("latest"),
     stop:input => call("stop", input),
+    live:request => durable.fetch(new Request("https://lighthouse-control-port.internal/live", request)),
   });
 }
 function credentials(request) {
@@ -73,7 +74,7 @@ function nativeCors(request) {
   if (!allowed.has(origin)) return null;
   return {
     "access-control-allow-origin":origin,
-    "access-control-allow-methods":"POST, OPTIONS",
+    "access-control-allow-methods":"GET, POST, OPTIONS",
     "access-control-allow-headers":"content-type, x-lighthouse-session-id, x-lighthouse-session-token",
     "access-control-max-age":"600",
     "vary":"Origin",
@@ -99,11 +100,20 @@ export function createLighthouseControlPortHttpService({ namespace, ownerPasscod
       if (request.method === "OPTIONS") {
         return cors === null ? json({ code:"ORIGIN_NOT_ALLOWED" }, 403) : new Response(null, { status:204, headers:cors });
       }
-      if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405, cors || {});
       if (cors === null) return json({ code:"ORIGIN_NOT_ALLOWED" }, 403);
 
       const sessions = stub(namespace);
       if (!sessions) return json({ code:"HUB_UNAVAILABLE" }, 503, cors || {});
+
+      if (url.pathname === `${LIGHTHOUSE_CONTROL_PORT_API_ROOT}/live`) {
+        const upgrade = clean(request.headers.get("upgrade")).toLowerCase();
+        if (request.method !== "GET" || upgrade !== "websocket") {
+          return json({ code:"WEBSOCKET_UPGRADE_REQUIRED" }, 426, cors || {});
+        }
+        return sessions.live(request);
+      }
+
+      if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405, cors || {});
 
       if (url.pathname === `${LIGHTHOUSE_CONTROL_PORT_API_ROOT}/session/start`) {
         const configured = clean(ownerPasscode);

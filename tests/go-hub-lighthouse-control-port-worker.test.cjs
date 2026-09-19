@@ -107,3 +107,43 @@ test("edge refuses owner bootstrap with wrong passcode and blocks unknown browse
   }), env);
   assert.equal(origin.status, 403);
 });
+
+
+test("edge forwards LIGHTHOUSE live websocket upgrade to the durable session without URL credentials", async () => {
+  const { createEdgeWorkerHandler } = await load("live");
+  const calls = [];
+  const namespace = {
+    getByName(name) {
+      assert.equal(name, "lighthouse-control-port-v1");
+      return {
+        async fetch(request) {
+          const url = new URL(request.url);
+          calls.push({
+            pathname:url.pathname,
+            search:url.search,
+            method:request.method,
+            upgrade:request.headers.get("upgrade"),
+          });
+          return new Response(JSON.stringify({ ok:true, route:"live" }), {
+            status:200,
+            headers:{ "content-type":"application/json" },
+          });
+        },
+      };
+    },
+  };
+  const handler = createEdgeWorkerHandler({
+    delegate:{ async fetch(){ return new Response("delegate"); } },
+    factoryMcp:{ async fetch(){ return new Response("mcp"); } },
+  });
+  const response = await handler.fetch(new Request("https://hub.example/hub/api/lighthouse-control-port/live", {
+    method:"GET",
+    headers:{ origin:"https://localhost", upgrade:"websocket" },
+  }), { LIGHTHOUSE_CONTROL_PORT_SESSIONS:namespace, GOHUB_OWNER_PASSCODE:"owner-pass" });
+
+  assert.equal(response.status, 200);
+  assert.equal(calls.at(-1).pathname, "/live");
+  assert.equal(calls.at(-1).search, "");
+  assert.equal(calls.at(-1).method, "GET");
+  assert.equal(calls.at(-1).upgrade, "websocket");
+});

@@ -72,6 +72,7 @@ export function createLighthouseControlPortSessionService({
   now = () => Date.now(),
   randomUUID = () => crypto.randomUUID(),
   randomSessionToken = randomToken,
+  onEvent = async () => {},
 } = {}) {
   if (!storage || typeof storage.get !== "function" || typeof storage.put !== "function") {
     throw new TypeError("LIGHTHOUSE control-port storage required");
@@ -107,6 +108,10 @@ export function createLighthouseControlPortSessionService({
     const supplied = await sha256(sessionToken);
     if (!constantTimeEqual(supplied, current.session.tokenHash)) return { ok:false, code:"SESSION_INACTIVE", state:current.state };
     return current;
+  }
+
+  async function emit(event) {
+    try { await onEvent(clone(event)); } catch {}
   }
 
   return Object.freeze({
@@ -162,6 +167,12 @@ export function createLighthouseControlPortSessionService({
       };
       session.state.commands[id] = command;
       await save(session.state);
+      await emit({
+        type:"COMMAND_AVAILABLE",
+        requestId:id,
+        capabilityId:capId,
+        at:new Date(Number(now())).toISOString(),
+      });
       return { ok:true, command:clone(command), duplicate:false };
     },
 
@@ -195,6 +206,11 @@ export function createLighthouseControlPortSessionService({
       }
       auth.state.session = { ...auth.session, lastSeenAt:Number(now()) };
       await save(auth.state);
+      await emit({
+        type:"RECEIPTS_UPDATED",
+        count:receipts.length,
+        at:new Date(Number(now())).toISOString(),
+      });
       return { ok:true, accepted:receipts.length };
     },
 
@@ -208,7 +224,18 @@ export function createLighthouseControlPortSessionService({
       auth.state.latest = clone(packet);
       auth.state.session = { ...auth.session, lastSeenAt:Number(now()) };
       await save(auth.state);
+      await emit({
+        type:"STATE_UPDATED",
+        at:new Date(Number(now())).toISOString(),
+      });
       return { ok:true };
+    },
+
+    async authorizeLive({ sessionId, sessionToken } = {}) {
+      const auth = await authorize({ sessionId, sessionToken });
+      return auth.ok
+        ? { ok:true, session:publicSession(auth.session) }
+        : { ok:false, code:auth.code };
     },
 
     async latest() {
@@ -241,12 +268,87 @@ function internalJson(payload, status = 200) {
 }
 
 export class LighthouseControlPortSessionRegistry {
-  constructor(ctx) { this.ctx = ctx; }
-  service() { return createLighthouseControlPortSessionService({ storage:this.ctx.storage }); }
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.liveClients = new Map();
+  }
+
+  service() {
+    return createLighthouseControlPortSessionService({
+      storage:this.ctx.storage,
+      onEvent:event => this.broadcast(event),
+    });
+  }
+
+  broadcast(event) {
+    const payload = JSON.stringify(event);
+    for (const [socket, state] of this.liveClients) {
+      if (state?.authenticated !== true) continue;
+      try { socket.send(payload); }
+      catch { this.liveClients.delete(socket); }
+    }
+  }
+
+  async openLive() {
+    if (typeof WebSocketPair !== "function") return internalJson({ ok:false, code:"WEBSOCKET_UNAVAILABLE" }, 501);
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+    server.accept();
+    const authTimer = setTimeout(() => {
+      const state = this.liveClients.get(server);
+      if (state?.authenticated === true) return;
+      try { server.close(4401, "AUTH_TIMEOUT"); } catch {}
+      this.liveClients.delete(server);
+    }, 10_000);
+    this.liveClients.set(server, { authenticated:false, authTimer });
+
+    server.addEventListener("message", async event => {
+      let message = null;
+      try { message = JSON.parse(String(event.data || "")); } catch {}
+      if (!message || message.type !== "AUTH") {
+        try { server.send(JSON.stringify({ type:"ERROR", code:"AUTH_REQUIRED" })); } catch {}
+        return;
+      }
+      const auth = await this.service().authorizeLive({
+        sessionId:message.sessionId,
+        sessionToken:message.sessionToken,
+      });
+      if (!auth.ok) {
+        try { server.send(JSON.stringify({ type:"ERROR", code:auth.code || "SESSION_INACTIVE" })); } catch {}
+        try { server.close(4403, "SESSION_INACTIVE"); } catch {}
+        this.liveClients.delete(server);
+        return;
+      }
+      clearTimeout(authTimer);
+      this.liveClients.set(server, { authenticated:true, authTimer:null });
+      try {
+        server.send(JSON.stringify({
+          type:"READY",
+          sessionId:auth.session?.sessionId || null,
+          at:new Date().toISOString(),
+        }));
+      } catch {}
+    });
+    const cleanup = () => {
+      const state = this.liveClients.get(server);
+      if (state?.authTimer) clearTimeout(state.authTimer);
+      this.liveClients.delete(server);
+    };
+    server.addEventListener("close", cleanup);
+    server.addEventListener("error", cleanup);
+    return new Response(null, { status:101, webSocket:client });
+  }
 
   async fetch(request) {
-    if (request.method !== "POST") return internalJson({ ok:false, code:"METHOD_NOT_ALLOWED" }, 405);
     const url = new URL(request.url);
+    if (url.pathname === "/live") {
+      const upgrade = clean(request.headers.get("upgrade")).toLowerCase();
+      if (request.method !== "GET" || upgrade !== "websocket") {
+        return internalJson({ ok:false, code:"WEBSOCKET_UPGRADE_REQUIRED" }, 426);
+      }
+      return this.openLive();
+    }
+    if (request.method !== "POST") return internalJson({ ok:false, code:"METHOD_NOT_ALLOWED" }, 405);
     const input = await request.json().catch(() => ({}));
     const service = this.service();
     if (url.pathname === "/start") return internalJson(await service.start(input));
