@@ -260,7 +260,6 @@ export class GoHubCounterDispatchState {
       const result = this.core.waitingTarget({ target }, state);
       state = result.dispatch;
       if (!result.idempotent) await this.save(state);
-      await this.schedule(state.legs[target].nextAttemptAt);
       return publicState(state, { targetConfigured:false });
     }
     const attempt = this.core.beginAttempt({ target }, state);
@@ -292,14 +291,24 @@ export class GoHubCounterDispatchState {
     const current = await this.load();
     const result = this.core.enqueueOpen(input, current);
     if (result.created) await this.save(result.dispatch);
-    if (result.idempotent) return result;
+    if (result.idempotent) {
+      const status = result.dispatch?.legs?.LIGHT?.status;
+      return ["WAITING_TARGET","RETRY_WAIT"].includes(status)
+        ? this.deliver("LIGHT", result.dispatch)
+        : result;
+    }
     return this.deliver("LIGHT", result.dispatch);
   }
   async enqueueAnswer(input = {}) {
     const current = await this.load();
     const result = this.core.enqueueAnswer(input, current);
     if (!result.idempotent) await this.save(result.dispatch);
-    if (result.idempotent) return result;
+    if (result.idempotent) {
+      const status = result.dispatch?.legs?.GO?.status;
+      return ["WAITING_TARGET","RETRY_WAIT"].includes(status)
+        ? this.deliver("GO", result.dispatch)
+        : result;
+    }
     return this.deliver("GO", result.dispatch);
   }
   async get(input = {}) {
