@@ -187,6 +187,56 @@ export function createGoogleDriveService({
     };
   }
 
+  async function createFolderRaw(parentId, name) {
+    const result = await request(
+      "/files?supportsAllDrives=true&fields=" + encode(FILE_FIELDS),
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          mimeType: FOLDER_MIME,
+          parents: [parentId],
+        }),
+      },
+    );
+    if (result.response) return result;
+    const verified = await readback(result.payload?.id, { name, parentId });
+    if (verified.response) return verified;
+    return { item: verified.item };
+  }
+
+  async function ensureFolderPath(pathValue) {
+    if (!scopeRoot) return { response: json({ code: "DRIVE_ROOT_NOT_CONFIGURED" }, 503) };
+    const segments = text(pathValue).split("/").map(part => part.trim()).filter(Boolean);
+    if (!segments.length || segments.length > 32 || segments.some(part => part === "." || part === "..")) {
+      return { response: json({ code: "DRIVE_INVALID_PATH" }, 400) };
+    }
+    let currentId = scopeRoot;
+    const created = [];
+    for (const segment of segments) {
+      const found = await findChildByName(currentId, segment);
+      if (found.response) return found;
+      if (found.items.length > 1) {
+        return { response: json({ code: "DRIVE_PATH_AMBIGUOUS", segment }, 409) };
+      }
+      if (found.items.length === 1) {
+        const item = found.items[0];
+        if (item.mimeType !== FOLDER_MIME) {
+          return { response: json({ code: "DRIVE_PATH_NOT_FOLDER", segment, item }, 409) };
+        }
+        currentId = item.id;
+        continue;
+      }
+      const made = await createFolderRaw(currentId, segment);
+      if (made.response) return made;
+      created.push(made.item.id);
+      currentId = made.item.id;
+    }
+    const verified = await readback(currentId);
+    if (verified.response) return verified;
+    return { item: verified.item, created };
+  }
+
   async function readback(fileId, expected = {}) {
     const result = await getRaw(fileId);
     if (result.response) return result;
@@ -296,6 +346,7 @@ export function createGoogleDriveService({
           "move_item",
           "rename_item",
           "upload_file_internal",
+          "ensure_folder_path_internal",
         ],
         destructiveDeleteExposed: false,
         mutationReadbackRequired: true,
@@ -373,27 +424,21 @@ export function createGoogleDriveService({
 
     async uploadFileBytes(input = {}) { return uploadFileBytes(input); },
 
+    async ensureFolderPath(input = {}) {
+      const result = await ensureFolderPath(input.path);
+      if (result.response) return result.response;
+      return json({ item: result.item, createdFolderIds: result.created, readback: "PASS" });
+    },
+
     async createFolder(input = {}) {
       const parentId = text(input.parentId);
       const name = text(input.name);
       if (!parentId || !name) return json({ code: "DRIVE_INVALID_INPUT" }, 400);
       const scoped = await isWithinScope(parentId);
       if (!scoped.ok) return scoped.response;
-      const result = await request(
-        "/files?supportsAllDrives=true&fields=" + encode(FILE_FIELDS),
-        {
-          method: "POST",
-          body: JSON.stringify({
-            name,
-            mimeType: FOLDER_MIME,
-            parents: [parentId],
-          }),
-        },
-      );
+      const result = await createFolderRaw(parentId, name);
       if (result.response) return result.response;
-      const verified = await readback(result.payload?.id, { name, parentId });
-      if (verified.response) return verified.response;
-      return json({ item: verified.item, readback: "PASS" });
+      return json({ item: result.item, readback: "PASS" });
     },
 
     async moveItem(input = {}) {

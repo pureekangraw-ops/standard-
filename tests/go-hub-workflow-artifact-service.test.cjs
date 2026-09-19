@@ -65,6 +65,24 @@ test("lists exact-run GitHub Actions artifacts", async () => {
   assert.equal(payload.artifacts[0].digest, "sha256:zip");
 });
 
+test("inventories repository artifacts when runId is omitted", async () => {
+  const { createWorkflowArtifactService } = await import(url + "?inventory=" + Date.now());
+  const fetchImpl = async requestUrl => {
+    assert.match(String(requestUrl), /\/actions\/artifacts\?per_page=100$/);
+    return new Response(JSON.stringify({ artifacts: [{
+      id: 17, name: "older-owner", size_in_bytes: 321, expired: false,
+      workflow_run: { id: 555 }, digest: "sha256:older",
+    }] }), { headers: { "content-type": "application/json" } });
+  };
+  const drive = { uploadFileBytes: async () => new Response("{}") };
+  const service = createWorkflowArtifactService({ fetchImpl, token: "token", drive });
+  const response = await service.listArtifacts({ repository: "pureekangraw-ops/ygph-metropolis" });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.scope, "REPOSITORY");
+  assert.equal(payload.artifacts[0].runId, 555);
+});
+
 test("extracts one artifact entry and archives exact bytes to Drive with identity metadata", async () => {
   const { createWorkflowArtifactService } = await import(url + "?archive=" + Date.now());
   const zip = storedZip("android/app/lighthouse-release.apk", new Uint8Array([1,2,3,4]));
@@ -83,6 +101,13 @@ test("extracts one artifact entry and archives exact bytes to Drive with identit
   let upload = null;
   const drive = {
     defaultParentId: () => "folder-a",
+    ensureFolderPath: async input => {
+      assert.equal(input.path, "GO/ระบบ-งาน/GO-HUB/Build Archive/LIGHTHOUSE");
+      return new Response(JSON.stringify({
+        item: { id: "folder-archive", name: "LIGHTHOUSE" },
+        readback: "PASS",
+      }), { headers: { "content-type": "application/json" } });
+    },
     uploadFileBytes: async input => {
       upload = input;
       return new Response(JSON.stringify({
@@ -96,12 +121,14 @@ test("extracts one artifact entry and archives exact bytes to Drive with identit
     repository: "pureekangraw-ops/ygph-metropolis",
     runId: 100,
     artifactId: 8,
+    archivePath: "GO/ระบบ-งาน/GO-HUB/Build Archive/LIGHTHOUSE",
     entrySuffix: "lighthouse-release.apk",
     destinationName: "lighthouse-owner.11-vc1016.apk",
   });
   const payload = await response.json();
   assert.equal(response.status, 200);
   assert.equal(payload.readback, "PASS");
+  assert.equal(upload.parentId, "folder-archive");
   assert.equal(upload.name, "lighthouse-owner.11-vc1016.apk");
   assert.equal(upload.mimeType, "application/vnd.android.package-archive");
   assert.deepEqual(Array.from(upload.bytes), [1,2,3,4]);
