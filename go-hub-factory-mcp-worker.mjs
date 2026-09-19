@@ -118,7 +118,7 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
         lightCapabilityStatus:dispatchPayload.capabilityStatus || null,
         lightUpgradeUrl:dispatchPayload.upgradeUrl || null,
       }, response.status);
-    }
+    },
 
     async get(input = {}) {
       const response = await counter.get(input);
