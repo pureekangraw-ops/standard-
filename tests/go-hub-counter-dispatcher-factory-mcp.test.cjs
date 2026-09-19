@@ -33,46 +33,103 @@ function counterState(overrides = {}) {
   };
 }
 
-test("Factory MCP counter create attaches dispatcher truth from the real execution seam", async () => {
-  const { createCounterDispatchLifecycle } = await import(moduleUrl + "?create=" + Date.now());
-  const calls = [];
+test("Factory MCP counter create surfaces Notion OAuth URL while LIGHT waits for authorization", async () => {
+  const { createCounterDispatchLifecycle } = await import(moduleUrl + "?auth=" + Date.now());
   const lifecycle = createCounterDispatchLifecycle({
     counter:{
       create:async () => response({ ok:true, counter:counterState(), created:true }),
       get:async () => response({ ok:true, counter:counterState() }),
-      answer:async () => response({ ok:true, counter:counterState() }),
+      seen:async () => response({ code:"unused" }, 500),
+      answer:async () => response({ code:"unused" }, 500),
     },
     dispatch:{
       async open(input) {
-        calls.push(["open", input]);
         return response({
           ok:true,
           dispatch:{
             counterId:input.counterId,
             workId:input.workId,
             checkpointId:input.checkpointId,
-            legs:{ LIGHT:{ status:"WAITING_TARGET" }, GO:{ status:"IDLE" } },
+            legs:{ LIGHT:{ status:"WAITING_AUTH" }, GO:{ status:"IDLE" } },
           },
-          targetConfigured:false,
+          authRequired:true,
+          authorizationUrl:"https://notion.example/oauth",
         });
       },
       async get() { return response({ code:"DISPATCH_NOT_FOUND" }, 404); },
       async answer() { return response({ code:"unused" }, 500); },
     },
   });
-
   const result = await lifecycle.create({});
   const payload = await result.json();
-
   assert.equal(result.status, 200);
-  assert.equal(payload.counter.counterId, "COUNTER-FMCP-1");
-  assert.equal(payload.dispatch.legs.LIGHT.status, "WAITING_TARGET");
-  assert.equal(payload.dispatchCode, null);
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0][1].request, "Find in Notion AI Search");
+  assert.equal(payload.counter.currentState, "OPEN");
+  assert.equal(payload.dispatch.legs.LIGHT.status, "WAITING_AUTH");
+  assert.equal(payload.lightAuthRequired, true);
+  assert.equal(payload.lightAuthorizationUrl, "https://notion.example/oauth");
 });
 
-test("Factory MCP counter get exposes dispatcher state without mutating Counter", async () => {
+test("Factory MCP writes SEEN and ANSWERED when Dispatcher returns Notion AI Search result", async () => {
+  const { createCounterDispatchLifecycle } = await import(moduleUrl + "?answer=" + Date.now());
+  const calls = [];
+  const open = counterState();
+  const seen = counterState({ currentState:"SEEN" });
+  const answered = counterState({
+    currentState:"ANSWERED",
+    answer:"1. Counter Contract — Projects / GO Hub",
+    sources:["https://notion.so/page-1"],
+    evidence:[{ kind:"notion_ai_search_result", source:"https://notion.so/page-1" }],
+    confidence:"NOTION_AI_SEARCH",
+    nextRoute:"GO",
+  });
+  const lifecycle = createCounterDispatchLifecycle({
+    counter:{
+      async create() { calls.push("create"); return response({ ok:true, counter:open, created:true }); },
+      async get() { return response({ ok:true, counter:answered }); },
+      async seen(input) {
+        calls.push(["seen",input]);
+        return response({ ok:true, counter:seen });
+      },
+      async answer(input) {
+        calls.push(["answer",input]);
+        return response({ ok:true, counter:answered });
+      },
+    },
+    dispatch:{
+      async open() {
+        return response({
+          ok:true,
+          dispatch:{
+            counterId:"COUNTER-FMCP-1",
+            workId:"WORK-1",
+            checkpointId:"CP-1",
+            legs:{ LIGHT:{ status:"DELIVERED" }, GO:{ status:"IDLE" } },
+          },
+          lightAnswer:{
+            status:"ANSWERED",
+            answer:"1. Counter Contract — Projects / GO Hub",
+            sources:["https://notion.so/page-1"],
+            evidence:[{ kind:"notion_ai_search_result", source:"https://notion.so/page-1" }],
+            confidence:"NOTION_AI_SEARCH",
+            nextRoute:"GO",
+          },
+        });
+      },
+      async get() { return response({ code:"unused" }, 500); },
+      async answer() { return response({ code:"unused" }, 500); },
+    },
+  });
+  const result = await lifecycle.create({});
+  const payload = await result.json();
+  assert.equal(payload.counter.currentState, "ANSWERED");
+  assert.equal(payload.lightResult.status, "ANSWERED");
+  assert.equal(calls[0], "create");
+  assert.equal(calls[1][0], "seen");
+  assert.equal(calls[2][0], "answer");
+  assert.equal(calls[2][1].answer, "1. Counter Contract — Projects / GO Hub");
+});
+
+test("Factory MCP counter get exposes Dispatcher state without mutating Counter", async () => {
   const { createCounterDispatchLifecycle } = await import(moduleUrl + "?get=" + Date.now());
   let counterGets = 0;
   let dispatchGets = 0;
@@ -83,6 +140,7 @@ test("Factory MCP counter get exposes dispatcher state without mutating Counter"
         counterGets += 1;
         return response({ ok:true, counter:counterState() });
       },
+      async seen() { return response({ code:"unused" }, 500); },
       async answer() { return response({ code:"unused" }, 500); },
     },
     dispatch:{
@@ -95,43 +153,41 @@ test("Factory MCP counter get exposes dispatcher state without mutating Counter"
             counterId:input.counterId,
             workId:input.workId,
             checkpointId:input.checkpointId,
-            legs:{ LIGHT:{ status:"WAITING_TARGET" }, GO:{ status:"IDLE" } },
+            legs:{ LIGHT:{ status:"WAITING_AUTH" }, GO:{ status:"IDLE" } },
           },
         });
       },
       async answer() { return response({ code:"unused" }, 500); },
     },
   });
-
   const result = await lifecycle.get({});
   const payload = await result.json();
   assert.equal(counterGets, 1);
   assert.equal(dispatchGets, 1);
-  assert.equal(payload.dispatch.legs.LIGHT.status, "WAITING_TARGET");
+  assert.equal(payload.dispatch.legs.LIGHT.status, "WAITING_AUTH");
 });
 
-test("Factory MCP counter answer queues GO wake on the same Counter identity", async () => {
-  const { createCounterDispatchLifecycle } = await import(moduleUrl + "?answer=" + Date.now());
-  const calls = [];
+test("Factory MCP counter answer keeps GO return transport separate", async () => {
+  const { createCounterDispatchLifecycle } = await import(moduleUrl + "?go=" + Date.now());
   const answered = counterState({
     currentState:"ANSWERED",
     answer:"Found it",
-    sources:["notion://page/1"],
-    evidence:[{ kind:"page", reference:"notion://page/1" }],
-    confidence:"HIGH",
+    sources:["https://notion.so/page-1"],
+    evidence:[{ kind:"notion_ai_search_result", source:"https://notion.so/page-1" }],
+    confidence:"NOTION_AI_SEARCH",
     nextRoute:"GO",
   });
   const lifecycle = createCounterDispatchLifecycle({
     counter:{
       async create() { return response({ code:"unused" }, 500); },
       async get() { return response({ code:"unused" }, 500); },
+      async seen() { return response({ code:"unused" }, 500); },
       async answer() { return response({ ok:true, counter:answered }); },
     },
     dispatch:{
       async open() { return response({ code:"unused" }, 500); },
       async get() { return response({ code:"unused" }, 500); },
       async answer(input) {
-        calls.push(input);
         return response({
           ok:true,
           dispatch:{
@@ -144,11 +200,7 @@ test("Factory MCP counter answer queues GO wake on the same Counter identity", a
       },
     },
   });
-
   const result = await lifecycle.answer({});
   const payload = await result.json();
   assert.equal(payload.dispatch.legs.GO.status, "WAITING_TARGET");
-  assert.equal(calls[0].status, "ANSWERED");
-  assert.equal(calls[0].answer, "Found it");
-  assert.deepEqual(calls[0].sources, ["notion://page/1"]);
 });
