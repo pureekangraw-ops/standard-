@@ -166,7 +166,7 @@ export function createWorkflowArtifactService({ fetchImpl = fetch, token, drive,
       const repository = assertRepository(input.repository);
       const runId = positiveInt(input.runId);
       const artifactId = positiveInt(input.artifactId);
-      const parentId = clean(input.parentId);
+      const parentId = clean(input.parentId) || clean(typeof drive.defaultParentId === "function" ? drive.defaultParentId() : "");
       if (!githubToken) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
       if (!repository || !runId || !artifactId || !parentId) {
         return json({ code: "ARTIFACT_INVALID_INPUT" }, 400);
