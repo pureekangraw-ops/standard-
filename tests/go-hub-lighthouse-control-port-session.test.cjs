@@ -104,3 +104,52 @@ test("wrong token, requestId conflicts, and secret-shaped payloads fail closed",
   assert.equal((await service.enqueue({ requestId:"hub-1", capabilityId:"system.appState", payload:{} })).ok, true);
   assert.equal((await service.enqueue({ requestId:"hub-1", capabilityId:"finance.balance", payload:{} })).code, "REQUEST_ID_CONFLICT");
 });
+
+
+test("realtime event hook signals command, receipts, and state changes without carrying session secrets", async () => {
+  const m = await load("realtime-events");
+  const events = [];
+  const service = m.createLighthouseControlPortSessionService({
+    storage:new MemoryStorage(),
+    now:() => 1_000,
+    randomUUID:() => "lh-session-live",
+    randomSessionToken:() => "device-token-live",
+    onEvent:async event => { events.push(event); },
+  });
+  await service.start({ ttlMs:60_000 });
+  await service.enqueue({
+    requestId:"live-command-1",
+    capabilityId:"system.appState",
+    payload:{},
+  });
+  await service.pushReceipts({
+    sessionId:"lh-session-live",
+    sessionToken:"device-token-live",
+    receipts:[{ requestId:"live-command-1", capabilityId:"system.appState", status:"DONE", updatedAt:"2026-09-19T01:20:00.000Z" }],
+  });
+  await service.pushState({
+    sessionId:"lh-session-live",
+    sessionToken:"device-token-live",
+    packet:{ work:{ nextAction:"WAITING_COMMAND" }, snapshot:{ freshness:"LIVE", revision:4 }, syncedAt:"2026-09-19T01:20:00.000Z" },
+  });
+
+  assert.deepEqual(events.map(event => event.type), ["COMMAND_AVAILABLE","RECEIPTS_UPDATED","STATE_UPDATED"]);
+  assert.equal(events[0].requestId, "live-command-1");
+  assert.equal(JSON.stringify(events).includes("device-token-live"), false);
+});
+
+test("live authentication uses the existing paired session credential and exposes only public session state", async () => {
+  const m = await load("live-auth");
+  const service = m.createLighthouseControlPortSessionService({
+    storage:new MemoryStorage(),
+    now:() => 1_000,
+    randomUUID:() => "lh-session-live",
+    randomSessionToken:() => "device-token-live",
+  });
+  await service.start({ ttlMs:60_000 });
+  const ok = await service.authorizeLive({ sessionId:"lh-session-live", sessionToken:"device-token-live" });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.session.sessionId, "lh-session-live");
+  assert.equal(JSON.stringify(ok).includes("device-token-live"), false);
+  assert.equal((await service.authorizeLive({ sessionId:"lh-session-live", sessionToken:"wrong" })).code, "SESSION_INACTIVE");
+});
