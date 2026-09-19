@@ -249,6 +249,8 @@ export class GoHubCentreState {
     }
     next.lastGlobalAuditSequence = Number(payload.sequence);
     next.auditPendingEvent = null;
+    state.lastGlobalAuditSequence = next.lastGlobalAuditSequence;
+    state.auditPendingEvent = null;
     await this.ctx.storage.put("state", clone(next));
     return next;
   }
