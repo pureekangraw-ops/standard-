@@ -208,3 +208,89 @@ test("live authentication uses the existing paired session credential and expose
   assert.equal(JSON.stringify(ok).includes("device-token-live"), false);
   assert.equal((await service.authorizeLive({ sessionId:"lh-session-live", sessionToken:"wrong" })).code, "SESSION_INACTIVE");
 });
+
+
+test("Hub-side Centre Board projection survives device session restart and archives returned work", async () => {
+  const m = await load("hub-board-projection");
+  let clock = Date.parse("2026-09-19T16:00:00.000Z");
+  const storage = new MemoryStorage();
+  const service = m.createLighthouseControlPortSessionService({
+    storage,
+    now:() => clock,
+    randomUUID:() => "lh-session-board-projection",
+    randomSessionToken:() => "device-token-board-projection",
+  });
+
+  await service.start({ ttlMs:60_000 });
+  const projected = await service.projectCentre({
+    ok:true,
+    phase:"AWAY",
+    workId:"WORK-LIVE-1",
+    work:{
+      workId:"WORK-LIVE-1",
+      status:"AWAY",
+      task:"Keep Hub Board current",
+      requestedResult:"Hub owns Board projection",
+      role:{ roleId:"code-worker" },
+    },
+    ownership:{ active:true, ownerId:"GO" },
+    interruption:null,
+    executionCheckpoint:{ latest:{ resumeFrom:"Continue server-side projection" } },
+    realityEvidence:null,
+    validationEvidence:null,
+  });
+  assert.equal(projected.ok, true);
+  assert.equal(projected.board.revision, 1);
+  assert.equal(projected.board.pins[0].status, "DOING");
+
+  clock += 1_000;
+  const returned = await service.projectCentre({
+    ok:true,
+    phase:"RETURNED",
+    workId:"WORK-LIVE-1",
+    work:{
+      workId:"WORK-LIVE-1",
+      status:"RETURNED",
+      task:"Keep Hub Board current",
+      requestedResult:"Hub owns Board projection",
+      returnedPayload:{ result:"PASS" },
+      role:{ roleId:"code-worker" },
+    },
+    ownership:{ active:false, ownerId:null },
+    interruption:null,
+    executionCheckpoint:{ latest:null },
+    realityEvidence:{ kind:"DEVICE", reference:"owner.13" },
+    validationEvidence:{ kind:"READBACK", reference:"PASS" },
+  });
+  assert.equal(returned.board.revision, 2);
+  assert.equal(returned.board.pins[0].status, "ARCHIVED");
+  assert.equal(returned.board.pins[0].result, "PASS");
+
+  await service.start({ deviceLabel:"replacement session", ttlMs:60_000 });
+  const afterRestart = await service.boardLatest();
+  assert.equal(afterRestart.board.revision, 2);
+  assert.equal(afterRestart.board.pins[0].status, "ARCHIVED");
+});
+
+test("paired LIGHTHOUSE can read Hub Board but cannot read it with a bad session credential", async () => {
+  const m = await load("hub-board-read");
+  const service = m.createLighthouseControlPortSessionService({
+    storage:new MemoryStorage(),
+    now:() => 1_000,
+    randomUUID:() => "lh-session-board-read",
+    randomSessionToken:() => "device-token-board-read",
+  });
+  await service.start({ ttlMs:60_000 });
+  await service.projectCentre({
+    ok:true,
+    phase:"AWAY",
+    workId:"WORK-READ-1",
+    work:{ workId:"WORK-READ-1", status:"AWAY", task:"Read Board", requestedResult:"Projection" },
+    ownership:{ active:false },
+  });
+  const good = await service.board({ sessionId:"lh-session-board-read", sessionToken:"device-token-board-read" });
+  assert.equal(good.ok, true);
+  assert.equal(good.board.boardId, "BOARD-LIGHTHOUSE-CENTRE");
+  assert.equal(good.board.pins[0].workId, "WORK-READ-1");
+  assert.equal((await service.board({ sessionId:"lh-session-board-read", sessionToken:"wrong" })).code, "SESSION_INACTIVE");
+});
