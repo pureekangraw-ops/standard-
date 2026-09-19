@@ -289,6 +289,7 @@ export function createGoogleDriveService({
           "capabilities",
           "health",
           "diagnostics",
+          "root",
           "get_item",
           "list_children",
           "create_folder",
@@ -321,6 +322,19 @@ export function createGoogleDriveService({
         },
         scopes: grantedScopes,
         scopeSource: grantedScopes.length ? "refresh_response" : "unavailable",
+      });
+    },
+
+    defaultParentId() { return scopeRoot || null; },
+
+    async root() {
+      if (!scopeRoot) return json({ code: "DRIVE_ROOT_NOT_CONFIGURED" }, 503);
+      const result = await getRaw(scopeRoot);
+      if (result.response) return result.response;
+      const item = normalizeFile(result.payload);
+      return json({
+        item: { ...item, parents: [] },
+        scope: "GOVERNED_ROOT",
       });
     },
 
