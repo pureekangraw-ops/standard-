@@ -1,0 +1,228 @@
+"use strict";
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const path = require("node:path");
+const { pathToFileURL } = require("node:url");
+
+const serviceUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-google-drive-service.mjs")).href;
+
+async function load(tag) {
+  return import(serviceUrl + "?" + tag + "=" + Date.now());
+}
+
+function driveFile(overrides = {}) {
+  return {
+    id: "file-a",
+    name: "alpha.txt",
+    mimeType: "text/plain",
+    size: "12",
+    modifiedTime: "2026-09-19T00:00:00.000Z",
+    md5Checksum: "abc123",
+    version: "7",
+    parents: ["folder-old"],
+    trashed: false,
+    webViewLink: "https://drive.google.com/file/d/file-a/view",
+    ...overrides,
+  };
+}
+
+test("Drive service fails closed when auth is missing", async () => {
+  const { createGoogleDriveService } = await load("missing");
+  let calls = 0;
+  const service = createGoogleDriveService({
+    fetchImpl: async () => { calls += 1; throw new Error("must not call upstream"); },
+  });
+
+  const capabilities = await service.capabilities();
+  assert.deepEqual(await capabilities.json(), {
+    configured: false,
+    authMode: null,
+    rootScopeConfigured: false,
+    operations: ["capabilities", "get_item", "list_children", "create_folder", "move_item", "rename_item"],
+    destructiveDeleteExposed: false,
+    mutationReadbackRequired: true,
+  });
+
+  const response = await service.getItem({ fileId: "file-a" });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { code: "DRIVE_NOT_CONFIGURED" });
+  assert.equal(calls, 0);
+});
+
+test("Drive service refreshes OAuth token server-side and never echoes secrets", async () => {
+  const { createGoogleDriveService } = await load("refresh");
+  const requests = [];
+  const fetchImpl = async (url, init = {}) => {
+    requests.push({ url: String(url), init });
+    if (String(url) === "https://oauth2.googleapis.com/token") {
+      assert.match(String(init.body), /client_id=client-a/);
+      assert.match(String(init.body), /refresh_token=refresh-secret/);
+      return new Response(JSON.stringify({ access_token: "access-secret", expires_in: 3600 }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    assert.equal(init.headers.authorization, "Bearer access-secret");
+    return new Response(JSON.stringify(driveFile()), {
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const service = createGoogleDriveService({
+    fetchImpl,
+    refreshToken: "refresh-secret",
+    clientId: "client-a",
+    clientSecret: "client-secret",
+  });
+  const response = await service.getItem({ fileId: "file-a" });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.item.id, "file-a");
+  assert.equal(payload.item.md5Checksum, "abc123");
+  assert.equal(requests.length, 2);
+  assert.doesNotMatch(JSON.stringify(payload), /access-secret|refresh-secret|client-secret/);
+});
+
+test("Drive createFolder requires readback before PASS", async () => {
+  const { createGoogleDriveService } = await load("create");
+  const requests = [];
+  const fetchImpl = async (url, init = {}) => {
+    requests.push({ url: String(url), init });
+    if (init.method === "POST") {
+      assert.deepEqual(JSON.parse(init.body), {
+        name: "Archive",
+        mimeType: "application/vnd.google-apps.folder",
+        parents: ["parent-a"],
+      });
+      return new Response(JSON.stringify(driveFile({
+        id: "folder-new",
+        name: "Archive",
+        mimeType: "application/vnd.google-apps.folder",
+        parents: ["parent-a"],
+      })), { headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify(driveFile({
+      id: "folder-new",
+      name: "Archive",
+      mimeType: "application/vnd.google-apps.folder",
+      parents: ["parent-a"],
+    })), { headers: { "content-type": "application/json" } });
+  };
+
+  const service = createGoogleDriveService({ fetchImpl, accessToken: "token-a" });
+  const response = await service.createFolder({ parentId: "parent-a", name: "Archive" });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.readback, "PASS");
+  assert.equal(payload.item.id, "folder-new");
+  assert.equal(requests.length, 2);
+});
+
+test("Drive move uses native parent update and verifies destination readback", async () => {
+  const { createGoogleDriveService } = await load("move");
+  const requests = [];
+  const fetchImpl = async (url, init = {}) => {
+    requests.push({ url: String(url), init });
+    if (requests.length === 1) {
+      return new Response(JSON.stringify(driveFile({ parents: ["folder-old"] })), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (requests.length === 2) {
+      const current = new URL(String(url));
+      assert.equal(init.method, "PATCH");
+      assert.equal(current.searchParams.get("addParents"), "folder-new");
+      assert.equal(current.searchParams.get("removeParents"), "folder-old");
+      return new Response(JSON.stringify(driveFile({ parents: ["folder-new"] })), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify(driveFile({ parents: ["folder-new"] })), {
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const service = createGoogleDriveService({ fetchImpl, accessToken: "token-a" });
+  const response = await service.moveItem({ fileId: "file-a", destinationFolderId: "folder-new" });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.readback, "PASS");
+  assert.deepEqual(payload.previousParents, ["folder-old"]);
+  assert.deepEqual(payload.item.parents, ["folder-new"]);
+  assert.equal(requests.length, 3);
+});
+
+test("Drive rename verifies the new name by readback", async () => {
+  const { createGoogleDriveService } = await load("rename");
+  const requests = [];
+  const fetchImpl = async (url, init = {}) => {
+    requests.push({ url: String(url), init });
+    if (init.method === "PATCH") {
+      assert.deepEqual(JSON.parse(init.body), { name: "renamed.txt" });
+    }
+    return new Response(JSON.stringify(driveFile({ name: "renamed.txt" })), {
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const service = createGoogleDriveService({ fetchImpl, accessToken: "token-a" });
+  const response = await service.renameItem({ fileId: "file-a", name: "renamed.txt" });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.readback, "PASS");
+  assert.equal(payload.item.name, "renamed.txt");
+  assert.equal(requests.length, 2);
+});
+
+test("Drive readback mismatch fails closed", async () => {
+  const { createGoogleDriveService } = await load("mismatch");
+  let calls = 0;
+  const fetchImpl = async (_url, init = {}) => {
+    calls += 1;
+    const name = init.method === "PATCH" ? "renamed.txt" : "old.txt";
+    return new Response(JSON.stringify(driveFile({ name })), {
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const service = createGoogleDriveService({ fetchImpl, accessToken: "token-a" });
+  const response = await service.renameItem({ fileId: "file-a", name: "renamed.txt" });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { code: "DRIVE_READBACK_MISMATCH", field: "name" });
+  assert.equal(calls, 2);
+});
+
+test("Drive root scope blocks items outside configured root", async () => {
+  const { createGoogleDriveService } = await load("scope");
+  const fetchImpl = async url => {
+    const id = decodeURIComponent(String(url).match(/\/files\/([^?]+)/)?.[1] || "");
+    if (id === "outside") {
+      return new Response(JSON.stringify(driveFile({ id: "outside", parents: ["other-root"] })), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify(driveFile({ id: "other-root", parents: [] })), {
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const service = createGoogleDriveService({
+    fetchImpl,
+    accessToken: "token-a",
+    rootFolderId: "allowed-root",
+  });
+  const response = await service.getItem({ fileId: "outside" });
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { code: "DRIVE_SCOPE_VIOLATION" });
+});
+
+test("Drive upstream failures are sanitized", async () => {
+  const { createGoogleDriveService } = await load("sanitize");
+  const service = createGoogleDriveService({
+    accessToken: "super-secret-token",
+    fetchImpl: async () => new Response(JSON.stringify({
+      error: { message: "super-secret-token leaked", errors: [{ reason: "forbidden" }] },
+    }), { status: 403, headers: { "content-type": "application/json" } }),
+  });
+  const response = await service.getItem({ fileId: "file-a" });
+  const payload = await response.json();
+  assert.equal(response.status, 502);
+  assert.deepEqual(payload, { code: "DRIVE_UPSTREAM_ERROR", category: "forbidden" });
+  assert.doesNotMatch(JSON.stringify(payload), /super-secret-token/);
+});
