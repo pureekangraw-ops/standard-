@@ -174,6 +174,7 @@ async function mcpPost(fetchImpl, token, body, sessionId = null) {
     authorization:"Bearer " + token,
     "content-type":"application/json",
     accept:"application/json, text/event-stream",
+    "mcp-protocol-version":MCP_PROTOCOL_VERSION,
   };
   if (sessionId) headers["mcp-session-id"] = sessionId;
   const response = await fetchImpl(NOTION_MCP_URL, {
