@@ -38,7 +38,7 @@ test("Drive service fails closed when auth is missing", async () => {
     configured: false,
     authMode: null,
     rootScopeConfigured: false,
-    operations: ["capabilities", "health", "diagnostics", "get_item", "list_children", "create_folder", "move_item", "rename_item", "upload_file_internal"],
+    operations: ["capabilities", "health", "diagnostics", "root", "get_item", "list_children", "create_folder", "move_item", "rename_item", "upload_file_internal"],
     destructiveDeleteExposed: false,
     mutationReadbackRequired: true,
   });
@@ -126,6 +126,31 @@ test("Drive diagnostics reports sanitized account identity and granted refresh s
     scopeSource: "refresh_response",
   });
   assert.doesNotMatch(JSON.stringify(payload), /refresh-secret|client-secret|access-secret/);
+});
+
+test("Drive root returns only governed root identity and hides outer parents", async () => {
+  const { createGoogleDriveService } = await load("root");
+  const service = createGoogleDriveService({
+    accessToken: "token-a",
+    rootFolderId: "root-governed",
+    fetchImpl: async (url, init = {}) => {
+      assert.match(String(url), /\/files\/root-governed\?/);
+      assert.equal(init.headers.authorization, "Bearer token-a");
+      return new Response(JSON.stringify(driveFile({
+        id: "root-governed",
+        name: "GO Hub",
+        mimeType: "application/vnd.google-apps.folder",
+        parents: ["outer-private-parent"],
+      })), { headers: { "content-type": "application/json" } });
+    },
+  });
+  assert.equal(service.defaultParentId(), "root-governed");
+  const response = await service.root();
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.scope, "GOVERNED_ROOT");
+  assert.equal(payload.item.id, "root-governed");
+  assert.deepEqual(payload.item.parents, []);
 });
 
 test("Drive health proves auth and upstream without returning account data", async () => {
