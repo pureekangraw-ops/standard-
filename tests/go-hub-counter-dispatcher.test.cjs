@@ -36,7 +36,36 @@ test("dispatcher fails closed as WAITING_TARGET when LIGHT wake target is not co
   assert.equal(result.dispatch.legs.LIGHT.status, "WAITING_TARGET");
   assert.equal(result.dispatch.legs.LIGHT.attempts, 0);
   assert.equal(result.dispatch.legs.LIGHT.lastError, "CALLABLE_TARGET_NOT_CONFIGURED");
-  assert.equal(stateStorage.alarms.length, 1);
+  assert.equal(stateStorage.alarms.length, 0);
+});
+
+
+test("WAITING_TARGET can be retried by the same idempotent OPEN after target is configured", async () => {
+  const originalFetch = globalThis.fetch;
+  const env = {};
+  let calls = 0;
+  try {
+    const { GoHubCounterDispatchState } = await import(moduleUrl + "?late-target=" + Date.now());
+    const dispatch = new GoHubCounterDispatchState({ storage:storage() }, env);
+    const first = await dispatch.enqueueOpen(openInput());
+    assert.equal(first.dispatch.legs.LIGHT.status, "WAITING_TARGET");
+
+    env.LIGHT_WAKE_URL = "https://light.example/wake";
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ receiptId:"late-light" }), {
+        status:200,
+        headers:{ "content-type":"application/json" },
+      });
+    };
+
+    const second = await dispatch.enqueueOpen(openInput());
+    assert.equal(second.dispatch.legs.LIGHT.status, "DELIVERED");
+    assert.equal(second.dispatch.legs.LIGHT.receipt.receiptId, "late-light");
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("OPEN dispatch wakes LIGHT once and duplicate OPEN does not redeliver", async () => {
