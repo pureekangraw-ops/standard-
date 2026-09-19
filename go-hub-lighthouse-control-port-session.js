@@ -294,7 +294,13 @@ export class LighthouseControlPortSessionRegistry {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
-    this.liveClients.set(server, { authenticated:false });
+    const authTimer = setTimeout(() => {
+      const state = this.liveClients.get(server);
+      if (state?.authenticated === true) return;
+      try { server.close(4401, "AUTH_TIMEOUT"); } catch {}
+      this.liveClients.delete(server);
+    }, 10_000);
+    this.liveClients.set(server, { authenticated:false, authTimer });
 
     server.addEventListener("message", async event => {
       let message = null;
@@ -313,7 +319,8 @@ export class LighthouseControlPortSessionRegistry {
         this.liveClients.delete(server);
         return;
       }
-      this.liveClients.set(server, { authenticated:true });
+      clearTimeout(authTimer);
+      this.liveClients.set(server, { authenticated:true, authTimer:null });
       try {
         server.send(JSON.stringify({
           type:"READY",
@@ -322,7 +329,11 @@ export class LighthouseControlPortSessionRegistry {
         }));
       } catch {}
     });
-    const cleanup = () => this.liveClients.delete(server);
+    const cleanup = () => {
+      const state = this.liveClients.get(server);
+      if (state?.authTimer) clearTimeout(state.authTimer);
+      this.liveClients.delete(server);
+    };
     server.addEventListener("close", cleanup);
     server.addEventListener("error", cleanup);
     return new Response(null, { status:101, webSocket:client });
