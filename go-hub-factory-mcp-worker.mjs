@@ -232,6 +232,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           linearCreateIssue: input => linear.createIssue(input),
           linearUpdateIssue: input => linear.updateIssue(input),
           driveCapabilities: () => drive.capabilities(),
+          driveHealth: () => drive.health(),
           driveGetItem: input => drive.getItem(input),
           driveListChildren: input => drive.listChildren(input),
           driveCreateFolder: input => drive.createFolder(input),
