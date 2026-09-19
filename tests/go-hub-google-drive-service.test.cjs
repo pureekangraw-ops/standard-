@@ -38,7 +38,7 @@ test("Drive service fails closed when auth is missing", async () => {
     configured: false,
     authMode: null,
     rootScopeConfigured: false,
-    operations: ["capabilities", "health", "diagnostics", "root", "get_item", "list_children", "create_folder", "move_item", "rename_item", "upload_file_internal"],
+    operations: ["capabilities", "health", "diagnostics", "root", "get_item", "list_children", "create_folder", "move_item", "rename_item", "upload_file_internal", "ensure_folder_path_internal"],
     destructiveDeleteExposed: false,
     mutationReadbackRequired: true,
   });
@@ -171,6 +171,42 @@ test("Drive health proves auth and upstream without returning account data", asy
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, upstream: "PASS", authMode: "access_token" });
   assert.equal(calls, 1);
+});
+
+test("Drive resolves and creates a governed folder path from configured root", async () => {
+  const { createGoogleDriveService } = await load("path");
+  const folders = new Map([
+    ["root-governed", driveFile({ id: "root-governed", name: "ROOT", mimeType: "application/vnd.google-apps.folder", parents: [] })],
+    ["go-id", driveFile({ id: "go-id", name: "GO", mimeType: "application/vnd.google-apps.folder", parents: ["root-governed"] })],
+  ]);
+  let createdId = 0;
+  const fetchImpl = async (url, init = {}) => {
+    const current = new URL(String(url));
+    if (init.method === "POST") {
+      const body = JSON.parse(init.body);
+      const id = "made-" + (++createdId);
+      const item = driveFile({ id, name: body.name, mimeType: "application/vnd.google-apps.folder", parents: body.parents });
+      folders.set(id, item);
+      return new Response(JSON.stringify(item), { headers: { "content-type": "application/json" } });
+    }
+    const fileMatch = current.pathname.match(/\/files\/([^/]+)$/);
+    if (fileMatch) {
+      const id = decodeURIComponent(fileMatch[1]);
+      return new Response(JSON.stringify(folders.get(id)), { headers: { "content-type": "application/json" } });
+    }
+    const q = current.searchParams.get("q") || "";
+    const parent = q.match(/^'([^']+)' in parents/)?.[1];
+    const name = q.match(/name = '([^']+)'/)?.[1];
+    const items = [...folders.values()].filter(item => item.parents?.includes(parent) && item.name === name);
+    return new Response(JSON.stringify({ files: items }), { headers: { "content-type": "application/json" } });
+  };
+  const service = createGoogleDriveService({ fetchImpl, accessToken: "token-a", rootFolderId: "root-governed" });
+  const response = await service.ensureFolderPath({ path: "GO/ระบบ-งาน/GO-HUB/Build Archive/LIGHTHOUSE" });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.readback, "PASS");
+  assert.equal(payload.item.name, "LIGHTHOUSE");
+  assert.equal(payload.createdFolderIds.length, 4);
 });
 
 test("Drive createFolder requires readback before PASS", async () => {
