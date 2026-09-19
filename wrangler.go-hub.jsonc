@@ -32,6 +32,10 @@
       {
         "name": "GO_HUB_GLOBAL_AUDIT",
         "class_name": "GoHubGlobalAuditLog"
+      },
+      {
+        "name": "GO_HUB_COUNTER_STATE",
+        "class_name": "GoHubCounterState"
       }
     ]
   },
@@ -70,6 +74,12 @@
       "tag": "v6-global-audit-log",
       "new_sqlite_classes": [
         "GoHubGlobalAuditLog"
+      ]
+    },
+    {
+      "tag": "v7-go-light-counter-state",
+      "new_sqlite_classes": [
+        "GoHubCounterState"
       ]
     }
   ],
