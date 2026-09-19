@@ -30,10 +30,10 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_open_pull_request", "go_hub_get_pull_request", "go_hub_get_ci",
     "go_hub_get_failure_evidence", "go_hub_rerun_failed_jobs", "go_hub_factory_action", "go_hub_factory_foreman",
     "go_hub_maintenance", "go_hub_merge_pull_request", "go_hub_get_workflow_runs", "go_hub_centre_live_action",
-    "go_hub_lighthouse_control_port_state", "go_hub_lighthouse_control_port_command", "go_hub_mimir_search_catalog",
+    "go_hub_lighthouse_control_port_state", "go_hub_lighthouse_control_port_command", "go_hub_project_status", "go_hub_board_pin_route", "go_hub_mimir_search_catalog",
     "go_hub_mimir_search_knowledge", "go_hub_observer_latest", "go_hub_observer_screenshot", "go_hub_linear_list_projects", "go_hub_linear_get_issue",
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
-    "go_hub_drive_capabilities", "go_hub_drive_health", "go_hub_drive_get_item", "go_hub_drive_list_children",
+    "go_hub_drive_capabilities", "go_hub_drive_health", "go_hub_drive_diagnostics", "go_hub_drive_get_item", "go_hub_drive_list_children",
     "go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
@@ -44,6 +44,8 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(tools.find(tool => tool.name === "go_hub_centre_live_action").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_lighthouse_control_port_state").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_lighthouse_control_port_command").annotations.readOnlyHint, false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_project_status").annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_board_pin_route").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_observer_latest").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_observer_screenshot").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_list_projects").annotations.readOnlyHint, true);
@@ -52,6 +54,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_update_issue").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_capabilities").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_health").annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_drive_diagnostics").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_get_item").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_list_children").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_create_folder").annotations.readOnlyHint, false);
@@ -76,6 +79,8 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_get_issue").inputSchema.required.includes("workContext"), false);
   assert.equal(tools.find(tool => tool.name === "go_hub_observer_latest").inputSchema.required.includes("workContext"), false);
   assert.equal(tools.find(tool => tool.name === "go_hub_observer_screenshot").inputSchema.required.includes("workContext"), false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_project_status").inputSchema.required.includes("workContext"), false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_board_pin_route").inputSchema.required.includes("workContext"), false);
 
   await registry.callTool("go_hub_inspect_repository", { repository: "pureekangraw-ops/standard-", branch: "main" });
   await registry.callTool("go_hub_factory_foreman", { action: "state", repository: "pureekangraw-ops/standard-" });
@@ -87,6 +92,10 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(calls.at(-1).name, "lighthouseControlPortState");
   await registry.callTool("go_hub_lighthouse_control_port_command", { targetId: "lighthouse", requestId: "hub-1", capabilityId: "system.appState", payload: {} });
   assert.equal(calls.at(-1).name, "lighthouseControlPortCommand");
+  await registry.callTool("go_hub_project_status", { targetId: "lighthouse", factoryTaskId: "pureekangraw-ops:task-1" });
+  assert.equal(calls.at(-1).name, "projectStatus");
+  await registry.callTool("go_hub_board_pin_route", { firstCommand: "ต่อ", pin: { pinId:"PIN-1", status:"DOING" } });
+  assert.equal(calls.at(-1).name, "boardPinRoute");
   await registry.callTool("go_hub_observer_latest", {});
   await registry.callTool("go_hub_observer_screenshot", { screenshotRef: "shot:1" });
   assert.equal(calls.at(-2).name, "observerLatest");
