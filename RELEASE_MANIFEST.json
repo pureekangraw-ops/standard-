@@ -13,13 +13,14 @@
     "durable CENTRE checkpoint before destination access",
     "canonical Optician and City Route gate before Factory handoff",
     "single CENTRE entry and return passage for GO",
-    "explicit repository-neutral Work Target routing into LIGHTHOUSE through Factory"
+    "explicit repository-neutral Work Target routing into LIGHTHOUSE through Factory",
+    "read-only Project Status Envelope V1 with source-specific cards"
   ],
   "serviceWorker": {
     "file": "go-hub-sw.js",
     "mode": "go-hub-exclusive",
     "cachePrefix": "go-hub-app-",
-    "cacheGeneration": "v10-lighthouse-target-route",
+    "cacheGeneration": "v11-project-status",
     "autoActivate": true
   },
   "validation": {
@@ -52,6 +53,9 @@
     },
     {
       "path": "go-hub-shell.js"
+    },
+    {
+      "path": "go-hub-project-status.js"
     },
     {
       "path": "go-hub-runtime.js"
