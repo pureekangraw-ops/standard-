@@ -40,6 +40,10 @@
       {
         "name": "GO_HUB_COUNTER_DISPATCH_STATE",
         "class_name": "GoHubCounterDispatchState"
+      },
+      {
+        "name": "GO_HUB_NOTION_LIGHT_STATE",
+        "class_name": "GoHubNotionLightState"
       }
     ]
   },
@@ -91,6 +95,12 @@
       "new_sqlite_classes": [
         "GoHubCounterDispatchState"
       ]
+    },
+    {
+      "tag": "v9-go-light-notion-mcp-state",
+      "new_sqlite_classes": [
+        "GoHubNotionLightState"
+      ]
     }
   ],
   "vars": {
@@ -112,6 +122,7 @@
       "/hub/lighthouse",
       "/hub/api/browser/*",
       "/hub/api/github-workspace/*",
+      "/hub/api/notion-light/*",
       "/hub/observer",
       "/mcp",
       "/oauth/*",
