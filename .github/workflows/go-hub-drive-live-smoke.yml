@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run governed Drive create rename move readback
+      - name: Discover authenticated Drive tree and run governed smoke
         shell: bash
         run: |
           node --input-type=module <<'NODE'
@@ -36,8 +36,6 @@ jobs:
           const cloudflareToken = process.env.CLOUDFLARE_API_TOKEN;
           const signingKey = process.env.GOHUB_MASTER_KEY;
           const runId = process.env.GITHUB_RUN_ID;
-          const goHubFolderId = "1Frd9yAdiMwf-b4U-e6cJ2eZGRz41zQGN";
-          const migrationMapId = "1ej2IzADhrGJ6dgun9Py3FLjMYRDEGlgH";
           const migrationMapName = "DRIVE_ORGANIZATION_MIGRATION_MAP_2026-09-19.md";
           const initialFolderName = "GO-HUB-DRIVE-SMOKE-" + runId;
           const finalFolderName = "GO-HUB-DRIVE-SMOKE-VERIFIED-" + runId;
@@ -61,7 +59,7 @@ jobs:
             checkpointId: "CP-DRIVE-HUB-001",
             returnAddress: "CP-DRIVE-HUB-001",
             destination: "destination://drive",
-            task: "Live Drive smoke inside GO-HUB scope",
+            task: "Live Drive smoke on authenticated GO-HUB tree",
             requestedResult: "Create rename move readback PASS with migration map restored",
             lensReference: "role://drive-hub-integration@WORK-DRIVE-HUB-20260919-001",
           };
@@ -93,21 +91,45 @@ jobs:
             return proof;
           }
 
+          async function children(parentId) {
+            const result = await call("go_hub_drive_list_children", { parentId, pageSize: 1000 });
+            return Array.isArray(result?.items) ? result.items : [];
+          }
+
+          async function uniqueChild(parentId, name, label) {
+            const items = await children(parentId);
+            const matches = items.filter(item => item?.name === name && item?.trashed !== true);
+            if (matches.length !== 1) {
+              const visible = items.slice(0, 40).map(item => String(item?.name || "")).filter(Boolean).join("|");
+              throw new Error(label + "_NOT_UNIQUE:matches=" + matches.length + ":visible=" + visible);
+            }
+            return matches[0];
+          }
+
+          let goHubFolderId = null;
+          let migrationMapId = null;
           let evidenceFolderId = null;
           let migrationMoved = false;
 
           try {
             const capabilities = await call("go_hub_drive_capabilities");
             if (capabilities?.configured !== true) throw new Error("DRIVE_NOT_CONFIGURED");
+            console.error("DRIVE_DISCOVERY:authMode=" + capabilities.authMode +
+              ":rootScopeConfigured=" + capabilities.rootScopeConfigured);
 
-            const goHub = await call("go_hub_drive_get_item", { fileId: goHubFolderId });
-            if (goHub?.item?.id !== goHubFolderId) throw new Error("GO_HUB_FOLDER_READBACK_FAILED");
-
-            const before = await call("go_hub_drive_get_item", { fileId: migrationMapId });
-            if (before?.item?.name !== migrationMapName ||
-                !before?.item?.parents?.includes(goHubFolderId)) {
-              throw new Error("MIGRATION_MAP_PRECONDITION_FAILED");
+            const rootItems = await children("root");
+            const goMatches = rootItems.filter(item => item?.name === "GO" && item?.trashed !== true);
+            if (goMatches.length !== 1) {
+              const visible = rootItems.slice(0, 40).map(item => String(item?.name || "")).filter(Boolean).join("|");
+              throw new Error("GO_FOLDER_NOT_UNIQUE:matches=" + goMatches.length + ":visible=" + visible);
             }
+            const goFolder = goMatches[0];
+            const systemFolder = await uniqueChild(goFolder.id, "ระบบ-งาน", "SYSTEM_WORK_FOLDER");
+            const goHubFolder = await uniqueChild(systemFolder.id, "GO-HUB", "GO_HUB_FOLDER");
+            const migrationMap = await uniqueChild(goHubFolder.id, migrationMapName, "MIGRATION_MAP");
+
+            goHubFolderId = goHubFolder.id;
+            migrationMapId = migrationMap.id;
 
             const created = await call("go_hub_drive_create_folder", {
               parentId: goHubFolderId,
@@ -161,24 +183,23 @@ jobs:
               throw new Error("FINAL_MIGRATION_MAP_READBACK_FAILED");
             }
 
-            const children = await call("go_hub_drive_list_children", {
-              parentId: goHubFolderId,
-              pageSize: 1000,
-            });
-            const folderFound = children?.items?.some(item =>
+            const finalChildren = await children(goHubFolderId);
+            const folderFound = finalChildren.some(item =>
               item.id === evidenceFolderId && item.name === finalFolderName
             );
-            const mapFound = children?.items?.some(item =>
+            const mapFound = finalChildren.some(item =>
               item.id === migrationMapId && item.name === migrationMapName
             );
             if (!folderFound || !mapFound) throw new Error("FINAL_LIST_READBACK_FAILED");
 
             console.log("GO_HUB_DRIVE_LIVE_SMOKE_PASS");
+            console.log("go_hub_folder_id=" + goHubFolderId);
             console.log("evidence_folder_id=" + evidenceFolderId);
             console.log("evidence_folder_name=" + finalFolderName);
+            console.log("migration_map_id=" + migrationMapId);
             console.log("migration_map_restored=true");
           } catch (error) {
-            if (migrationMoved) {
+            if (migrationMoved && migrationMapId && goHubFolderId) {
               try {
                 await call("go_hub_drive_move_item", {
                   fileId: migrationMapId,
