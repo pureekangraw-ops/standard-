@@ -59,6 +59,7 @@ export function createGoogleDriveService({
   const scopeRoot = text(rootFolderId);
   let cachedToken = null;
   let cachedTokenExpiresAt = 0;
+  let cachedScopes = "";
 
   function authMode() {
     if (oauthRefreshToken && oauthClientId && oauthClientSecret) return "refresh_token";
@@ -98,6 +99,7 @@ export function createGoogleDriveService({
       };
     }
     cachedToken = text(payload.access_token);
+    cachedScopes = text(payload.scope);
     const expiresIn = Number(payload.expires_in);
     cachedTokenExpiresAt = Date.now() + (Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 300) * 1000;
     return { token: cachedToken };
@@ -178,6 +180,7 @@ export function createGoogleDriveService({
         operations: [
           "capabilities",
           "health",
+          "diagnostics",
           "get_item",
           "list_children",
           "create_folder",
@@ -193,6 +196,23 @@ export function createGoogleDriveService({
       const result = await request("/about?fields=storageQuota(limit,usage)");
       if (result.response) return result.response;
       return json({ ok: true, upstream: "PASS", authMode: authMode() });
+    },
+
+    async diagnostics() {
+      const result = await request("/about?fields=user(displayName,emailAddress,permissionId)");
+      if (result.response) return result.response;
+      const grantedScopes = cachedScopes ? cachedScopes.split(/\s+/).filter(Boolean) : [];
+      return json({
+        ok: true,
+        authMode: authMode(),
+        account: {
+          displayName: typeof result.payload?.user?.displayName === "string" ? result.payload.user.displayName : null,
+          emailAddress: typeof result.payload?.user?.emailAddress === "string" ? result.payload.user.emailAddress : null,
+          permissionId: text(result.payload?.user?.permissionId) || null,
+        },
+        scopes: grantedScopes,
+        scopeSource: grantedScopes.length ? "refresh_response" : "unavailable",
+      });
     },
 
     async getItem(input = {}) {

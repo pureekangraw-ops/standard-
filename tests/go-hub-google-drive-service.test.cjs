@@ -38,7 +38,7 @@ test("Drive service fails closed when auth is missing", async () => {
     configured: false,
     authMode: null,
     rootScopeConfigured: false,
-    operations: ["capabilities", "health", "get_item", "list_children", "create_folder", "move_item", "rename_item"],
+    operations: ["capabilities", "health", "diagnostics", "get_item", "list_children", "create_folder", "move_item", "rename_item"],
     destructiveDeleteExposed: false,
     mutationReadbackRequired: true,
   });
@@ -80,6 +80,52 @@ test("Drive service refreshes OAuth token server-side and never echoes secrets",
   assert.equal(payload.item.md5Checksum, "abc123");
   assert.equal(requests.length, 2);
   assert.doesNotMatch(JSON.stringify(payload), /access-secret|refresh-secret|client-secret/);
+});
+
+test("Drive diagnostics reports sanitized account identity and granted refresh scopes", async () => {
+  const { createGoogleDriveService } = await load("diagnostics");
+  const service = createGoogleDriveService({
+    refreshToken: "refresh-secret",
+    clientId: "client-a",
+    clientSecret: "client-secret",
+    fetchImpl: async (url, init = {}) => {
+      if (String(url) === "https://oauth2.googleapis.com/token") {
+        return new Response(JSON.stringify({
+          access_token: "access-secret",
+          expires_in: 3600,
+          scope: "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email",
+        }), { headers: { "content-type": "application/json" } });
+      }
+      assert.equal(String(url), "https://www.googleapis.com/drive/v3/about?fields=user(displayName,emailAddress,permissionId)");
+      assert.equal(init.headers.authorization, "Bearer access-secret");
+      return new Response(JSON.stringify({
+        user: {
+          displayName: "BIG",
+          emailAddress: "big@example.com",
+          permissionId: "permission-a",
+        },
+      }), { headers: { "content-type": "application/json" } });
+    },
+  });
+
+  const response = await service.diagnostics();
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.deepEqual(payload, {
+    ok: true,
+    authMode: "refresh_token",
+    account: {
+      displayName: "BIG",
+      emailAddress: "big@example.com",
+      permissionId: "permission-a",
+    },
+    scopes: [
+      "https://www.googleapis.com/auth/drive",
+      "https://www.googleapis.com/auth/userinfo.email",
+    ],
+    scopeSource: "refresh_response",
+  });
+  assert.doesNotMatch(JSON.stringify(payload), /refresh-secret|client-secret|access-secret/);
 });
 
 test("Drive health proves auth and upstream without returning account data", async () => {
