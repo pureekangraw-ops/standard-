@@ -54,6 +54,14 @@ test("Centre live round-trip keeps exact identity through return", async () => {
   assert.equal(away.body.work.status, "AWAY");
   assert.equal(away.body.envelope, undefined);
 
+  assert.equal((await call(instance, {
+    action: "record_reality", ...id,
+    evidence: { kind: "readback", reference: "reality:rt" },
+  })).status, 200);
+  assert.equal((await call(instance, {
+    action: "validate", ...id,
+    evidence: { kind: "acceptance", reference: "validation:rt" },
+  })).status, 200);
   const returned = await call(instance, {
     action: "return", ...id, payload: { status: "OK" },
   });
@@ -421,4 +429,98 @@ test("Centre automatically emits global audit events for state-changing transiti
   assert.equal(events[1].workId, "WORK-AUDIT");
   assert.equal(reviewed.body.auditPending, false);
   assert.equal(reviewed.body.lastGlobalAuditSequence, 2);
+});
+
+
+test("normal Centre return requires Reality then explicit validation", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?evidence-done=" + Date.now());
+  const instance = new GoHubCentreState({ storage: new MemoryStorage() }, {});
+  const id = await prepared(instance, "DONE-GATE");
+
+  const noReality = await call(instance, { action: "return", ...id, payload: { status: "DONE" } });
+  assert.equal(noReality.status, 409);
+  assert.equal(noReality.body.code, "CENTRE_RETURN_REQUIRES_REALITY");
+
+  const reality = await call(instance, {
+    action: "record_reality", ...id,
+    evidence: { kind: "readback", reference: "world:123" },
+  });
+  assert.equal(reality.status, 200);
+  assert.equal(reality.body.validationEvidence, null);
+
+  const noValidation = await call(instance, { action: "return", ...id, payload: { status: "DONE" } });
+  assert.equal(noValidation.status, 409);
+  assert.equal(noValidation.body.code, "CENTRE_RETURN_REQUIRES_VALIDATION");
+
+  const validated = await call(instance, {
+    action: "validate", ...id,
+    evidence: { kind: "acceptance", reference: "accept:123" },
+  });
+  assert.equal(validated.status, 200);
+  assert.equal(validated.body.phase, "VALIDATED");
+  assert.equal(validated.body.validationEvidence.realityReference, "world:123");
+
+  const returned = await call(instance, { action: "return", ...id, payload: { status: "DONE" } });
+  assert.equal(returned.status, 200);
+  assert.equal(returned.body.phase, "RETURNED");
+});
+
+test("validation is stale after a new recorded side effect", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?validation-stale=" + Date.now());
+  const instance = new GoHubCentreState({ storage: new MemoryStorage() }, {});
+  const id = await prepared(instance, "STALE-DONE");
+  await call(instance, {
+    action: "record_reality", ...id,
+    evidence: { kind: "readback", reference: "world:before" },
+  });
+  const validated = await call(instance, {
+    action: "validate", ...id,
+    evidence: { kind: "acceptance", reference: "accept:before" },
+  });
+  assert.equal(validated.body.validationEvidence.effectRevision, 0);
+
+  const effect = await call(instance, {
+    action: "record_effect", ...id,
+    expectedEffectRevision: 0,
+    effectId: "EFFECT-AFTER-VALIDATION",
+    effectTool: "drive.upload",
+    effectReceiptRef: "drive:new-file",
+    effectStatus: "DONE",
+  });
+  assert.equal(effect.status, 200);
+  assert.equal(effect.body.effectLedger.revision, 1);
+
+  const blocked = await call(instance, { action: "return", ...id, payload: { status: "DONE" } });
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.body.code, "CENTRE_VALIDATION_STALE");
+});
+
+test("new Reality invalidates prior validation and resume starts a fresh completion cycle", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?validation-reset=" + Date.now());
+  const instance = new GoHubCentreState({ storage: new MemoryStorage() }, {});
+  const id = await prepared(instance, "RESET-DONE");
+  await call(instance, {
+    action: "record_reality", ...id,
+    evidence: { kind: "readback", reference: "world:one" },
+  });
+  await call(instance, {
+    action: "validate", ...id,
+    evidence: { kind: "acceptance", reference: "accept:one" },
+  });
+  const replacedReality = await call(instance, {
+    action: "record_reality", ...id,
+    evidence: { kind: "readback", reference: "world:two" },
+  });
+  assert.equal(replacedReality.body.validationEvidence, null);
+
+  await call(instance, {
+    action: "validate", ...id,
+    evidence: { kind: "acceptance", reference: "accept:two" },
+  });
+  assert.equal((await call(instance, { action: "return", ...id })).status, 200);
+  const resumed = await call(instance, { action: "resume", ...id });
+  assert.equal(resumed.status, 200);
+  assert.equal(resumed.body.realityExists, false);
+  assert.equal(resumed.body.realityEvidence, null);
+  assert.equal(resumed.body.validationEvidence, null);
 });
