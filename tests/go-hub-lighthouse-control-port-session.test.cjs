@@ -86,6 +86,61 @@ test("Hub command roundtrip delivers command then accepts receipt and snapshot",
   assert.equal((await service.pull({ sessionId:"lh-session-1", sessionToken:"device-token-1" })).commands.length, 0);
 });
 
+
+
+test("Centre Board pin identifiers and recovery status metadata are not mistaken for device secrets", async () => {
+  const m = await load("centre-board-schema");
+  const service = m.createLighthouseControlPortSessionService({
+    storage:new MemoryStorage(),
+    now:() => 1_000,
+    randomUUID:() => "lh-session-board",
+    randomSessionToken:() => "device-token-board",
+  });
+  await service.start({ ttlMs:60_000 });
+
+  const queued = await service.enqueue({
+    requestId:"board-claim-1",
+    capabilityId:"centreBoard.claim",
+    payload:{
+      workId:"WORK-1",
+      employeeId:"GO-1",
+      pinIds:["pin-1","pin-2"],
+      expectedRevision:3,
+      status:"PENDING_RECOVERY",
+    },
+  });
+  assert.equal(queued.ok, true);
+
+  assert.equal((await service.pushState({
+    sessionId:"lh-session-board",
+    sessionToken:"device-token-board",
+    packet:{
+      snapshot:{
+        values:{
+          "centreBoard.read":{
+            boardId:"board-1",
+            workId:"WORK-1",
+            revision:3,
+            pins:[{ pinId:"pin-1", status:"PENDING_RECOVERY", touchedBy:["GO-1"] }],
+          },
+        },
+      },
+    },
+  })).ok, true);
+
+  for (const [requestId, payload] of [
+    ["secret-pin", { pin:"1234" }],
+    ["secret-password", { devicePassword:"never" }],
+    ["secret-recovery", { recoveryCode:"never" }],
+    ["secret-token", { sessionToken:"never" }],
+  ]) {
+    assert.equal((await service.enqueue({
+      requestId,
+      capabilityId:"system.appState",
+      payload,
+    })).code, "SCHEMA_REJECTED");
+  }
+});
 test("wrong token, requestId conflicts, and secret-shaped payloads fail closed", async () => {
   const m = await load("failclosed");
   const service = m.createLighthouseControlPortSessionService({
