@@ -10,12 +10,21 @@ import { createFactoryActionService } from "./go-hub-factory-service.mjs";
 import { createMaintenanceService } from "./go-hub-maintenance.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { createLighthouseControlPortMcpService } from "./go-hub-lighthouse-control-port-service.mjs";
+import { createGoogleDriveService } from "./go-hub-google-drive-service.mjs";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: { "content-type": "application/json; charset=utf-8" },
   });
+}
+
+function firstEnv(env, names) {
+  for (const name of names) {
+    const value = env?.[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
 }
 
 function observerStatus(code) {
@@ -198,6 +207,14 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const observer = createObserverEvidenceService({ namespace: env?.OBSERVER_SESSIONS });
       const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
       const lighthouseControlPort = createLighthouseControlPortMcpService({ namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS });
+      const drive = createGoogleDriveService({
+        fetchImpl,
+        accessToken: firstEnv(env, ["GOOGLE_DRIVE_ACCESS_TOKEN", "DRIVE_ACCESS_TOKEN", "GDRIVE_ACCESS_TOKEN"]),
+        refreshToken: firstEnv(env, ["GOOGLE_DRIVE_REFRESH_TOKEN", "DRIVE_REFRESH_TOKEN", "GDRIVE_REFRESH_TOKEN"]),
+        clientId: firstEnv(env, ["GOOGLE_DRIVE_CLIENT_ID", "DRIVE_CLIENT_ID", "GDRIVE_CLIENT_ID"]),
+        clientSecret: firstEnv(env, ["GOOGLE_DRIVE_CLIENT_SECRET", "DRIVE_CLIENT_SECRET", "GDRIVE_CLIENT_SECRET"]),
+        rootFolderId: firstEnv(env, ["GOOGLE_DRIVE_ROOT_FOLDER_ID", "DRIVE_ROOT_FOLDER_ID", "GDRIVE_ROOT_FOLDER_ID"]),
+      });
       const registry = createMcpRegistry({
         lifecycle: Object.freeze({
           ...lifecycle,
@@ -214,6 +231,12 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           linearGetIssue: input => linear.getIssue(input),
           linearCreateIssue: input => linear.createIssue(input),
           linearUpdateIssue: input => linear.updateIssue(input),
+          driveCapabilities: () => drive.capabilities(),
+          driveGetItem: input => drive.getItem(input),
+          driveListChildren: input => drive.listChildren(input),
+          driveCreateFolder: input => drive.createFolder(input),
+          driveMoveItem: input => drive.moveItem(input),
+          driveRenameItem: input => drive.renameItem(input),
         }),
       });
 

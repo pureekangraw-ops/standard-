@@ -33,6 +33,8 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_lighthouse_control_port_state", "go_hub_lighthouse_control_port_command", "go_hub_mimir_search_catalog",
     "go_hub_mimir_search_knowledge", "go_hub_observer_latest", "go_hub_observer_screenshot", "go_hub_linear_list_projects", "go_hub_linear_get_issue",
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
+    "go_hub_drive_capabilities", "go_hub_drive_get_item", "go_hub_drive_list_children",
+    "go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_factory_foreman").annotations.readOnlyHint, false);
@@ -48,6 +50,12 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_get_issue").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_create_issue").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_update_issue").annotations.readOnlyHint, false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_drive_capabilities").annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_drive_get_item").annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_drive_list_children").annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_drive_create_folder").annotations.readOnlyHint, false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_drive_move_item").annotations.readOnlyHint, false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_drive_rename_item").annotations.readOnlyHint, false);
   assert.deepEqual(tools[0].securitySchemes, [{ type: "oauth2", scopes: ["go-hub"] }]);
 
   for (const name of [
@@ -55,6 +63,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_factory_action",
     "go_hub_merge_pull_request", "go_hub_mimir_search_catalog", "go_hub_mimir_search_knowledge",
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
+    "go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item",
   ]) {
     assert.equal(tools.find(tool => tool.name === name).inputSchema.required.includes("workContext"), true, `${name} must require city work context`);
   }
