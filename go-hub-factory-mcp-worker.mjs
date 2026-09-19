@@ -15,6 +15,7 @@ import { createWorkflowArtifactService } from "./go-hub-workflow-artifact-servic
 import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
 import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
 import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
+import { createCounterService } from "./go-hub-counter.mjs";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -319,6 +320,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const observer = createObserverEvidenceService({ namespace: env?.OBSERVER_SESSIONS });
       const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
       const globalAudit = createGlobalAuditService({ namespace: env?.GO_HUB_GLOBAL_AUDIT });
+      const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE });
       const lighthouseControlPort = createLighthouseControlPortMcpService({ namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS });
       const projectStatus = createProjectStatusReadService({ lifecycle, factoryBinding:env?.GO_HUB_FACTORY_STATE });
       const boardPinRoute = createBoardPinRouteReadService();
@@ -358,6 +360,11 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           lighthouseControlPortCommand: input => lighthouseControlPort.command(input),
           projectStatus: async input => json(await projectStatus.read(input)),
           boardPinRoute: input => json(boardPinRoute.read(input)),
+          counterCreate: input => runMutation("counter.create", input, () => counter.create(input)),
+          counterGet: input => counter.get(input),
+          counterSeen: input => runMutation("counter.seen", input, () => counter.seen(input)),
+          counterAnswer: input => runMutation("counter.answer", input, () => counter.answer(input)),
+          counterReadback: input => runMutation("counter.readback", input, () => counter.readback(input)),
           linearListProjects: input => linear.listProjects(input),
           linearGetIssue: input => linear.getIssue(input),
           linearCreateIssue: input => runMutation("linear.create_issue", input, () => linear.createIssue(input)),
