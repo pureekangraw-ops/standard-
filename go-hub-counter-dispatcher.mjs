@@ -88,6 +88,7 @@ export function createCounterDispatchCore({
       counterId, workId, checkpointId, revision:1,
       request, context, sourceHints, doNotChange,
       answer:null,
+      lightResult:null,
       legs:{ LIGHT:leg(), GO:leg() },
       events:[],
       createdAt:at,
@@ -384,6 +385,15 @@ export class GoHubCounterDispatchState {
 
         if (!response.ok || body?.ok !== true) throw new Error(body?.code || "NOTION_LIGHT_SEARCH_FAILED");
 
+        const lightAnswer = {
+          status:body.status,
+          answer:body.answer,
+          sources:Array.isArray(body.sources) ? body.sources : [],
+          evidence:Array.isArray(body.evidence) ? body.evidence : [],
+          confidence:body.confidence || null,
+          nextRoute:body.nextRoute || "GO",
+        };
+        state.lightResult = clone(lightAnswer);
         const delivered = this.core.delivered({
           target,
           receipt:{
@@ -397,14 +407,7 @@ export class GoHubCounterDispatchState {
         await this.save(delivered.dispatch);
         return publicState(delivered.dispatch, {
           targetConfigured:true,
-          lightAnswer:{
-            status:body.status,
-            answer:body.answer,
-            sources:Array.isArray(body.sources) ? body.sources : [],
-            evidence:Array.isArray(body.evidence) ? body.evidence : [],
-            confidence:body.confidence || null,
-            nextRoute:body.nextRoute || "GO",
-          },
+          lightAnswer:clone(lightAnswer),
         });
       } catch (error) {
         const result = this.core.failed({
@@ -452,15 +455,80 @@ export class GoHubCounterDispatchState {
     }
   }
 
+  async recoverDeliveredLightResult(current) {
+    const state = clone(current);
+    if (state?.legs?.LIGHT?.status !== "DELIVERED") return publicState(state);
+    if (state.lightResult) {
+      return publicState(state, { idempotent:true, lightAnswer:clone(state.lightResult) });
+    }
+    if (state.legs.LIGHT?.receipt?.tool !== "notion-ai-search") {
+      return publicState(state, { idempotent:true });
+    }
+
+    const namespace = this.env?.GO_HUB_NOTION_LIGHT_STATE;
+    const notion = namespace && typeof namespace.getByName === "function"
+      ? namespace.getByName("notion-light-primary")
+      : null;
+    if (!notion || typeof notion.fetch !== "function") {
+      return publicState(state, { idempotent:true, recoveryCode:"NOTION_LIGHT_STATE_NOT_CONFIGURED" });
+    }
+
+    const response = await notion.fetch(new Request("https://notion-light.internal/search", {
+      method:"POST",
+      headers:{ "content-type":"application/json" },
+      body:JSON.stringify({
+        action:"search",
+        query:state.request,
+        counterId:state.counterId,
+        workId:state.workId,
+        checkpointId:state.checkpointId,
+        context:state.context,
+      }),
+    }));
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || body?.ok !== true) {
+      return publicState(state, {
+        idempotent:true,
+        recoveryCode:body?.code || "NOTION_LIGHT_RESULT_RECOVERY_FAILED",
+      });
+    }
+
+    const lightAnswer = {
+      status:body.status,
+      answer:body.answer,
+      sources:Array.isArray(body.sources) ? body.sources : [],
+      evidence:Array.isArray(body.evidence) ? body.evidence : [],
+      confidence:body.confidence || null,
+      nextRoute:body.nextRoute || "GO",
+    };
+    state.revision += 1;
+    state.lightResult = clone(lightAnswer);
+    state.updatedAt = new Date().toISOString();
+    append(state, "RESULT_RECOVERED", "LIGHT", state.updatedAt, {
+      tool:body.tool || "notion-ai-search",
+      resultCount:Number(body.resultCount || 0),
+    });
+    await this.save(state);
+    return publicState(state, {
+      idempotent:true,
+      recovered:true,
+      lightAnswer:clone(lightAnswer),
+    });
+  }
+
   async enqueueOpen(input = {}) {
     const current = await this.load();
     const result = this.core.enqueueOpen(input, current);
     if (result.created) await this.save(result.dispatch);
     if (result.idempotent) {
       const status = result.dispatch?.legs?.LIGHT?.status;
-      return ["WAITING_TARGET","WAITING_AUTH","BLOCKED","RETRY_WAIT"].includes(status)
-        ? this.deliver("LIGHT", result.dispatch, input.hubOrigin)
-        : result;
+      if (["WAITING_TARGET","WAITING_AUTH","BLOCKED","RETRY_WAIT"].includes(status)) {
+        return this.deliver("LIGHT", result.dispatch, input.hubOrigin);
+      }
+      if (status === "DELIVERED") {
+        return this.recoverDeliveredLightResult(result.dispatch);
+      }
+      return result;
     }
     return this.deliver("LIGHT", result.dispatch, input.hubOrigin);
   }
