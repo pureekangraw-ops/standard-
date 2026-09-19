@@ -14,6 +14,7 @@ export { GoHubFactoryState } from "./go-hub-factory-state.mjs";
 export { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 export { GoHubCentreState } from "./go-hub-centre-live.mjs";
 export { GoHubGlobalAuditLog } from "./go-hub-global-audit.mjs";
+export { GoHubCounterState } from "./go-hub-counter.mjs";
 export { LighthouseControlPortSessionRegistry } from "./go-hub-lighthouse-control-port-session.js";
 
 const CENTRE_API_ROOT = "/hub/api/centre";

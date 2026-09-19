@@ -2,6 +2,7 @@ import { createOAuthHandler, verifyAccessToken } from "./go-hub-oauth.mjs";
 import { createMcpRegistry } from "./go-hub-mcp-registry.mjs";
 import { createMcpHandler } from "./go-hub-mcp.mjs";
 import { createNotionCatalogService } from "./go-hub-notion-catalog.mjs";
+import { createCounterService } from "./go-hub-counter.mjs";
 import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
 import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
 
@@ -589,6 +590,7 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
       if (url.pathname === "/mcp") {
         if (!env?.GITHUB_TOKEN) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
         const lifecycle = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
+        const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE });
         const catalog = createNotionCatalogService({
           fetchImpl,
           token: env?.NOTION_TOKEN,
@@ -600,6 +602,11 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
           lifecycle: Object.freeze({
             ...lifecycle,
             searchCatalog: input => catalog.searchCatalog(input),
+            counterCreate: input => counter.create(input),
+            counterGet: input => counter.get(input),
+            counterSeen: input => counter.seen(input),
+            counterAnswer: input => counter.answer(input),
+            counterReadback: input => counter.readback(input),
             projectStatus: async input => json(await projectStatus.read(input)),
             boardPinRoute: input => json(boardPinRoute.read(input)),
           }),
