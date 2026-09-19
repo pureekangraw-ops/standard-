@@ -422,11 +422,10 @@ function render() {
       return item;
     }),
   );
-  const snapshot = taskSnapshot();
   renderCentre();
-  renderWorkbench(snapshot);
-  renderOperator(snapshot);
-  renderProjectStatus(snapshot);
+  renderWorkbench(taskSnapshot());
+  renderOperator(taskSnapshot());
+  renderProjectStatus(taskSnapshot());
 }
 
 projectStatusRefresh?.addEventListener("click", () => {
