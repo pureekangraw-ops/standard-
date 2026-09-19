@@ -43,6 +43,8 @@ const definitions = [
   def("go_hub_maintenance", "Inspect governed Maintenance capability or build a source-bound Factory closeout plan.", "maintenance", schema({ target: { type: "string", enum: ["factory"] }, action: { type: "string", enum: ["inspect", "plan_closeout"] }, input: obj, workContext }, ["target", "action", "input", "workContext"]), ann(true)),
   def("go_hub_merge_pull_request", "Merge with Foreman ownership and exact-head CI.", "mergePullRequest", schema({ repository: str, number: int, expectedHeadSha: str, goId: str, jobId: str, method: { type: "string", enum: ["merge", "squash", "rebase"] }, workContext }, ["repository", "number", "expectedHeadSha", "goId", "jobId", "workContext"]), ann(false, true)),
   def("go_hub_get_workflow_runs", "Observe workflow and deployment runs.", "getWorkflowRuns", schema({ repository: str, sha: str }, ["repository", "sha"]), ann(true)),
+  def("go_hub_list_workflow_artifacts", "List GitHub Actions artifacts for one exact workflow run.", "listWorkflowArtifacts", schema({ repository: str, runId: int }, ["repository", "runId"]), ann(true)),
+  def("go_hub_archive_workflow_artifact", "Download one GitHub Actions artifact server-side, optionally extract one entry, and archive it to governed Google Drive with hash metadata and readback.", "archiveWorkflowArtifact", schema({ repository: str, runId: int, artifactId: int, parentId: str, entrySuffix: str, destinationName: str, mimeType: str, workContext }, ["repository", "runId", "artifactId", "parentId", "workContext"]), ann(false)),
   def("go_hub_centre_live_action", "Execute or inspect durable City/Centre live work through GO Hub.", "centreLiveAction", schema({ action: { type: "string", enum: ["start", "inspect", "review", "fit", "leave", "return", "record_reality", "cancel", "resume"] }, workId: str, checkpointId: str, returnAddress: str, task: str, requestedResult: str, authority: str, targetId: str, roleId: str, roleReference: str, workingView: str, destination: str, payload: obj, evidence: obj, reuseFit: { type: "boolean" } }, ["action", "workId"]), ann(false)),
   def("go_hub_lighthouse_control_port_state", "Read latest paired LIGHTHOUSE Control Port snapshot, work state, commands, and receipts.", "lighthouseControlPortState", schema({ targetId: str }, ["targetId"]), ann(true)),
   def("go_hub_lighthouse_control_port_command", "Queue one governed command for paired LIGHTHOUSE Control Port. Owner confirmation remains enforced on-device by capability guard.", "lighthouseControlPortCommand", schema({ targetId: str, requestId: str, capabilityId: str, payload: obj }, ["targetId", "requestId", "capabilityId", "payload"]), ann(false)),
@@ -70,7 +72,7 @@ const factoryTools = new Set(["go_hub_create_branch", "go_hub_put_file", "go_hub
 const mimirTools = new Set(["go_hub_mimir_search_catalog", "go_hub_mimir_search_knowledge"]);
 const maintenanceTools = new Set(["go_hub_maintenance"]);
 const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linear_update_issue"]);
-const driveMutationTools = new Set(["go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item"]);
+const driveMutationTools = new Set(["go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item", "go_hub_archive_workflow_artifact"]);
 
 function assertArgs(definition, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("invalid MCP tool arguments");
