@@ -2,6 +2,9 @@ const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_SESSION_TTL_MS = DEFAULT_SESSION_TTL_MS;
 const MAX_RECORDS = 200;
 const MAX_STATE_CHARS = 750_000;
+const HUB_BOARD_STORAGE_KEY = "hub-centre-board-v1";
+const HUB_BOARD_ID = "BOARD-LIGHTHOUSE-CENTRE";
+const HUB_BOARD_WORK_ID = "WORK-GO-HUB-CENTRE-BOARD";
 const SECRET_KEY = /^(?:(?:device|owner|security)?pin(?:hash|code|value)?|.*password|.*passphrase|recovery(?:code|key|phrase|token|secret)|vault(?:key|password|secret|token)|.*secret|.*token)$/i;
 const encoder = new TextEncoder();
 
@@ -67,6 +70,56 @@ function trimRecords(record) {
   return Object.fromEntries(entries.slice(Math.max(0, entries.length - MAX_RECORDS)));
 }
 
+function boardStatus(view = {}) {
+  const phase = clean(view.phase).toUpperCase();
+  const workStatus = clean(view.work?.status).toUpperCase();
+  if (phase === "RECOVERY_REQUIRED" || clean(view.interruption?.state).toUpperCase() === "RECOVERY_REQUIRED") return "PENDING_RECOVERY";
+  if (workStatus === "RETURNED" || phase === "RETURNED") return "ARCHIVED";
+  if (phase === "VALIDATED" || phase === "REALITY") return "VERIFY";
+  if (workStatus === "AWAY" || phase === "AWAY" || phase === "EXECUTION_RESUME") return "DOING";
+  return "OPEN";
+}
+
+function hubBoardPin(view = {}, previous = null, at = new Date().toISOString()) {
+  const workId = requestId(view.workId || view.work?.workId);
+  const owner = clean(view.ownership?.ownerId) || clean(view.work?.role?.roleId) || "GO";
+  const priorTouched = Array.isArray(previous?.touchedBy) ? previous.touchedBy.map(clean).filter(Boolean) : [];
+  const touchedBy = [...new Set([...priorTouched, owner].filter(Boolean))];
+  const reality = view.realityEvidence && typeof view.realityEvidence === "object" ? view.realityEvidence : null;
+  const validation = view.validationEvidence && typeof view.validationEvidence === "object" ? view.validationEvidence : null;
+  const evidence = [];
+  if (reality?.reference) evidence.push({ kind:clean(reality.kind) || "reality", ref:clean(reality.reference) });
+  if (validation?.reference) evidence.push({ kind:clean(validation.kind) || "validation", ref:clean(validation.reference) });
+  const returned = view.work?.returnedPayload;
+  const returnedResult = returned && typeof returned === "object" && !Array.isArray(returned)
+    ? clean(returned.result || returned.status)
+    : "";
+  const resumeFrom = clean(view.executionCheckpoint?.latest?.resumeFrom);
+  const status = boardStatus(view);
+  return {
+    pinId:("PIN:" + workId).slice(0, 128),
+    workId,
+    title:clean(view.work?.task) || workId,
+    detail:clean(view.work?.requestedResult),
+    status,
+    ownerEmployeeId:owner || null,
+    touchedBy,
+    result:returnedResult || (status === "ARCHIVED" ? "Centre returned" : null),
+    nextAction:status === "ARCHIVED" ? null : (resumeFrom || clean(view.work?.requestedResult) || null),
+    evidence,
+    links:[],
+    revision:Number.isSafeInteger(Number(previous?.revision)) ? Number(previous.revision) + 1 : 1,
+    createdAt:clean(previous?.createdAt) || at,
+    updatedAt:at,
+  };
+}
+
+function projectionSignature(pin) {
+  if (!pin) return "";
+  const { revision, createdAt, updatedAt, ...stable } = pin;
+  return canonical(stable);
+}
+
 export function createLighthouseControlPortSessionService({
   storage,
   now = () => Date.now(),
@@ -112,6 +165,47 @@ export function createLighthouseControlPortSessionService({
 
   async function emit(event) {
     try { await onEvent(clone(event)); } catch {}
+  }
+
+  async function loadHubBoard() {
+    const stored = await storage.get(HUB_BOARD_STORAGE_KEY);
+    if (stored && stored.schemaVersion === 1 && stored.boardId === HUB_BOARD_ID && Array.isArray(stored.pins)) return stored;
+    return { schemaVersion:1, boardId:HUB_BOARD_ID, workId:HUB_BOARD_WORK_ID, revision:0, updatedAt:null, pins:[], audit:[] };
+  }
+
+  async function saveHubBoard(board) {
+    const next = clone(board);
+    next.audit = Array.isArray(next.audit) ? next.audit.slice(-MAX_RECORDS) : [];
+    await storage.put(HUB_BOARD_STORAGE_KEY, next);
+    const readback = await storage.get(HUB_BOARD_STORAGE_KEY);
+    if (canonical(readback) !== canonical(next)) throw new Error("HUB_BOARD_READBACK_MISMATCH");
+    return next;
+  }
+
+  async function projectCentre(view = {}) {
+    if (!view || typeof view !== "object" || Array.isArray(view) || view.ok !== true) return { ok:false, code:"SCHEMA_REJECTED" };
+    const at = new Date(Number(now())).toISOString();
+    const board = await loadHubBoard();
+    const workId = requestId(view.workId || view.work?.workId);
+    const index = board.pins.findIndex(pin => pin?.workId === workId);
+    const previous = index >= 0 ? board.pins[index] : null;
+    const pin = hubBoardPin(view, previous, at);
+    if (previous && projectionSignature(previous) === projectionSignature(pin)) {
+      return { ok:true, changed:false, board:clone(board), pin:clone(previous) };
+    }
+    const next = clone(board);
+    next.revision = Number(board.revision || 0) + 1;
+    next.updatedAt = at;
+    if (index >= 0) next.pins[index] = pin;
+    else next.pins.push(pin);
+    next.audit.push({ type:"CENTRE_PROJECT", workId, pinId:pin.pinId, status:pin.status, boardRevision:next.revision, at });
+    const saved = await saveHubBoard(next);
+    await emit({ type:"BOARD_UPDATED", workId, boardRevision:saved.revision, status:pin.status, at });
+    return { ok:true, changed:true, board:clone(saved), pin:clone(pin) };
+  }
+
+  async function boardLatest() {
+    return { ok:true, board:clone(await loadHubBoard()) };
   }
 
   return Object.freeze({
@@ -247,8 +341,20 @@ export function createLighthouseControlPortSessionService({
         latest:clone(current.state.latest),
         commands:Object.values(current.state.commands).map(clone),
         receipts:Object.values(current.state.receipts).map(clone),
+        board:(await boardLatest()).board,
       };
     },
+
+    async board(credentials = {}) {
+      const auth = await authorize(credentials);
+      if (!auth.ok) return { ok:false, code:auth.code };
+      auth.state.session = { ...auth.session, lastSeenAt:Number(now()) };
+      await save(auth.state);
+      return boardLatest();
+    },
+
+    projectCentre,
+    boardLatest,
 
     async stop(credentials = {}) {
       const auth = await authorize(credentials);
@@ -357,6 +463,9 @@ export class LighthouseControlPortSessionRegistry {
     if (url.pathname === "/receipts") return internalJson(await service.pushReceipts(input));
     if (url.pathname === "/state") return internalJson(await service.pushState(input));
     if (url.pathname === "/latest") return internalJson(await service.latest());
+    if (url.pathname === "/board") return internalJson(await service.board(input));
+    if (url.pathname === "/board/latest") return internalJson(await service.boardLatest());
+    if (url.pathname === "/board/project") return internalJson(await service.projectCentre(input.view));
     if (url.pathname === "/stop") return internalJson(await service.stop(input));
     return internalJson({ ok:false, code:"NOT_FOUND" }, 404);
   }
