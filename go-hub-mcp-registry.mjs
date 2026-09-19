@@ -14,6 +14,7 @@ const workContext = {
   properties: {
     workId: str, checkpointId: str, returnAddress: str, destination: str,
     task: str, requestedResult: str, lensReference: str,
+    ownerId: str, leaseId: str, ownershipRevision: revision,
   },
   required: ["workId", "checkpointId", "returnAddress", "destination", "task", "requestedResult", "lensReference"],
   additionalProperties: false,
