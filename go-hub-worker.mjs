@@ -2,7 +2,8 @@ import { createOAuthHandler, verifyAccessToken } from "./go-hub-oauth.mjs";
 import { createMcpRegistry } from "./go-hub-mcp-registry.mjs";
 import { createMcpHandler } from "./go-hub-mcp.mjs";
 import { createNotionCatalogService } from "./go-hub-notion-catalog.mjs";
-import { createCounterService } from "./go-hub-counter.mjs";\nimport { createCounterDispatchService } from "./go-hub-counter-dispatcher.mjs";
+import { createCounterService } from "./go-hub-counter.mjs";
+import { createCounterDispatchService } from "./go-hub-counter-dispatcher.mjs";
 import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
 import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
 
@@ -656,7 +657,8 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
       if (url.pathname === "/mcp") {
         if (!env?.GITHUB_TOKEN) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
         const lifecycle = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
-        const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE });\n        const dispatch = createCounterDispatchService({ namespace: env?.GO_HUB_COUNTER_DISPATCH_STATE });
+        const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE });
+        const dispatch = createCounterDispatchService({ namespace: env?.GO_HUB_COUNTER_DISPATCH_STATE });
         const catalog = createNotionCatalogService({
           fetchImpl,
           token: env?.NOTION_TOKEN,
