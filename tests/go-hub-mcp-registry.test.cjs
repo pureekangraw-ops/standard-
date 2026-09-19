@@ -85,10 +85,6 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(tools.find(tool => tool.name === "go_hub_project_status").inputSchema.required.includes("workContext"), false);
   assert.equal(tools.find(tool => tool.name === "go_hub_board_pin_route").inputSchema.required.includes("workContext"), false);
 
-  await registry.callTool("go_hub_list_workflow_artifacts", { repository: "pureekangraw-ops/ygph-metropolis", runId: 123 });
-  assert.equal(calls.at(-1).name, "listWorkflowArtifacts");
-  await registry.callTool("go_hub_archive_workflow_artifact", { repository: "pureekangraw-ops/ygph-metropolis", runId: 123, artifactId: 456, parentId: "folder-a", entrySuffix: "app.apk", destinationName: "app.apk", workContext: driveWorkContext });
-  assert.equal(calls.at(-1).name, "archiveWorkflowArtifact");
   await registry.callTool("go_hub_inspect_repository", { repository: "pureekangraw-ops/standard-", branch: "main" });
   await registry.callTool("go_hub_factory_foreman", { action: "state", repository: "pureekangraw-ops/standard-" });
   assert.equal(calls[0].name, "inspect");
@@ -107,6 +103,10 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   await registry.callTool("go_hub_observer_screenshot", { screenshotRef: "shot:1" });
   assert.equal(calls.at(-2).name, "observerLatest");
   assert.equal(calls.at(-1).name, "observerScreenshot");
+  await registry.callTool("go_hub_list_workflow_artifacts", { repository: "pureekangraw-ops/ygph-metropolis", runId: 123 });
+  assert.equal(calls.at(-1).name, "listWorkflowArtifacts");
+  await registry.callTool("go_hub_archive_workflow_artifact", { repository: "pureekangraw-ops/ygph-metropolis", runId: 123, artifactId: 456, parentId: "folder-a", entrySuffix: "app.apk", destinationName: "app.apk", workContext: driveWorkContext });
+  assert.equal(calls.at(-1).name, "archiveWorkflowArtifact");
 });
 
 test("city lifecycle tools require exact Centre identity and correct destination", async () => {
