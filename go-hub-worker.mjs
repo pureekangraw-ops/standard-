@@ -2,6 +2,8 @@ import { createOAuthHandler, verifyAccessToken } from "./go-hub-oauth.mjs";
 import { createMcpRegistry } from "./go-hub-mcp-registry.mjs";
 import { createMcpHandler } from "./go-hub-mcp.mjs";
 import { createNotionCatalogService } from "./go-hub-notion-catalog.mjs";
+import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
+import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
 
 const API_ROOT = "/hub/api/github-workspace";
 const ALLOWED_OWNER = "pureekangraw-ops";
@@ -592,10 +594,14 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
           token: env?.NOTION_TOKEN,
           dataSourceId: env?.NOTION_CATALOG_DATA_SOURCE_ID,
         });
+        const projectStatus = createProjectStatusReadService({ lifecycle, factoryBinding:env?.GO_HUB_FACTORY_STATE });
+        const boardPinRoute = createBoardPinRouteReadService();
         const registry = createMcpRegistry({
           lifecycle: Object.freeze({
             ...lifecycle,
             searchCatalog: input => catalog.searchCatalog(input),
+            projectStatus: async input => json(await projectStatus.read(input)),
+            boardPinRoute: input => json(boardPinRoute.read(input)),
           }),
         });
         return createMcpHandler({

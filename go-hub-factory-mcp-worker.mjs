@@ -11,6 +11,8 @@ import { createMaintenanceService } from "./go-hub-maintenance.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { createLighthouseControlPortMcpService } from "./go-hub-lighthouse-control-port-service.mjs";
 import { createGoogleDriveService } from "./go-hub-google-drive-service.mjs";
+import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
+import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -207,6 +209,8 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const observer = createObserverEvidenceService({ namespace: env?.OBSERVER_SESSIONS });
       const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
       const lighthouseControlPort = createLighthouseControlPortMcpService({ namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS });
+      const projectStatus = createProjectStatusReadService({ lifecycle, factoryBinding:env?.GO_HUB_FACTORY_STATE });
+      const boardPinRoute = createBoardPinRouteReadService();
       const drive = createGoogleDriveService({
         fetchImpl,
         accessToken: firstEnv(env, ["GOOGLE_DRIVE_ACCESS_TOKEN", "DRIVE_ACCESS_TOKEN", "GDRIVE_ACCESS_TOKEN", "GOOGLE_ACCESS_TOKEN", "GOOGLE_OAUTH_ACCESS_TOKEN", "GDRIVE_OAUTH_ACCESS_TOKEN"]),
@@ -227,6 +231,8 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           centreLiveAction: input => centreLive.action(input),
           lighthouseControlPortState: input => lighthouseControlPort.state(input),
           lighthouseControlPortCommand: input => lighthouseControlPort.command(input),
+          projectStatus: async input => json(await projectStatus.read(input)),
+          boardPinRoute: input => json(boardPinRoute.read(input)),
           linearListProjects: input => linear.listProjects(input),
           linearGetIssue: input => linear.getIssue(input),
           linearCreateIssue: input => linear.createIssue(input),
