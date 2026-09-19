@@ -74,7 +74,7 @@ function nativeCors(request) {
   if (!allowed.has(origin)) return null;
   return {
     "access-control-allow-origin":origin,
-    "access-control-allow-methods":"POST, OPTIONS",
+    "access-control-allow-methods":"GET, POST, OPTIONS",
     "access-control-allow-headers":"content-type, x-lighthouse-session-id, x-lighthouse-session-token",
     "access-control-max-age":"600",
     "vary":"Origin",
