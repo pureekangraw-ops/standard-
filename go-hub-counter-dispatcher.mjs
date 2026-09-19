@@ -1,0 +1,372 @@
+const MAX_ATTEMPTS = 5;
+const WAITING_TARGET_RETRY_MS = 5 * 60 * 1000;
+const RETRY_DELAYS_MS = Object.freeze([1_000, 5_000, 30_000, 120_000, 300_000]);
+const SECRET_FIELD = /(authorization|token|secret|passcode|master.?key|password|bearer)/i;
+
+function json(payload, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8" },
+  });
+}
+function clone(value) { return value == null ? value : structuredClone(value); }
+function required(value, label) {
+  const text = String(value || "").trim();
+  if (!text) throw Object.assign(new Error(label + " is required"), { status:400 });
+  return text;
+}
+function objectValue(value, label, optional = false) {
+  if (value == null && optional) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw Object.assign(new Error(label + " must be an object"), { status:400 });
+  }
+  return clone(value);
+}
+function rejectSecrets(value, path = "root") {
+  if (!value || typeof value !== "object") return;
+  for (const [key, nested] of Object.entries(value)) {
+    if (SECRET_FIELD.test(key)) {
+      throw Object.assign(new Error("SECRET_FIELD_REJECTED:" + path + "." + key), { status:400 });
+    }
+    rejectSecrets(nested, path + "." + key);
+  }
+}
+function leg() {
+  return {
+    status:"IDLE",
+    attempts:0,
+    lastAttemptAt:null,
+    nextAttemptAt:null,
+    deliveredAt:null,
+    lastError:null,
+    receipt:null,
+  };
+}
+function append(state, type, target, at, detail = null) {
+  state.events.push({
+    sequence:state.events.length + 1,
+    type,
+    target,
+    at,
+    ...(detail == null ? {} : { detail:clone(detail) }),
+  });
+}
+function assertIdentity(state, input) {
+  if (required(input.counterId, "Counter ID") !== state.counterId ||
+      required(input.workId, "Work ID") !== state.workId ||
+      required(input.checkpointId, "Checkpoint ID") !== state.checkpointId) {
+    throw Object.assign(new Error("DISPATCH_IDENTITY_MISMATCH"), { status:409 });
+  }
+}
+function publicState(state, extra = {}) {
+  return { ok:true, dispatch:clone(state), ...extra };
+}
+
+export function createCounterDispatchCore({
+  now = () => Date.now(),
+  maxAttempts = MAX_ATTEMPTS,
+} = {}) {
+  function stamp() { return new Date(Number(now())).toISOString(); }
+  function enqueueOpen(input = {}, current = null) {
+    rejectSecrets(input);
+    const counterId = required(input.counterId, "Counter ID");
+    const workId = required(input.workId, "Work ID");
+    const checkpointId = required(input.checkpointId, "Checkpoint ID");
+    const request = required(input.request, "Request");
+    const context = objectValue(input.context, "Context", true);
+    const sourceHints = Array.isArray(input.sourceHints) ? input.sourceHints.map(String) : [];
+    const doNotChange = Array.isArray(input.doNotChange) ? input.doNotChange.map(String) : [];
+    if (current) {
+      assertIdentity(current, { counterId, workId, checkpointId });
+      if (current.request !== request) {
+        throw Object.assign(new Error("DISPATCH_REQUEST_MISMATCH"), { status:409 });
+      }
+      return publicState(current, { idempotent:true });
+    }
+    const at = stamp();
+    const state = {
+      counterId, workId, checkpointId, revision:1,
+      request, context, sourceHints, doNotChange,
+      answer:null,
+      legs:{ LIGHT:leg(), GO:leg() },
+      events:[],
+      createdAt:at,
+      updatedAt:at,
+    };
+    state.legs.LIGHT.status = "QUEUED";
+    append(state, "QUEUED", "LIGHT", at, { type:"NEW_COUNTER_TICKET" });
+    return publicState(state, { created:true });
+  }
+
+  function enqueueAnswer(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    rejectSecrets(input);
+    assertIdentity(current, input);
+    const answer = {
+      status:required(input.status, "Answer status"),
+      answer:required(input.answer, "Answer"),
+      sources:Array.isArray(input.sources) ? input.sources.map(String) : [],
+      evidence:Array.isArray(input.evidence) ? clone(input.evidence) : [],
+      confidence:input.confidence == null ? null : String(input.confidence),
+      nextRoute:input.nextRoute == null ? null : String(input.nextRoute),
+    };
+    const fingerprint = JSON.stringify(answer);
+    if (current.answer && JSON.stringify(current.answer) === fingerprint &&
+        current.legs.GO.status !== "IDLE") {
+      return publicState(current, { idempotent:true });
+    }
+    const state = clone(current);
+    state.revision += 1;
+    state.answer = answer;
+    state.legs.GO = leg();
+    state.legs.GO.status = "QUEUED";
+    state.updatedAt = stamp();
+    append(state, "QUEUED", "GO", state.updatedAt, { type:"COUNTER_ANSWER_READY", status:answer.status });
+    return publicState(state);
+  }
+
+  function waitingTarget(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    if (!["LIGHT","GO"].includes(target)) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    const state = clone(current);
+    if (state.legs[target].status === "WAITING_TARGET") return publicState(state, { idempotent:true });
+    state.revision += 1;
+    state.legs[target].status = "WAITING_TARGET";
+    state.legs[target].lastError = "CALLABLE_TARGET_NOT_CONFIGURED";
+    state.legs[target].nextAttemptAt = new Date(Number(now()) + WAITING_TARGET_RETRY_MS).toISOString();
+    state.updatedAt = stamp();
+    append(state, "WAITING_TARGET", target, state.updatedAt);
+    return publicState(state);
+  }
+
+  function beginAttempt(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    const state = clone(current);
+    const targetLeg = state.legs[target];
+    if (!targetLeg) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    if (targetLeg.status === "DELIVERED" || targetLeg.status === "DEAD_LETTER") {
+      return publicState(state, { idempotent:true });
+    }
+    state.revision += 1;
+    targetLeg.status = "DISPATCHING";
+    targetLeg.attempts += 1;
+    targetLeg.lastAttemptAt = stamp();
+    targetLeg.nextAttemptAt = null;
+    targetLeg.lastError = null;
+    state.updatedAt = targetLeg.lastAttemptAt;
+    append(state, "ATTEMPT", target, state.updatedAt, { attempt:targetLeg.attempts });
+    return publicState(state);
+  }
+
+  function delivered(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    const state = clone(current);
+    const targetLeg = state.legs[target];
+    if (!targetLeg) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    if (targetLeg.status === "DELIVERED") return publicState(state, { idempotent:true });
+    state.revision += 1;
+    targetLeg.status = "DELIVERED";
+    targetLeg.deliveredAt = stamp();
+    targetLeg.nextAttemptAt = null;
+    targetLeg.lastError = null;
+    targetLeg.receipt = input.receipt && typeof input.receipt === "object" ? clone(input.receipt) : {};
+    state.updatedAt = targetLeg.deliveredAt;
+    append(state, "DELIVERED", target, state.updatedAt, targetLeg.receipt);
+    return publicState(state);
+  }
+
+  function failed(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    const state = clone(current);
+    const targetLeg = state.legs[target];
+    if (!targetLeg) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    state.revision += 1;
+    targetLeg.lastError = String(input.error || "DISPATCH_FAILED").slice(0, 240);
+    const exhausted = targetLeg.attempts >= maxAttempts;
+    targetLeg.status = exhausted ? "DEAD_LETTER" : "RETRY_WAIT";
+    targetLeg.nextAttemptAt = exhausted ? null : new Date(
+      Number(now()) + RETRY_DELAYS_MS[Math.min(Math.max(targetLeg.attempts - 1, 0), RETRY_DELAYS_MS.length - 1)]
+    ).toISOString();
+    state.updatedAt = stamp();
+    append(state, exhausted ? "DEAD_LETTER" : "RETRY_WAIT", target, state.updatedAt, {
+      attempts:targetLeg.attempts,
+      error:targetLeg.lastError,
+      nextAttemptAt:targetLeg.nextAttemptAt,
+    });
+    return publicState(state);
+  }
+
+  return Object.freeze({ enqueueOpen, enqueueAnswer, waitingTarget, beginAttempt, delivered, failed });
+}
+
+function endpoint(env, target) {
+  const url = target === "LIGHT" ? env?.LIGHT_WAKE_URL : env?.GO_WAKE_URL;
+  const bearer = target === "LIGHT" ? env?.LIGHT_WAKE_BEARER : env?.GO_WAKE_BEARER;
+  return { url:String(url || "").trim(), bearer:String(bearer || "").trim() };
+}
+function wakePayload(state, target) {
+  if (target === "LIGHT") {
+    return {
+      type:"NEW_COUNTER_TICKET",
+      target:"LIGHT",
+      counterId:state.counterId,
+      workId:state.workId,
+      checkpointId:state.checkpointId,
+      request:state.request,
+      context:clone(state.context),
+      sourceHints:clone(state.sourceHints),
+      doNotChange:clone(state.doNotChange),
+    };
+  }
+  return {
+    type:"COUNTER_ANSWER_READY",
+    target:"GO",
+    counterId:state.counterId,
+    workId:state.workId,
+    checkpointId:state.checkpointId,
+    ...clone(state.answer || {}),
+  };
+}
+function publicReceipt(response, payload) {
+  return {
+    httpStatus:Number(response?.status || 0),
+    receiptId:payload && typeof payload === "object" && payload.receiptId != null
+      ? String(payload.receiptId).slice(0, 160)
+      : null,
+  };
+}
+
+export class GoHubCounterDispatchState {
+  constructor(ctx, env) {
+    this.ctx = ctx;
+    this.env = env || {};
+    this.core = createCounterDispatchCore();
+  }
+  async load() { return (await this.ctx.storage.get("dispatch")) || null; }
+  async save(state) { await this.ctx.storage.put("dispatch", clone(state)); }
+  async schedule(iso) {
+    if (!iso || typeof this.ctx.storage.setAlarm !== "function") return;
+    const when = Date.parse(iso);
+    if (Number.isFinite(when)) await this.ctx.storage.setAlarm(when);
+  }
+  async deliver(target, current) {
+    let state = current;
+    const config = endpoint(this.env, target);
+    if (!config.url) {
+      const result = this.core.waitingTarget({ target }, state);
+      state = result.dispatch;
+      if (!result.idempotent) await this.save(state);
+      await this.schedule(state.legs[target].nextAttemptAt);
+      return publicState(state, { targetConfigured:false });
+    }
+    const attempt = this.core.beginAttempt({ target }, state);
+    state = attempt.dispatch;
+    if (attempt.idempotent) return publicState(state);
+    await this.save(state);
+    try {
+      const response = await fetch(config.url, {
+        method:"POST",
+        headers:{
+          "content-type":"application/json",
+          ...(config.bearer ? { authorization:"Bearer " + config.bearer } : {}),
+        },
+        body:JSON.stringify(wakePayload(state, target)),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error("WAKE_HTTP_" + response.status);
+      const result = this.core.delivered({ target, receipt:publicReceipt(response, body) }, state);
+      await this.save(result.dispatch);
+      return result;
+    } catch (error) {
+      const result = this.core.failed({ target, error:error?.message || "WAKE_FAILED" }, state);
+      await this.save(result.dispatch);
+      await this.schedule(result.dispatch.legs[target].nextAttemptAt);
+      return result;
+    }
+  }
+  async enqueueOpen(input = {}) {
+    const current = await this.load();
+    const result = this.core.enqueueOpen(input, current);
+    if (result.created) await this.save(result.dispatch);
+    if (result.idempotent) return result;
+    return this.deliver("LIGHT", result.dispatch);
+  }
+  async enqueueAnswer(input = {}) {
+    const current = await this.load();
+    const result = this.core.enqueueAnswer(input, current);
+    if (!result.idempotent) await this.save(result.dispatch);
+    if (result.idempotent) return result;
+    return this.deliver("GO", result.dispatch);
+  }
+  async get(input = {}) {
+    const current = await this.load();
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    assertIdentity(current, input);
+    return publicState(current);
+  }
+  async retry(input = {}) {
+    const current = await this.load();
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    assertIdentity(current, input);
+    const target = required(input.target, "Target").toUpperCase();
+    if (!["LIGHT","GO"].includes(target)) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    return this.deliver(target, current);
+  }
+  async alarm() {
+    const state = await this.load();
+    if (!state) return;
+    const nowMs = Date.now();
+    for (const target of ["LIGHT","GO"]) {
+      const targetLeg = state.legs[target];
+      if (!targetLeg || !["WAITING_TARGET","RETRY_WAIT"].includes(targetLeg.status)) continue;
+      if (targetLeg.nextAttemptAt && Date.parse(targetLeg.nextAttemptAt) > nowMs) continue;
+      const latest = await this.load();
+      await this.deliver(target, latest);
+    }
+  }
+  async fetch(request) {
+    try {
+      if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405);
+      const input = await request.json().catch(() => null);
+      if (!input || typeof input !== "object" || Array.isArray(input)) return json({ code:"INVALID_JSON" }, 400);
+      const action = required(input.action, "Action").toLowerCase();
+      const result = action === "open" ? await this.enqueueOpen(input)
+        : action === "answer" ? await this.enqueueAnswer(input)
+        : action === "get" ? await this.get(input)
+        : action === "retry" ? await this.retry(input)
+        : (() => { throw Object.assign(new Error("DISPATCH_ACTION_UNSUPPORTED"), { status:400 }); })();
+      return json(result);
+    } catch (error) {
+      return json({ code:error?.message || "DISPATCH_ERROR" }, error?.status || 400);
+    }
+  }
+}
+
+function stubFor(namespace, counterId) {
+  if (!namespace || typeof namespace.getByName !== "function") return null;
+  return namespace.getByName(counterId);
+}
+export function createCounterDispatchService({ namespace } = {}) {
+  async function call(action, input = {}) {
+    const counterId = required(input.counterId, "Counter ID");
+    const stub = stubFor(namespace, counterId);
+    if (!stub || typeof stub.fetch !== "function") return json({ code:"DISPATCH_STATE_NOT_CONFIGURED" }, 503);
+    return stub.fetch(new Request("https://counter-dispatch.internal/" + action, {
+      method:"POST",
+      headers:{ "content-type":"application/json" },
+      body:JSON.stringify({ ...input, action }),
+    }));
+  }
+  return Object.freeze({
+    open:input => call("open", input),
+    answer:input => call("answer", input),
+    get:input => call("get", input),
+    retry:input => call("retry", input),
+  });
+}
+
+export { MAX_ATTEMPTS, WAITING_TARGET_RETRY_MS, RETRY_DELAYS_MS };
