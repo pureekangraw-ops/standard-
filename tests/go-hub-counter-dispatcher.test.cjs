@@ -36,9 +36,29 @@ test("dispatcher fails closed as WAITING_TARGET when LIGHT wake target is not co
   assert.equal(result.dispatch.legs.LIGHT.status, "WAITING_TARGET");
   assert.equal(result.dispatch.legs.LIGHT.attempts, 0);
   assert.equal(result.dispatch.legs.LIGHT.lastError, "CALLABLE_TARGET_NOT_CONFIGURED");
+  assert.equal(result.dispatch.legs.LIGHT.nextAttemptAt, null);
   assert.equal(stateStorage.alarms.length, 0);
 });
 
+
+test("legacy WAITING_TARGET timestamp is reconciled to null once without fake delivery", async () => {
+  const { createCounterDispatchCore } = await import(moduleUrl + "?legacy-wait=" + Date.now());
+  const core = createCounterDispatchCore({ now:() => Date.parse("2026-09-19T16:55:00.000Z") });
+  let state = core.enqueueOpen(openInput()).dispatch;
+  state = core.waitingTarget({ target:"LIGHT" }, state).dispatch;
+  state.legs.LIGHT.nextAttemptAt = "2026-09-19T16:50:28.457Z";
+  const reconciled = core.waitingTarget({ target:"LIGHT" }, state);
+
+  assert.equal(reconciled.reconciled, true);
+  assert.equal(reconciled.dispatch.legs.LIGHT.status, "WAITING_TARGET");
+  assert.equal(reconciled.dispatch.legs.LIGHT.attempts, 0);
+  assert.equal(reconciled.dispatch.legs.LIGHT.nextAttemptAt, null);
+  assert.equal(reconciled.dispatch.events.at(-1).type, "WAITING_TARGET_RECONCILED");
+
+  const stable = core.waitingTarget({ target:"LIGHT" }, reconciled.dispatch);
+  assert.equal(stable.idempotent, true);
+  assert.equal(stable.dispatch.events.length, reconciled.dispatch.events.length);
+});
 
 test("WAITING_TARGET can be retried by the same idempotent OPEN after target is configured", async () => {
   const originalFetch = globalThis.fetch;
