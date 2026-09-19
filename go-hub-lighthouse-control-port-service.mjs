@@ -56,6 +56,9 @@ function stub(namespace) {
     pushReceipts:input => call("receipts", input),
     pushState:input => call("state", input),
     latest:() => call("latest"),
+    board:input => call("board", input),
+    latestBoard:() => call("board/latest"),
+    projectCentre:view => call("board/project", { view }),
     stop:input => call("stop", input),
     live:request => durable.fetch(new Request("https://lighthouse-control-port.internal/live", request)),
   });
@@ -164,6 +167,11 @@ export function createLighthouseControlPortHttpService({ namespace, ownerPasscod
         return result?.ok ? json({ ok:true }, 200, cors || {}) : json({ code:result?.code || "HUB_UNAVAILABLE" }, statusFor(result?.code), cors || {});
       }
 
+      if (url.pathname === `${LIGHTHOUSE_CONTROL_PORT_API_ROOT}/board`) {
+        const result = await sessions.board(auth);
+        return result?.ok ? json({ board:result.board || null }, 200, cors || {}) : json({ code:result?.code || "HUB_UNAVAILABLE" }, statusFor(result?.code), cors || {});
+      }
+
       if (url.pathname === `${LIGHTHOUSE_CONTROL_PORT_API_ROOT}/session/stop`) {
         const result = await sessions.stop(auth);
         return result?.ok ? json({ ok:true }, 200, cors || {}) : json({ code:result?.code || "HUB_UNAVAILABLE" }, statusFor(result?.code), cors || {});
@@ -186,6 +194,12 @@ export function createLighthouseControlPortMcpService({ namespace } = {}) {
       if (!current || typeof current.latest !== "function") return json({ code:"HUB_UNAVAILABLE" }, 503);
       const result = await current.latest();
       return result?.ok ? json(result, 200) : json({ code:result?.code || "HUB_UNAVAILABLE", session:result?.session || null }, statusFor(result?.code));
+    },
+    async projectCentre(view = {}) {
+      const current = sessions();
+      if (!current || typeof current.projectCentre !== "function") return json({ code:"HUB_UNAVAILABLE" }, 503);
+      const result = await current.projectCentre(view);
+      return result?.ok ? json(result, 200) : json({ code:result?.code || "HUB_UNAVAILABLE" }, statusFor(result?.code));
     },
     async command({ targetId, requestId, capabilityId, payload = {} } = {}) {
       requireTarget(targetId);
