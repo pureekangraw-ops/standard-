@@ -134,3 +134,13 @@ export function resolvePinRoute({ intent, pin = null } = {}) {
     createAllowed:false,
   });
 }
+
+export function createBoardPinRouteReadService() {
+  return Object.freeze({
+    read({ firstCommand, pin = null } = {}) {
+      const intent = lockPinIntent(firstCommand);
+      const route = resolvePinRoute({ intent, pin });
+      return Object.freeze({ intent, route });
+    },
+  });
+}
