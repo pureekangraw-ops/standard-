@@ -1,0 +1,158 @@
+name: GO Hub Drive Live Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/go-hub-drive-live-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  live-drive-smoke:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GOHUB_MASTER_KEY: ${{ secrets.GOHUB_MASTER_KEY }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run governed Drive create rename move readback
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { createTestAccessToken } from "./go-hub-oauth.mjs";
+
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const cloudflareToken = process.env.CLOUDFLARE_API_TOKEN;
+          const signingKey = process.env.GOHUB_MASTER_KEY;
+          const runId = process.env.GITHUB_RUN_ID;
+          const sourceParentId = "14aCUoGaorfPJ97CTemW3SwDl2neDbDs7";
+          const destinationParentId = "1Frd9yAdiMwf-b4U-e6cJ2eZGRz41zQGN";
+          const initialName = "GO-HUB-DRIVE-SMOKE-" + runId;
+          const finalName = "GO-HUB-DRIVE-SMOKE-VERIFIED-" + runId;
+
+          if (!accountId || !cloudflareToken || !signingKey || !runId) {
+            throw new Error("LIVE_SMOKE_PREREQUISITES_MISSING");
+          }
+
+          const subdomainResponse = await fetch(
+            "https://api.cloudflare.com/client/v4/accounts/" + accountId + "/workers/subdomain",
+            { headers: { authorization: "Bearer " + cloudflareToken } },
+          );
+          const subdomainPayload = await subdomainResponse.json().catch(() => null);
+          const subdomain = String(subdomainPayload?.result?.subdomain || "").trim();
+          if (!subdomainResponse.ok || !subdomain) throw new Error("WORKERS_SUBDOMAIN_UNAVAILABLE");
+
+          const origin = "https://go-hub." + subdomain + ".workers.dev";
+          const token = await createTestAccessToken({ issuer: origin, signingKey });
+          const workContext = {
+            workId: "WORK-DRIVE-HUB-20260919-001",
+            checkpointId: "CP-DRIVE-HUB-001",
+            returnAddress: "CP-DRIVE-HUB-001",
+            destination: "destination://drive",
+            task: "Live Drive smoke create rename move readback",
+            requestedResult: "Verified final folder in GO-HUB",
+            lensReference: "role://drive-hub-integration@WORK-DRIVE-HUB-20260919-001",
+          };
+
+          async function call(name, args = {}) {
+            const response = await fetch(origin + "/mcp", {
+              method: "POST",
+              headers: {
+                authorization: "Bearer " + token,
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+              },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: name,
+                method: "tools/call",
+                params: { name, arguments: args },
+              }),
+            });
+            const payload = await response.json().catch(() => null);
+            const result = payload?.result;
+            const proof = result?.structuredContent;
+            if (!response.ok || payload?.error || result?.isError) {
+              throw new Error(proof?.code || payload?.error?.message || (name + "_FAILED"));
+            }
+            return proof;
+          }
+
+          let createdId = null;
+          try {
+            const capabilities = await call("go_hub_drive_capabilities");
+            if (capabilities?.configured !== true) throw new Error("DRIVE_NOT_CONFIGURED");
+
+            await call("go_hub_drive_get_item", { fileId: sourceParentId });
+            await call("go_hub_drive_get_item", { fileId: destinationParentId });
+
+            const created = await call("go_hub_drive_create_folder", {
+              parentId: sourceParentId,
+              name: initialName,
+              workContext,
+            });
+            if (created?.readback !== "PASS" || !created?.item?.id) throw new Error("CREATE_READBACK_FAILED");
+            createdId = created.item.id;
+
+            const renamed = await call("go_hub_drive_rename_item", {
+              fileId: createdId,
+              name: finalName,
+              workContext,
+            });
+            if (renamed?.readback !== "PASS" || renamed?.item?.name !== finalName) {
+              throw new Error("RENAME_READBACK_FAILED");
+            }
+
+            const moved = await call("go_hub_drive_move_item", {
+              fileId: createdId,
+              destinationFolderId: destinationParentId,
+              workContext,
+            });
+            if (moved?.readback !== "PASS" || !moved?.item?.parents?.includes(destinationParentId)) {
+              throw new Error("MOVE_READBACK_FAILED");
+            }
+
+            const finalItem = await call("go_hub_drive_get_item", { fileId: createdId });
+            if (finalItem?.item?.name !== finalName ||
+                !finalItem?.item?.parents?.includes(destinationParentId)) {
+              throw new Error("FINAL_ITEM_READBACK_FAILED");
+            }
+
+            const children = await call("go_hub_drive_list_children", { parentId: destinationParentId });
+            if (!children?.items?.some(item => item.id === createdId && item.name === finalName)) {
+              throw new Error("FINAL_LIST_READBACK_FAILED");
+            }
+
+            console.log("GO_HUB_DRIVE_LIVE_SMOKE_PASS");
+            console.log("item_id=" + createdId);
+            console.log("item_name=" + finalName);
+            console.log("destination_parent=" + destinationParentId);
+          } catch (error) {
+            if (createdId) {
+              try {
+                await call("go_hub_drive_move_item", {
+                  fileId: createdId,
+                  destinationFolderId: destinationParentId,
+                  workContext,
+                });
+                await call("go_hub_drive_rename_item", {
+                  fileId: createdId,
+                  name: "GO-HUB-DRIVE-SMOKE-RECOVERY-" + runId,
+                  workContext,
+                });
+              } catch {}
+            }
+            throw error;
+          }
+          NODE
