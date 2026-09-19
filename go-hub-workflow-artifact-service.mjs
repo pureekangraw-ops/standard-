@@ -26,9 +26,10 @@ function githubHeaders(token) {
   };
 }
 function normalizeArtifact(item, runId) {
+  const resolvedRunId = positiveInt(runId) || positiveInt(item?.workflow_run?.id);
   return {
     id: Number(item.id),
-    runId: Number(runId),
+    runId: resolvedRunId,
     name: clean(item.name) || null,
     sizeInBytes: Number(item.size_in_bytes || 0),
     expired: item.expired === true,
@@ -50,6 +51,17 @@ async function githubJson(fetchImpl, token, url) {
     return { response: json({ code: "GITHUB_UPSTREAM_ERROR", status: response.status }, 502) };
   }
   return { payload };
+}
+async function listRepositoryArtifacts(fetchImpl, token, repository) {
+  const result = await githubJson(
+    fetchImpl,
+    token,
+    GITHUB_API_ROOT + "/repos/" + repository + "/actions/artifacts?per_page=100",
+  );
+  if (result.response) return result;
+  return {
+    raw: Array.isArray(result.payload.artifacts) ? result.payload.artifacts : [],
+  };
 }
 async function listRunArtifacts(fetchImpl, token, repository, runId) {
   const result = await githubJson(
@@ -152,12 +164,15 @@ export function createWorkflowArtifactService({ fetchImpl = fetch, token, drive,
       const repository = assertRepository(input.repository);
       const runId = positiveInt(input.runId);
       if (!githubToken) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
-      if (!repository || !runId) return json({ code: "ARTIFACT_INVALID_INPUT" }, 400);
-      const result = await listRunArtifacts(fetchImpl, githubToken, repository, runId);
+      if (!repository) return json({ code: "ARTIFACT_INVALID_INPUT" }, 400);
+      const result = runId
+        ? await listRunArtifacts(fetchImpl, githubToken, repository, runId)
+        : await listRepositoryArtifacts(fetchImpl, githubToken, repository);
       if (result.response) return result.response;
       return json({
         repository,
-        runId,
+        runId: runId || null,
+        scope: runId ? "RUN" : "REPOSITORY",
         artifacts: result.raw.map(item => normalizeArtifact(item, runId)),
       });
     },
@@ -166,7 +181,19 @@ export function createWorkflowArtifactService({ fetchImpl = fetch, token, drive,
       const repository = assertRepository(input.repository);
       const runId = positiveInt(input.runId);
       const artifactId = positiveInt(input.artifactId);
-      const parentId = clean(input.parentId) || clean(typeof drive.defaultParentId === "function" ? drive.defaultParentId() : "");
+      const archivePath = clean(input.archivePath);
+      let parentId = clean(input.parentId);
+      if (parentId && archivePath) return json({ code: "ARTIFACT_DESTINATION_AMBIGUOUS" }, 400);
+      if (archivePath) {
+        if (typeof drive.ensureFolderPath !== "function") {
+          return json({ code: "DRIVE_PATH_RESOLUTION_UNAVAILABLE" }, 503);
+        }
+        const resolved = await drive.ensureFolderPath({ path: archivePath });
+        const resolvedPayload = await resolved.json().catch(() => ({ code: "DRIVE_INVALID_RESPONSE" }));
+        if (!resolved.ok) return json(resolvedPayload, resolved.status);
+        parentId = clean(resolvedPayload?.item?.id);
+      }
+      if (!parentId) parentId = clean(typeof drive.defaultParentId === "function" ? drive.defaultParentId() : "");
       if (!githubToken) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
       if (!repository || !runId || !artifactId || !parentId) {
         return json({ code: "ARTIFACT_INVALID_INPUT" }, 400);
@@ -235,6 +262,7 @@ export function createWorkflowArtifactService({ fetchImpl = fetch, token, drive,
         selectedEntry: clean(input.entrySuffix) ? selectedName : null,
         fileSha256,
         destination: storedPayload.item || null,
+        archivePath: archivePath || null,
         readback: storedPayload.readback || null,
       });
     },
