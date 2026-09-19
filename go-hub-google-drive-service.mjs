@@ -1,7 +1,8 @@
 const DRIVE_API_ROOT = "https://www.googleapis.com/drive/v3";
+const DRIVE_UPLOAD_API_ROOT = "https://www.googleapis.com/upload/drive/v3";
 const DRIVE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
-const FILE_FIELDS = "id,name,mimeType,size,modifiedTime,md5Checksum,version,parents,trashed,webViewLink";
+const FILE_FIELDS = "id,name,mimeType,size,modifiedTime,md5Checksum,version,parents,trashed,webViewLink,appProperties";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -26,6 +27,7 @@ function normalizeFile(file) {
     parents: Array.isArray(file?.parents) ? file.parents.map(String) : [],
     trashed: file?.trashed === true,
     webViewLink: file?.webViewLink || null,
+    appProperties: file?.appProperties && typeof file.appProperties === "object" ? { ...file.appProperties } : {},
   };
 }
 
@@ -158,6 +160,33 @@ export function createGoogleDriveService({
     return { ok: false, response: json({ code: "DRIVE_SCOPE_VIOLATION" }, 403) };
   }
 
+  function driveLiteral(value) {
+    return String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  }
+
+  function normalizedAppProperties(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value)
+      .map(([key, current]) => [text(key), text(current)])
+      .filter(([key, current]) => key && current)
+      .slice(0, 100));
+  }
+
+  async function findChildByName(parentId, name) {
+    const params = new URLSearchParams({
+      q: "'" + driveLiteral(parentId) + "' in parents and name = '" + driveLiteral(name) + "' and trashed = false",
+      fields: "files(" + FILE_FIELDS + ")",
+      pageSize: "10",
+      supportsAllDrives: "true",
+      includeItemsFromAllDrives: "true",
+    });
+    const result = await request("/files?" + params.toString());
+    if (result.response) return result;
+    return {
+      items: Array.isArray(result.payload?.files) ? result.payload.files.map(normalizeFile) : [],
+    };
+  }
+
   async function readback(fileId, expected = {}) {
     const result = await getRaw(fileId);
     if (result.response) return result;
@@ -168,7 +197,86 @@ export function createGoogleDriveService({
     if (expected.parentId != null && !item.parents.includes(expected.parentId)) {
       return { response: json({ code: "DRIVE_READBACK_MISMATCH", field: "parentId" }, 409) };
     }
+    if (expected.size != null && String(item.size) !== String(expected.size)) {
+      return { response: json({ code: "DRIVE_READBACK_MISMATCH", field: "size" }, 409) };
+    }
+    if (expected.appProperties && typeof expected.appProperties === "object") {
+      for (const [key, value] of Object.entries(expected.appProperties)) {
+        if (String(item.appProperties?.[key] || "") !== String(value)) {
+          return { response: json({ code: "DRIVE_READBACK_MISMATCH", field: "appProperties." + key }, 409) };
+        }
+      }
+    }
     return { item };
+  }
+
+  async function uploadFileBytes(input = {}) {
+    const parentId = text(input.parentId);
+    const name = text(input.name);
+    const mimeType = text(input.mimeType) || "application/octet-stream";
+    const appProperties = normalizedAppProperties(input.appProperties);
+    let bytes = input.bytes;
+    if (bytes instanceof ArrayBuffer) bytes = new Uint8Array(bytes);
+    if (!parentId || !name || !(bytes instanceof Uint8Array) || bytes.byteLength < 1) {
+      return json({ code: "DRIVE_INVALID_INPUT" }, 400);
+    }
+    const scoped = await isWithinScope(parentId);
+    if (!scoped.ok) return scoped.response;
+
+    const existing = await findChildByName(parentId, name);
+    if (existing.response) return existing.response;
+    if (existing.items.length) {
+      return json({ code: "DRIVE_NAME_CONFLICT", item: existing.items[0] }, 409);
+    }
+
+    const auth = await bearerToken();
+    if (auth.response) return auth.response;
+    const boundary = "go-hub-" + crypto.randomUUID();
+    const metadata = JSON.stringify({ name, parents: [parentId], appProperties });
+    const body = new Blob([
+      "--" + boundary + "\r\n",
+      "Content-Type: application/json; charset=UTF-8\r\n\r\n",
+      metadata,
+      "\r\n--" + boundary + "\r\n",
+      "Content-Type: " + mimeType + "\r\n\r\n",
+      bytes,
+      "\r\n--" + boundary + "--",
+    ]);
+    let upstream;
+    try {
+      upstream = await fetchImpl(
+        DRIVE_UPLOAD_API_ROOT + "/files?uploadType=multipart&supportsAllDrives=true&fields=" + encode(FILE_FIELDS),
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer " + auth.token,
+            "content-type": "multipart/related; boundary=" + boundary,
+          },
+          body,
+        },
+      );
+    } catch {
+      return json({ code: "DRIVE_UPSTREAM_ERROR", category: "NETWORK_ERROR" }, 502);
+    }
+    const payload = await upstream.json().catch(() => null);
+    if (!upstream.ok || !payload?.id) {
+      return json({
+        code: "DRIVE_UPSTREAM_ERROR",
+        category: errorCategory(payload, upstream.status),
+      }, 502);
+    }
+    const verified = await readback(payload.id, {
+      name,
+      parentId,
+      size: bytes.byteLength,
+      appProperties,
+    });
+    if (verified.response) return verified.response;
+    return json({
+      item: verified.item,
+      readback: "PASS",
+      sha256: text(input.sha256) || null,
+    });
   }
 
   return Object.freeze({
@@ -186,6 +294,7 @@ export function createGoogleDriveService({
           "create_folder",
           "move_item",
           "rename_item",
+          "upload_file_internal",
         ],
         destructiveDeleteExposed: false,
         mutationReadbackRequired: true,
@@ -247,6 +356,8 @@ export function createGoogleDriveService({
         nextPageToken: result.payload?.nextPageToken || null,
       });
     },
+
+    async uploadFileBytes(input = {}) { return uploadFileBytes(input); },
 
     async createFolder(input = {}) {
       const parentId = text(input.parentId);

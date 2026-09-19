@@ -38,7 +38,7 @@ test("Drive service fails closed when auth is missing", async () => {
     configured: false,
     authMode: null,
     rootScopeConfigured: false,
-    operations: ["capabilities", "health", "diagnostics", "get_item", "list_children", "create_folder", "move_item", "rename_item"],
+    operations: ["capabilities", "health", "diagnostics", "get_item", "list_children", "create_folder", "move_item", "rename_item", "upload_file_internal"],
     destructiveDeleteExposed: false,
     mutationReadbackRequired: true,
   });
