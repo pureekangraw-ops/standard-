@@ -61,14 +61,14 @@ export function createGoogleDriveService({
   let cachedTokenExpiresAt = 0;
 
   function authMode() {
-    if (directAccessToken) return "access_token";
     if (oauthRefreshToken && oauthClientId && oauthClientSecret) return "refresh_token";
+    if (directAccessToken) return "access_token";
     return null;
   }
 
   async function bearerToken() {
-    if (directAccessToken) return { token: directAccessToken };
-    if (!oauthRefreshToken || !oauthClientId || !oauthClientSecret) {
+    if (!(oauthRefreshToken && oauthClientId && oauthClientSecret)) {
+      if (directAccessToken) return { token: directAccessToken };
       return { response: json({ code: "DRIVE_NOT_CONFIGURED" }, 503) };
     }
     if (cachedToken && cachedTokenExpiresAt > Date.now() + 60_000) return { token: cachedToken };
