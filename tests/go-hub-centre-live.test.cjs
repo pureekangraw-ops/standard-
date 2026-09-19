@@ -172,3 +172,113 @@ test("live Work Target survives durable inspect and Factory leave", async () => 
   assert.equal(inspected.body.work.targetId, "lighthouse");
   assert.equal(inspected.body.work.handoff.targetId, "lighthouse");
 });
+
+
+test("Centre ownership claim is atomic and rejects a competing owner", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?claim=" + Date.now());
+  const instance = new GoHubCentreState({ storage: new MemoryStorage() }, {});
+  const id = { workId: "WORK-CLAIM", checkpointId: "CP-CLAIM", returnAddress: "CP-CLAIM" };
+  assert.equal((await call(instance, { action: "start", ...id })).status, 200);
+
+  const claimed = await call(instance, {
+    action: "claim", ...id, ownerId: "GO-A", expectedOwnershipRevision: 0, leaseSeconds: 300,
+  });
+  assert.equal(claimed.status, 200);
+  assert.equal(claimed.body.ownership.status, "CLAIMED");
+  assert.equal(claimed.body.ownership.revision, 1);
+  assert.equal(claimed.body.ownership.ownerId, "GO-A");
+  assert.ok(claimed.body.ownership.leaseId);
+
+  const conflict = await call(instance, {
+    action: "claim", ...id, ownerId: "GO-B", expectedOwnershipRevision: 1, leaseSeconds: 300,
+  });
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.code, "CENTRE_WORK_ALREADY_CLAIMED");
+});
+
+test("claimed Centre work requires the exact live lease for lifecycle mutation", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?guard=" + Date.now());
+  const instance = new GoHubCentreState({ storage: new MemoryStorage() }, {});
+  const id = { workId: "WORK-GUARD", checkpointId: "CP-GUARD", returnAddress: "CP-GUARD" };
+  assert.equal((await call(instance, { action: "start", ...id })).status, 200);
+  const claimed = await call(instance, {
+    action: "claim", ...id, ownerId: "GO-A", expectedOwnershipRevision: 0, leaseSeconds: 300,
+  });
+  const lease = claimed.body.ownership;
+
+  const blocked = await call(instance, {
+    action: "review", ...id, task: "Guard", requestedResult: "Safe", authority: "BIG",
+  });
+  assert.equal(blocked.status, 400);
+  assert.equal(blocked.body.code, "Owner ID is required");
+
+  const reviewedWithLease = await call(instance, {
+    action: "review", ...id, task: "Guard", requestedResult: "Safe", authority: "BIG",
+    ownerId: "GO-A", leaseId: lease.leaseId, expectedOwnershipRevision: lease.revision,
+  });
+  assert.equal(reviewedWithLease.status, 200);
+});
+
+test("ownership renew and release are revisioned and released work cannot mutate until reclaimed", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?renew=" + Date.now());
+  const instance = new GoHubCentreState({ storage: new MemoryStorage() }, {});
+  const id = { workId: "WORK-RENEW", checkpointId: "CP-RENEW", returnAddress: "CP-RENEW" };
+  await call(instance, { action: "start", ...id });
+  const claimed = await call(instance, {
+    action: "claim", ...id, ownerId: "GO-A", expectedOwnershipRevision: 0, leaseSeconds: 300,
+  });
+  const lease1 = claimed.body.ownership;
+
+  const stale = await call(instance, {
+    action: "renew", ...id, ownerId: "GO-A", leaseId: lease1.leaseId,
+    expectedOwnershipRevision: 0, leaseSeconds: 300,
+  });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.code, "CENTRE_OWNERSHIP_STALE_REVISION");
+
+  const renewed = await call(instance, {
+    action: "renew", ...id, ownerId: "GO-A", leaseId: lease1.leaseId,
+    expectedOwnershipRevision: 1, leaseSeconds: 600,
+  });
+  assert.equal(renewed.status, 200);
+  assert.equal(renewed.body.ownership.revision, 2);
+
+  const released = await call(instance, {
+    action: "release", ...id, ownerId: "GO-A", leaseId: lease1.leaseId,
+    expectedOwnershipRevision: 2,
+  });
+  assert.equal(released.status, 200);
+  assert.equal(released.body.ownership.status, "OPEN");
+  assert.equal(released.body.ownership.revision, 3);
+  assert.equal(released.body.ownership.enforced, true);
+
+  const blocked = await call(instance, {
+    action: "review", ...id, task: "No owner", requestedResult: "Blocked", authority: "BIG",
+  });
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.body.code, "CENTRE_WORK_UNCLAIMED");
+});
+
+test("expired ownership can be reclaimed by another owner at the current revision", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?reclaim=" + Date.now());
+  const map = new Map();
+  const storage = new MemoryStorage(map);
+  const instance = new GoHubCentreState({ storage }, {});
+  const id = { workId: "WORK-EXPIRED", checkpointId: "CP-EXPIRED", returnAddress: "CP-EXPIRED" };
+  await call(instance, { action: "start", ...id });
+  const claimed = await call(instance, {
+    action: "claim", ...id, ownerId: "GO-A", expectedOwnershipRevision: 0, leaseSeconds: 300,
+  });
+  const state = structuredClone(map.get("state"));
+  state.ownership.leaseExpiresAt = "2000-01-01T00:00:00.000Z";
+  map.set("state", state);
+
+  const reclaimed = await call(instance, {
+    action: "claim", ...id, ownerId: "GO-B",
+    expectedOwnershipRevision: claimed.body.ownership.revision, leaseSeconds: 300,
+  });
+  assert.equal(reclaimed.status, 200);
+  assert.equal(reclaimed.body.ownership.ownerId, "GO-B");
+  assert.equal(reclaimed.body.ownership.revision, 2);
+  assert.equal(reclaimed.body.ownership.status, "CLAIMED");
+});

@@ -18,6 +18,81 @@ function clone(value) {
   return value == null ? value : structuredClone(value);
 }
 
+const DEFAULT_LEASE_SECONDS = 15 * 60;
+const MAX_LEASE_SECONDS = 24 * 60 * 60;
+
+function leaseSeconds(value) {
+  if (value == null) return DEFAULT_LEASE_SECONDS;
+  const seconds = Number(value);
+  if (!Number.isSafeInteger(seconds) || seconds < 30 || seconds > MAX_LEASE_SECONDS) {
+    throw Object.assign(new Error("invalid lease seconds"), { status: 400 });
+  }
+  return seconds;
+}
+
+function ownershipState(state) {
+  const source = state?.ownership && typeof state.ownership === "object" ? state.ownership : {};
+  return {
+    revision: Number.isSafeInteger(source.revision) && source.revision >= 0 ? source.revision : 0,
+    enforced: source.enforced === true,
+    ownerId: String(source.ownerId || "").trim() || null,
+    leaseId: String(source.leaseId || "").trim() || null,
+    leaseExpiresAt: String(source.leaseExpiresAt || "").trim() || null,
+    claimedAt: String(source.claimedAt || "").trim() || null,
+    renewedAt: String(source.renewedAt || "").trim() || null,
+    releasedAt: String(source.releasedAt || "").trim() || null,
+  };
+}
+
+function ownershipView(state, now = Date.now()) {
+  const ownership = ownershipState(state);
+  const expiry = ownership.leaseExpiresAt ? Date.parse(ownership.leaseExpiresAt) : NaN;
+  const active = Boolean(ownership.ownerId && ownership.leaseId && Number.isFinite(expiry) && expiry > now);
+  const expired = Boolean(ownership.ownerId && ownership.leaseId && Number.isFinite(expiry) && expiry <= now);
+  return {
+    ...ownership,
+    status: active ? "CLAIMED" : expired ? "EXPIRED" : "OPEN",
+    active,
+  };
+}
+
+function expectedOwnershipRevision(input) {
+  const revision = Number(input.expectedOwnershipRevision);
+  if (!Number.isSafeInteger(revision) || revision < 0) {
+    throw Object.assign(new Error("expected ownership revision is required"), { status: 400 });
+  }
+  return revision;
+}
+
+function assertOwnershipRevision(state, input) {
+  const current = ownershipState(state);
+  const expected = expectedOwnershipRevision(input);
+  if (expected !== current.revision) {
+    throw Object.assign(new Error("CENTRE_OWNERSHIP_STALE_REVISION"), { status: 409 });
+  }
+  return current;
+}
+
+function assertLeaseForMutation(state, input) {
+  const current = ownershipView(state);
+  if (!current.enforced) return;
+  if (!current.ownerId || !current.leaseId) {
+    throw Object.assign(new Error("CENTRE_WORK_UNCLAIMED"), { status: 409 });
+  }
+  if (!current.active) {
+    throw Object.assign(new Error("CENTRE_WORK_LEASE_EXPIRED"), { status: 409 });
+  }
+  const ownerId = required(input.ownerId, "Owner ID");
+  const leaseId = required(input.leaseId, "Lease ID");
+  const revision = expectedOwnershipRevision(input);
+  if (ownerId !== current.ownerId || leaseId !== current.leaseId) {
+    throw Object.assign(new Error("CENTRE_WORK_OWNERSHIP_CONFLICT"), { status: 409 });
+  }
+  if (revision !== current.revision) {
+    throw Object.assign(new Error("CENTRE_OWNERSHIP_STALE_REVISION"), { status: 409 });
+  }
+}
+
 function stateView(state, extra = {}) {
   const work = clone(state.work);
   return {
@@ -30,6 +105,7 @@ function stateView(state, extra = {}) {
     realityExists: state.realityExists === true,
     realityEvidence: clone(state.realityEvidence || null),
     interruption: clone(state.interruption || null),
+    ownership: ownershipView(state),
     ...extra,
   };
 }
@@ -96,6 +172,16 @@ export class GoHubCentreState {
         realityExists: false,
         realityEvidence: null,
         interruption: null,
+        ownership: {
+          revision: 0,
+          enforced: false,
+          ownerId: null,
+          leaseId: null,
+          leaseExpiresAt: null,
+          claimedAt: null,
+          renewedAt: null,
+          releasedAt: null,
+        },
       });
       return stateView(state, { resumed: false });
     }
@@ -105,7 +191,77 @@ export class GoHubCentreState {
 
     if (action === "inspect") return stateView(state, { resumed: true });
 
+    if (action === "claim") {
+      const current = assertOwnershipRevision(state, input);
+      const view = ownershipView(state);
+      if (view.active) {
+        throw Object.assign(new Error("CENTRE_WORK_ALREADY_CLAIMED"), { status: 409 });
+      }
+      const ownerId = required(input.ownerId, "Owner ID");
+      const now = new Date();
+      const seconds = leaseSeconds(input.leaseSeconds);
+      state.ownership = {
+        revision: current.revision + 1,
+        enforced: true,
+        ownerId,
+        leaseId: crypto.randomUUID(),
+        leaseExpiresAt: new Date(now.getTime() + seconds * 1000).toISOString(),
+        claimedAt: now.toISOString(),
+        renewedAt: null,
+        releasedAt: null,
+      };
+      await this.save(state);
+      return stateView(state, { ownershipChanged: "CLAIMED" });
+    }
+
+    if (action === "renew") {
+      const current = assertOwnershipRevision(state, input);
+      const view = ownershipView(state);
+      if (!view.ownerId || !view.leaseId || !view.active) {
+        throw Object.assign(new Error("CENTRE_WORK_LEASE_EXPIRED"), { status: 409 });
+      }
+      const ownerId = required(input.ownerId, "Owner ID");
+      const leaseId = required(input.leaseId, "Lease ID");
+      if (ownerId !== view.ownerId || leaseId !== view.leaseId) {
+        throw Object.assign(new Error("CENTRE_WORK_OWNERSHIP_CONFLICT"), { status: 409 });
+      }
+      const now = new Date();
+      state.ownership = {
+        ...current,
+        revision: current.revision + 1,
+        enforced: true,
+        ownerId,
+        leaseId,
+        leaseExpiresAt: new Date(now.getTime() + leaseSeconds(input.leaseSeconds) * 1000).toISOString(),
+        renewedAt: now.toISOString(),
+        releasedAt: null,
+      };
+      await this.save(state);
+      return stateView(state, { ownershipChanged: "RENEWED" });
+    }
+
+    if (action === "release") {
+      const current = assertOwnershipRevision(state, input);
+      const ownerId = required(input.ownerId, "Owner ID");
+      const leaseId = required(input.leaseId, "Lease ID");
+      if (!current.ownerId || !current.leaseId || ownerId !== current.ownerId || leaseId !== current.leaseId) {
+        throw Object.assign(new Error("CENTRE_WORK_OWNERSHIP_CONFLICT"), { status: 409 });
+      }
+      state.ownership = {
+        ...current,
+        revision: current.revision + 1,
+        enforced: true,
+        ownerId: null,
+        leaseId: null,
+        leaseExpiresAt: null,
+        releasedAt: new Date().toISOString(),
+      };
+      await this.save(state);
+      return stateView(state, { ownershipChanged: "RELEASED" });
+    }
+
     if (action === "review") {
+      assertLeaseForMutation(state, input);
       state.work = this.centre.review(state.work, {
         task: input.task,
         requestedResult: input.requestedResult,
@@ -118,6 +274,7 @@ export class GoHubCentreState {
     }
 
     if (action === "fit") {
+      assertLeaseForMutation(state, input);
       if (input.lensId != null || input.lensReference != null || input.fittedView != null) {
         throw Object.assign(new Error("LEGACY_LENS_CONTRACT_REJECTED"), { status: 400 });
       }
@@ -132,6 +289,7 @@ export class GoHubCentreState {
     }
 
     if (action === "leave") {
+      assertLeaseForMutation(state, input);
       const result = this.centre.leave(state.work, {
         destination: required(input.destination, "Destination"),
         targetId: input.targetId,
@@ -143,6 +301,7 @@ export class GoHubCentreState {
     }
 
     if (action === "return") {
+      assertLeaseForMutation(state, input);
       assertIdentity(state, input, { requireReturn: true });
       state.work = this.centre.return(state.work, {
         workId: state.work.workId,
@@ -155,6 +314,7 @@ export class GoHubCentreState {
     }
 
     if (action === "record_reality") {
+      assertLeaseForMutation(state, input);
       if (state.work.status !== CENTRE_STATES.AWAY) {
         throw Object.assign(new Error("Reality can only be recorded while work is AWAY"), { status: 409 });
       }
@@ -166,6 +326,7 @@ export class GoHubCentreState {
     }
 
     if (action === "cancel") {
+      assertLeaseForMutation(state, input);
       assertIdentity(state, input, { requireReturn: true });
       const routed = routeInterruptionReturn({
         workId: state.work.workId,
@@ -193,6 +354,7 @@ export class GoHubCentreState {
     }
 
     if (action === "resume") {
+      assertLeaseForMutation(state, input);
       if (state.work.status !== CENTRE_STATES.RETURNED) {
         throw Object.assign(new Error("Centre work must be RETURNED"), { status: 409 });
       }
