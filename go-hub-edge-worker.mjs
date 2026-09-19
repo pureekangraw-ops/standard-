@@ -6,6 +6,7 @@ import { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import {
   createLighthouseControlPortHttpService,
+  createLighthouseControlPortMcpService,
   LIGHTHOUSE_CONTROL_PORT_API_ROOT,
   LIGHTHOUSE_CONTROL_PORT_OWNER_PATH,
 } from "./go-hub-lighthouse-control-port-service.mjs";
@@ -172,7 +173,18 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
         if (request.method !== "POST") return json({ code: "METHOD_NOT_ALLOWED" }, 405);
         const body = await request.json().catch(() => null);
         if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code: "INVALID_JSON" }, 400);
-        return createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE }).action(body);
+        const response = await createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE }).action(body);
+        if (response.ok) {
+          const view = await response.clone().json().catch(() => null);
+          if (view?.ok) {
+            try {
+              await createLighthouseControlPortMcpService({
+                namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS,
+              }).projectCentre(view);
+            } catch {}
+          }
+        }
+        return response;
       }
       if (request.method === "POST" && url.pathname === FACTORY_ACTION_PATH) {
         if (!env?.GITHUB_TOKEN) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);

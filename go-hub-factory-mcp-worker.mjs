@@ -432,7 +432,16 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           observerLatest: () => observer.latest(),
           observerScreenshot: input => observer.screenshot(input),
           auditHistory: input => globalAudit.history(input),
-          centreLiveAction: input => centreLive.action(input),
+          centreLiveAction: async input => {
+            const response = await centreLive.action(input);
+            if (response.ok) {
+              const view = await response.clone().json().catch(() => null);
+              if (view?.ok) {
+                try { await lighthouseControlPort.projectCentre(view); } catch {}
+              }
+            }
+            return response;
+          },
           lighthouseControlPortState: input => lighthouseControlPort.state(input),
           lighthouseControlPortCommand: input => lighthouseControlPort.command(input),
           projectStatus: async input => json(await projectStatus.read(input)),
