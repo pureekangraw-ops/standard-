@@ -82,6 +82,7 @@ test("extracts one artifact entry and archives exact bytes to Drive with identit
   };
   let upload = null;
   const drive = {
+    defaultParentId: () => "folder-a",
     uploadFileBytes: async input => {
       upload = input;
       return new Response(JSON.stringify({
@@ -95,7 +96,6 @@ test("extracts one artifact entry and archives exact bytes to Drive with identit
     repository: "pureekangraw-ops/ygph-metropolis",
     runId: 100,
     artifactId: 8,
-    parentId: "folder-a",
     entrySuffix: "lighthouse-release.apk",
     destinationName: "lighthouse-owner.11-vc1016.apk",
   });
