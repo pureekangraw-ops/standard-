@@ -16,6 +16,7 @@ import { createProjectStatusReadService } from "./go-hub-project-status-service.
 import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
 import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
 import { createCounterService } from "./go-hub-counter.mjs";
+import { createCounterDispatchService } from "./go-hub-counter-dispatcher.mjs";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -59,6 +60,80 @@ function mutationEvent({ correlationId, stage, operation, workContext, result = 
 
 async function responsePayload(response) {
   return response.clone().json().catch(() => ({}));
+}
+
+export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
+  if (!counter || !dispatch) throw new Error("Counter and dispatch services are required");
+
+  async function parsed(response) {
+    return response.clone().json().catch(() => ({}));
+  }
+
+  return Object.freeze({
+    async create(input = {}) {
+      const response = await counter.create(input);
+      const payload = await parsed(response);
+      if (!response.ok) return response;
+      const state = payload.counter || {};
+      const dispatchResponse = await dispatch.open({
+        counterId:state.counterId,
+        workId:state.workId,
+        checkpointId:state.checkpointId,
+        request:state.request,
+        context:state.context || {},
+        sourceHints:state.sourceHints || [],
+        doNotChange:state.doNotChange || [],
+      });
+      const dispatchPayload = await parsed(dispatchResponse);
+      return json({
+        ...payload,
+        dispatch:dispatchPayload.dispatch || null,
+        dispatchCode:dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_FAILED"),
+      }, response.status);
+    },
+
+    async get(input = {}) {
+      const response = await counter.get(input);
+      const payload = await parsed(response);
+      if (!response.ok) return response;
+      const state = payload.counter || {};
+      const dispatchResponse = await dispatch.get({
+        counterId:state.counterId,
+        workId:state.workId,
+        checkpointId:state.checkpointId,
+      });
+      const dispatchPayload = await parsed(dispatchResponse);
+      return json({
+        ...payload,
+        dispatch:dispatchPayload.dispatch || null,
+        dispatchCode:dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_UNAVAILABLE"),
+      }, response.status);
+    },
+
+    async answer(input = {}) {
+      const response = await counter.answer(input);
+      const payload = await parsed(response);
+      if (!response.ok) return response;
+      const state = payload.counter || {};
+      const dispatchResponse = await dispatch.answer({
+        counterId:state.counterId,
+        workId:state.workId,
+        checkpointId:state.checkpointId,
+        status:state.currentState,
+        answer:state.answer,
+        sources:state.sources || [],
+        evidence:state.evidence || [],
+        confidence:state.confidence,
+        nextRoute:state.nextRoute,
+      });
+      const dispatchPayload = await parsed(dispatchResponse);
+      return json({
+        ...payload,
+        dispatch:dispatchPayload.dispatch || null,
+        dispatchCode:dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_FAILED"),
+      }, response.status);
+    },
+  });
 }
 
 export function createGovernedMutationRunner({ centreLive, globalAudit } = {}) {
@@ -321,6 +396,8 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
       const globalAudit = createGlobalAuditService({ namespace: env?.GO_HUB_GLOBAL_AUDIT });
       const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE });
+      const dispatch = createCounterDispatchService({ namespace: env?.GO_HUB_COUNTER_DISPATCH_STATE });
+      const counterDispatch = createCounterDispatchLifecycle({ counter, dispatch });
       const lighthouseControlPort = createLighthouseControlPortMcpService({ namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS });
       const projectStatus = createProjectStatusReadService({ lifecycle, factoryBinding:env?.GO_HUB_FACTORY_STATE });
       const boardPinRoute = createBoardPinRouteReadService();
@@ -360,10 +437,10 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           lighthouseControlPortCommand: input => lighthouseControlPort.command(input),
           projectStatus: async input => json(await projectStatus.read(input)),
           boardPinRoute: input => json(boardPinRoute.read(input)),
-          counterCreate: input => runMutation("counter.create", input, () => counter.create(input)),
-          counterGet: input => counter.get(input),
+          counterCreate: input => runMutation("counter.create", input, () => counterDispatch.create(input)),
+          counterGet: input => counterDispatch.get(input),
           counterSeen: input => runMutation("counter.seen", input, () => counter.seen(input)),
-          counterAnswer: input => runMutation("counter.answer", input, () => counter.answer(input)),
+          counterAnswer: input => runMutation("counter.answer", input, () => counterDispatch.answer(input)),
           counterReadback: input => runMutation("counter.readback", input, () => counter.readback(input)),
           linearListProjects: input => linear.listProjects(input),
           linearGetIssue: input => linear.getIssue(input),
