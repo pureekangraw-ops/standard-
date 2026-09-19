@@ -8,6 +8,7 @@ const FACTORY = "destination://factory";
 const MIMIR = "destination://mimir";
 const LINEAR = "destination://linear";
 const MAINTENANCE = "destination://maintenance";
+const DRIVE = "destination://drive";
 const workContext = {
   type: "object",
   properties: {
@@ -53,12 +54,19 @@ const definitions = [
   def("go_hub_linear_get_issue", "Read one Linear issue and enforce configured-team scope.", "linearGetIssue", schema({ identifier: str }, ["identifier"]), ann(true)),
   def("go_hub_linear_create_issue", "Create a Linear issue in the configured team.", "linearCreateIssue", schema({ title: str, description: nullableStr, projectId: nullableStr, priority, workContext }, ["title", "workContext"]), ann(false)),
   def("go_hub_linear_update_issue", "Update an in-team Linear issue after a scoped read.", "linearUpdateIssue", schema({ identifier: str, title: str, description: nullableStr, priority, stateId: nullableStr, projectId: nullableStr, workContext }, ["identifier", "workContext"]), ann(false)),
+  def("go_hub_drive_capabilities", "Inspect GO Hub Google Drive bridge configuration and supported operations without exposing credentials.", "driveCapabilities", schema({}), ann(true)),
+  def("go_hub_drive_get_item", "Read normalized Google Drive item metadata by file or folder ID.", "driveGetItem", schema({ fileId: str }, ["fileId"]), ann(true)),
+  def("go_hub_drive_list_children", "List normalized Google Drive children under one folder ID.", "driveListChildren", schema({ parentId: str, pageSize: { type: "integer", minimum: 1, maximum: 1000 }, pageToken: str }, ["parentId"]), ann(true)),
+  def("go_hub_drive_create_folder", "Create a Google Drive folder and require destination readback before success.", "driveCreateFolder", schema({ parentId: str, name: str, workContext }, ["parentId", "name", "workContext"]), ann(false)),
+  def("go_hub_drive_move_item", "Move an existing Google Drive item with native parent update and require destination readback before success.", "driveMoveItem", schema({ fileId: str, destinationFolderId: str, workContext }, ["fileId", "destinationFolderId", "workContext"]), ann(false)),
+  def("go_hub_drive_rename_item", "Rename an existing Google Drive item and require readback before success.", "driveRenameItem", schema({ fileId: str, name: str, workContext }, ["fileId", "name", "workContext"]), ann(false)),
 ];
 
 const factoryTools = new Set(["go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_merge_pull_request", "go_hub_factory_action"]);
 const mimirTools = new Set(["go_hub_mimir_search_catalog", "go_hub_mimir_search_knowledge"]);
 const maintenanceTools = new Set(["go_hub_maintenance"]);
 const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linear_update_issue"]);
+const driveMutationTools = new Set(["go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item"]);
 
 function assertArgs(definition, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("invalid MCP tool arguments");
@@ -87,6 +95,7 @@ function assertLifecycle(name, args) {
   if (linearMutationTools.has(name)) assertWork(args.workContext, LINEAR);
   if (mimirTools.has(name)) assertWork(args.workContext, MIMIR);
   if (maintenanceTools.has(name)) assertWork(args.workContext, MAINTENANCE);
+  if (driveMutationTools.has(name)) assertWork(args.workContext, DRIVE);
   if (name === "go_hub_factory_foreman" && args.action !== "state") assertWork(args.workContext, FACTORY);
 }
 
