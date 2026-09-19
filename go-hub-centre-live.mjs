@@ -142,6 +142,27 @@ function assertEvidence(value, label) {
   };
 }
 
+function validationState(state) {
+  return state?.validationEvidence && typeof state.validationEvidence === "object"
+    ? clone(state.validationEvidence)
+    : null;
+}
+
+function assertEvidenceBackedReturn(state) {
+  if (state.realityExists !== true || !state.realityEvidence?.reference) {
+    throw Object.assign(new Error("CENTRE_RETURN_REQUIRES_REALITY"), { status: 409 });
+  }
+  const validation = validationState(state);
+  if (!validation) {
+    throw Object.assign(new Error("CENTRE_RETURN_REQUIRES_VALIDATION"), { status: 409 });
+  }
+  if (validation.realityReference !== state.realityEvidence.reference ||
+      Number(validation.effectRevision) !== effectLedgerState(state).revision ||
+      Number(validation.executionCheckpointRevision) !== executionCheckpointState(state).revision) {
+    throw Object.assign(new Error("CENTRE_VALIDATION_STALE"), { status: 409 });
+  }
+}
+
 function stateView(state, extra = {}) {
   const work = clone(state.work);
   return {
@@ -153,6 +174,7 @@ function stateView(state, extra = {}) {
     returnAddress: work.checkpointId,
     realityExists: state.realityExists === true,
     realityEvidence: clone(state.realityEvidence || null),
+    validationEvidence: validationState(state),
     interruption: clone(state.interruption || null),
     ownership: ownershipView(state),
     effectLedger: effectLedgerState(state),
@@ -217,6 +239,7 @@ export class GoHubCentreState {
         effectRevision: effectLedgerState(state).revision,
         executionCheckpointId: executionCheckpointState(state).latest?.executionCheckpointId || null,
         realityReference: state?.realityEvidence?.reference || null,
+        validationReference: state?.validationEvidence?.reference || null,
       },
     };
   }
@@ -279,6 +302,7 @@ export class GoHubCentreState {
         phase: "ARRIVED",
         realityExists: false,
         realityEvidence: null,
+        validationEvidence: null,
         interruption: null,
         ownership: {
           revision: 0,
@@ -436,6 +460,7 @@ export class GoHubCentreState {
       };
       state.executionCheckpoint = { revision: checkpoint.revision + 1, latest };
       state.executionResume = null;
+      state.validationEvidence = null;
       await this.save(state);
       return stateView(state, { executionCheckpointChanged: "SAVED" });
     }
@@ -472,6 +497,7 @@ export class GoHubCentreState {
         ...clone(resumePlan),
         resumedAt: new Date().toISOString(),
       };
+      state.validationEvidence = null;
       state.phase = "EXECUTION_RESUME";
       await this.save(state);
       return stateView(state, { resumePlan });
@@ -517,9 +543,31 @@ export class GoHubCentreState {
       return stateView(state, { envelope: result.envelope });
     }
 
+    if (action === "validate") {
+      assertLeaseForMutation(state, input);
+      if (state.work.status !== CENTRE_STATES.AWAY) {
+        throw Object.assign(new Error("Validation can only be recorded while work is AWAY"), { status: 409 });
+      }
+      if (state.realityExists !== true || !state.realityEvidence?.reference) {
+        throw Object.assign(new Error("CENTRE_VALIDATION_REQUIRES_REALITY"), { status: 409 });
+      }
+      const evidence = assertEvidence(input.evidence, "Validation evidence");
+      state.validationEvidence = {
+        ...evidence,
+        realityReference: state.realityEvidence.reference,
+        effectRevision: effectLedgerState(state).revision,
+        executionCheckpointRevision: executionCheckpointState(state).revision,
+        validatedAt: new Date().toISOString(),
+      };
+      state.phase = "VALIDATED";
+      await this.save(state);
+      return stateView(state);
+    }
+
     if (action === "return") {
       assertLeaseForMutation(state, input);
       assertIdentity(state, input, { requireReturn: true });
+      assertEvidenceBackedReturn(state);
       state.work = this.centre.return(state.work, {
         workId: state.work.workId,
         checkpointId: state.work.checkpointId,
@@ -537,6 +585,7 @@ export class GoHubCentreState {
       }
       state.realityExists = true;
       state.realityEvidence = assertRealityEvidence(input.evidence);
+      state.validationEvidence = null;
       state.phase = "REALITY";
       await this.save(state);
       return stateView(state);
@@ -578,6 +627,9 @@ export class GoHubCentreState {
       state.work = this.centre.resume(state.work, { reuseFit: input.reuseFit === true });
       state.phase = "RESUMED";
       state.interruption = null;
+      state.realityExists = false;
+      state.realityEvidence = null;
+      state.validationEvidence = null;
       await this.save(state);
       return stateView(state);
     }
