@@ -3,7 +3,7 @@ const DESTINATIONS = Object.freeze({
   mimir: Object.freeze({ id: "mimir", role: "information-entry", route: "destination://mimir" }),
   linear: Object.freeze({ id: "linear", role: "work-tracking-entry", route: "destination://linear" }),
   browser: Object.freeze({ id: "browser", role: "reality-entry", route: "destination://browser" }),
-  maintenance: Object.freeze({ id: "maintenance", role: "maintenance-entry", route: "destination://maintenance" }),
+  maintenance: Object.freeze({ id: "maintenance", role: "maintenance-entry", route: "destination://maintenance" }),\n  counter: Object.freeze({ id: "counter", role: "shared-counter-entry", route: "destination://counter" }),
 });
 
 const WORK_CONTEXT_FIELDS = Object.freeze([
