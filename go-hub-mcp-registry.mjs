@@ -9,6 +9,7 @@ const MIMIR = "destination://mimir";
 const LINEAR = "destination://linear";
 const MAINTENANCE = "destination://maintenance";
 const DRIVE = "destination://drive";
+const COUNTER = "destination://counter";
 const workContext = {
   type: "object",
   properties: {
@@ -52,6 +53,11 @@ const definitions = [
   def("go_hub_lighthouse_control_port_command", "Queue one governed command for paired LIGHTHOUSE Control Port. Owner confirmation remains enforced on-device by capability guard.", "lighthouseControlPortCommand", schema({ targetId: str, requestId: str, capabilityId: str, payload: obj }, ["targetId", "requestId", "capabilityId", "payload"]), ann(false)),
   def("go_hub_project_status", "Read normalized Project Status from current GitHub truth and optional Factory task truth.", "projectStatus", schema({ targetId: str, factoryTaskId: str }, ["targetId"]), ann(true)),
   def("go_hub_board_pin_route", "Resolve first-command Pin identity routing without mutating the Board.", "boardPinRoute", schema({ firstCommand: str, pin: obj }, ["firstCommand"]), ann(true)),
+  def("go_hub_counter_create", "Create one governed GO↔LIGHT Counter ticket.", "counterCreate", schema({ counterId: str, request: str, context: obj, sourceHints: { type: "array", items: str }, doNotChange: { type: "array", items: str }, workContext }, ["counterId", "request", "workContext"]), ann(false)),
+  def("go_hub_counter_get", "Read the current GO↔LIGHT Counter ticket and append-only event history.", "counterGet", schema({ counterId: str, workContext }, ["counterId", "workContext"]), ann(true)),
+  def("go_hub_counter_seen", "Mark one Counter ticket as seen by LIGHT.", "counterSeen", schema({ counterId: str, workContext }, ["counterId", "workContext"]), ann(false)),
+  def("go_hub_counter_answer", "Write LIGHT's bounded answer back to the same Counter ticket.", "counterAnswer", schema({ counterId: str, status: { type: "string", enum: ["ANSWERED", "WAIT", "UNKNOWN", "NEEDS_INPUT", "FAILED", "EXPIRED"] }, answer: str, sources: { type: "array", items: str }, evidence: { type: "array", items: obj }, confidence: { type: "string" }, nextRoute: { type: "string" }, workContext }, ["counterId", "status", "answer", "workContext"]), ann(false)),
+  def("go_hub_counter_readback", "Record GO readback on the same Counter ticket and close it by default.", "counterReadback", schema({ counterId: str, evidence: obj, close: { type: "boolean" }, workContext }, ["counterId", "evidence", "workContext"]), ann(false)),
   def("go_hub_mimir_search_catalog", "Search live MIMIR catalog with Gate-before-Rating.", "searchCatalog", schema({ task: str, requestedResult: str, lensReference: str, workContext }, ["task", "requestedResult", "workContext"]), ann(true)),
   def("go_hub_mimir_search_knowledge", "Search verified MIMIR knowledge with freshness and evidence gates.", "searchKnowledge", schema({ task: str, requestedResult: str, lensReference: str, workContext }, ["task", "requestedResult", "workContext"]), ann(true)),
   def("go_hub_observer_latest", "Read latest sanitized Browser Observer evidence.", "observerLatest", schema({}), ann(true)),
@@ -76,6 +82,7 @@ const mimirTools = new Set(["go_hub_mimir_search_catalog", "go_hub_mimir_search_
 const maintenanceTools = new Set(["go_hub_maintenance"]);
 const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linear_update_issue"]);
 const driveMutationTools = new Set(["go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item", "go_hub_archive_workflow_artifact"]);
+const counterTools = new Set(["go_hub_counter_create", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_answer", "go_hub_counter_readback"]);
 
 function assertArgs(definition, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("invalid MCP tool arguments");
@@ -105,6 +112,7 @@ function assertLifecycle(name, args) {
   if (mimirTools.has(name)) assertWork(args.workContext, MIMIR);
   if (maintenanceTools.has(name)) assertWork(args.workContext, MAINTENANCE);
   if (driveMutationTools.has(name)) assertWork(args.workContext, DRIVE);
+  if (counterTools.has(name)) assertWork(args.workContext, COUNTER);
   if (name === "go_hub_factory_foreman" && args.action !== "state") assertWork(args.workContext, FACTORY);
 }
 
