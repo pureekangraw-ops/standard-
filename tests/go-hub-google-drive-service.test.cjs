@@ -38,7 +38,7 @@ test("Drive service fails closed when auth is missing", async () => {
     configured: false,
     authMode: null,
     rootScopeConfigured: false,
-    operations: ["capabilities", "get_item", "list_children", "create_folder", "move_item", "rename_item"],
+    operations: ["capabilities", "health", "get_item", "list_children", "create_folder", "move_item", "rename_item"],
     destructiveDeleteExposed: false,
     mutationReadbackRequired: true,
   });
@@ -80,6 +80,26 @@ test("Drive service refreshes OAuth token server-side and never echoes secrets",
   assert.equal(payload.item.md5Checksum, "abc123");
   assert.equal(requests.length, 2);
   assert.doesNotMatch(JSON.stringify(payload), /access-secret|refresh-secret|client-secret/);
+});
+
+test("Drive health proves auth and upstream without returning account data", async () => {
+  const { createGoogleDriveService } = await load("health");
+  let calls = 0;
+  const service = createGoogleDriveService({
+    accessToken: "token-a",
+    fetchImpl: async (url, init = {}) => {
+      calls += 1;
+      assert.equal(String(url), "https://www.googleapis.com/drive/v3/about?fields=storageQuota(limit,usage)");
+      assert.equal(init.headers.authorization, "Bearer token-a");
+      return new Response(JSON.stringify({ storageQuota: { limit: "1", usage: "0" } }), {
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const response = await service.health();
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, upstream: "PASS", authMode: "access_token" });
+  assert.equal(calls, 1);
 });
 
 test("Drive createFolder requires readback before PASS", async () => {
