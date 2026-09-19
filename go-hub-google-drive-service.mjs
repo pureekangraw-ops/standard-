@@ -177,6 +177,7 @@ export function createGoogleDriveService({
         rootScopeConfigured: Boolean(scopeRoot),
         operations: [
           "capabilities",
+          "health",
           "get_item",
           "list_children",
           "create_folder",
@@ -186,6 +187,12 @@ export function createGoogleDriveService({
         destructiveDeleteExposed: false,
         mutationReadbackRequired: true,
       });
+    },
+
+    async health() {
+      const result = await request("/about?fields=storageQuota(limit,usage)");
+      if (result.response) return result.response;
+      return json({ ok: true, upstream: "PASS", authMode: authMode() });
     },
 
     async getItem(input = {}) {
