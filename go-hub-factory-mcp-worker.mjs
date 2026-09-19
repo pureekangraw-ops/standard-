@@ -31,6 +31,114 @@ function firstEnv(env, names) {
   return "";
 }
 
+function workText(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function mutationEvent({ correlationId, stage, operation, workContext, result = null } = {}) {
+  return {
+    eventId: "MUTATION-" + correlationId + "-" + stage,
+    type: "TOOL_MUTATION_" + stage,
+    workId: workText(workContext?.workId),
+    checkpointId: workText(workContext?.checkpointId),
+    phase: "TOOL_MUTATION",
+    at: new Date().toISOString(),
+    details: {
+      correlationId,
+      operation,
+      destination: workText(workContext?.destination) || null,
+      ...(result ? {
+        ok: result.ok === true,
+        status: Number(result.status || 0),
+        code: workText(result.code) || null,
+      } : {}),
+    },
+  };
+}
+
+async function responsePayload(response) {
+  return response.clone().json().catch(() => ({}));
+}
+
+export function createGovernedMutationRunner({ centreLive, globalAudit } = {}) {
+  if (!centreLive || typeof centreLive.action !== "function") throw new Error("Centre live service is required");
+  if (!globalAudit || typeof globalAudit.append !== "function") throw new Error("Global audit service is required");
+
+  return async function runGovernedMutation(operation, input = {}, execute) {
+    if (typeof execute !== "function") return json({ code: "MUTATION_EXECUTOR_REQUIRED" }, 500);
+    const workContext = input?.workContext;
+    if (!workContext || typeof workContext !== "object") return json({ code: "WORK_CONTEXT_REQUIRED" }, 400);
+
+    const inspected = await centreLive.action({
+      action: "inspect",
+      workId: workContext.workId,
+      checkpointId: workContext.checkpointId,
+    });
+    const centre = await responsePayload(inspected);
+    if (!inspected.ok) return json({ code: centre.code || "CENTRE_WORK_UNAVAILABLE" }, inspected.status || 502);
+    if (String(centre.checkpointId || "") !== String(workContext.checkpointId || "")) {
+      return json({ code: "CENTRE_CHECKPOINT_MISMATCH" }, 409);
+    }
+
+    const ownership = centre.ownership || {};
+    if (ownership.enforced === true) {
+      if (ownership.active !== true) return json({ code: "CENTRE_WORK_LEASE_INACTIVE" }, 409);
+      if (!workText(workContext.ownerId) || !workText(workContext.leaseId) ||
+          !Number.isSafeInteger(workContext.ownershipRevision)) {
+        return json({ code: "CENTRE_WORK_LEASE_REQUIRED" }, 409);
+      }
+      if (workText(workContext.ownerId) !== workText(ownership.ownerId) ||
+          workText(workContext.leaseId) !== workText(ownership.leaseId)) {
+        return json({ code: "CENTRE_WORK_OWNERSHIP_CONFLICT" }, 409);
+      }
+      if (Number(workContext.ownershipRevision) !== Number(ownership.revision)) {
+        return json({ code: "CENTRE_OWNERSHIP_STALE_REVISION" }, 409);
+      }
+    }
+
+    const correlationId = crypto.randomUUID();
+    const intent = await globalAudit.append(mutationEvent({
+      correlationId, stage: "INTENT", operation, workContext,
+    }));
+    const intentPayload = await responsePayload(intent);
+    if (!intent.ok) {
+      return json({
+        code: "GLOBAL_AUDIT_INTENT_REQUIRED",
+        auditCode: intentPayload.code || null,
+      }, 502);
+    }
+
+    let result;
+    try {
+      result = await execute();
+    } catch {
+      result = json({ code: "MUTATION_EXECUTION_ERROR" }, 502);
+    }
+    const payload = await responsePayload(result);
+    const outcome = {
+      ok: result.ok,
+      status: result.status,
+      code: payload?.code || null,
+    };
+    const recorded = await globalAudit.append(mutationEvent({
+      correlationId, stage: "RESULT", operation, workContext, result: outcome,
+    }));
+    const auditPayload = await responsePayload(recorded);
+    if (!recorded.ok) {
+      return json({
+        code: "GLOBAL_AUDIT_RECONCILIATION_REQUIRED",
+        operation,
+        mutationObserved: true,
+        upstreamStatus: result.status,
+        upstreamCode: payload?.code || null,
+        auditCode: auditPayload.code || null,
+        correlationId,
+      }, 502);
+    }
+    return result;
+  };
+}
+
 function observerStatus(code) {
   if (code === "SCHEMA_REJECTED") return 400;
   if (code === "SESSION_EXPIRED") return 410;
@@ -223,10 +331,22 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         rootFolderId: firstEnv(env, ["GOOGLE_DRIVE_ROOT_FOLDER_ID", "DRIVE_ROOT_FOLDER_ID", "GDRIVE_ROOT_FOLDER_ID", "GOOGLE_DRIVE_FOLDER_ID", "DRIVE_FOLDER_ID", "GDRIVE_FOLDER_ID", "GOOGLE_ROOT_FOLDER_ID"]),
       });
       const artifactDelivery = createWorkflowArtifactService({ fetchImpl, token: env.GITHUB_TOKEN, drive });
+      const runMutation = (env?.GO_HUB_CENTRE_STATE && env?.GO_HUB_GLOBAL_AUDIT)
+        ? createGovernedMutationRunner({ centreLive, globalAudit })
+        : async (_operation, _input, execute) => execute();
       const registry = createMcpRegistry({
         lifecycle: Object.freeze({
           ...lifecycle,
-          factoryAction: input => factoryAction(input),
+          createBranch: input => runMutation("github.create_branch", input, () => lifecycle.createBranch(input)),
+          putFile: input => runMutation("github.put_file", input, () => lifecycle.putFile(input)),
+          deleteFile: input => runMutation("github.delete_file", input, () => lifecycle.deleteFile(input)),
+          openPullRequest: input => runMutation("github.open_pull_request", input, () => lifecycle.openPullRequest(input)),
+          rerunFailed: input => runMutation("github.rerun_failed", input, () => lifecycle.rerunFailed(input)),
+          mergePullRequest: input => runMutation("github.merge_pull_request", input, () => lifecycle.mergePullRequest(input)),
+          factoryForeman: input => input.action === "state"
+            ? lifecycle.factoryForeman(input)
+            : runMutation("factory.foreman." + String(input.action || "unknown"), input, () => lifecycle.factoryForeman(input)),
+          factoryAction: input => runMutation("factory.action." + String(input.action || "unknown"), input, () => factoryAction(input)),
           maintenance: input => maintenance.maintenance(input),
           searchCatalog: input => catalog.searchCatalog(input),
           searchKnowledge: input => knowledge.searchKnowledge(input),
@@ -240,19 +360,19 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           boardPinRoute: input => json(boardPinRoute.read(input)),
           linearListProjects: input => linear.listProjects(input),
           linearGetIssue: input => linear.getIssue(input),
-          linearCreateIssue: input => linear.createIssue(input),
-          linearUpdateIssue: input => linear.updateIssue(input),
+          linearCreateIssue: input => runMutation("linear.create_issue", input, () => linear.createIssue(input)),
+          linearUpdateIssue: input => runMutation("linear.update_issue", input, () => linear.updateIssue(input)),
           driveCapabilities: () => drive.capabilities(),
           driveHealth: () => drive.health(),
           driveDiagnostics: () => drive.diagnostics(),
           driveRoot: () => drive.root(),
           driveGetItem: input => drive.getItem(input),
           driveListChildren: input => drive.listChildren(input),
-          driveCreateFolder: input => drive.createFolder(input),
-          driveMoveItem: input => drive.moveItem(input),
-          driveRenameItem: input => drive.renameItem(input),
+          driveCreateFolder: input => runMutation("drive.create_folder", input, () => drive.createFolder(input)),
+          driveMoveItem: input => runMutation("drive.move_item", input, () => drive.moveItem(input)),
+          driveRenameItem: input => runMutation("drive.rename_item", input, () => drive.renameItem(input)),
           listWorkflowArtifacts: input => artifactDelivery.listArtifacts(input),
-          archiveWorkflowArtifact: input => artifactDelivery.archiveArtifact(input),
+          archiveWorkflowArtifact: input => runMutation("artifact.archive_workflow", input, () => artifactDelivery.archiveArtifact(input)),
         }),
       });
 
