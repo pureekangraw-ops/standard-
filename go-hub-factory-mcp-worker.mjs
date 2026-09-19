@@ -87,24 +87,27 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
       const dispatchPayload = await parsed(dispatchResponse);
 
       let finalPayload = payload;
-      if (dispatchPayload.lightAnswer) {
+      const lightAnswer = dispatchPayload.lightAnswer || dispatchPayload.dispatch?.lightResult || null;
+      if (lightAnswer) {
         const identity = {
           counterId:state.counterId,
-          workId:state.workId,
-          checkpointId:state.checkpointId,
+          workContext:{
+            workId:state.workId,
+            checkpointId:state.checkpointId,
+          },
         };
         const seenResponse = await counter.seen(identity);
         if (!seenResponse.ok) return seenResponse;
         const answerResponse = await counter.answer({
           ...identity,
-          ...dispatchPayload.lightAnswer,
+          ...lightAnswer,
         });
         if (!answerResponse.ok) return answerResponse;
         const answerPayload = await parsed(answerResponse);
         finalPayload = {
           ...payload,
           counter:answerPayload.counter,
-          lightResult:dispatchPayload.lightAnswer,
+          lightResult:lightAnswer,
         };
       }
 
