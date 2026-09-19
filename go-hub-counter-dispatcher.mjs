@@ -130,14 +130,25 @@ export function createCounterDispatchCore({
     const target = required(input.target, "Target").toUpperCase();
     if (!["LIGHT","GO"].includes(target)) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
     const state = clone(current);
-    if (state.legs[target].status === "WAITING_TARGET") return publicState(state, { idempotent:true });
+    const targetLeg = state.legs[target];
+    const alreadyWaiting = targetLeg.status === "WAITING_TARGET";
+    const staleNextAttemptAt = targetLeg.nextAttemptAt;
+    if (alreadyWaiting && staleNextAttemptAt == null) {
+      return publicState(state, { idempotent:true });
+    }
     state.revision += 1;
-    state.legs[target].status = "WAITING_TARGET";
-    state.legs[target].lastError = "CALLABLE_TARGET_NOT_CONFIGURED";
-    state.legs[target].nextAttemptAt = new Date(Number(now()) + WAITING_TARGET_RETRY_MS).toISOString();
+    targetLeg.status = "WAITING_TARGET";
+    targetLeg.lastError = "CALLABLE_TARGET_NOT_CONFIGURED";
+    targetLeg.nextAttemptAt = null;
     state.updatedAt = stamp();
-    append(state, "WAITING_TARGET", target, state.updatedAt);
-    return publicState(state);
+    append(
+      state,
+      alreadyWaiting ? "WAITING_TARGET_RECONCILED" : "WAITING_TARGET",
+      target,
+      state.updatedAt,
+      alreadyWaiting ? { clearedNextAttemptAt:staleNextAttemptAt } : null,
+    );
+    return publicState(state, { reconciled:alreadyWaiting });
   }
 
   function beginAttempt(input = {}, current = null) {
