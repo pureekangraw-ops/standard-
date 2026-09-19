@@ -4,6 +4,7 @@ import { createFactoryMcpWorker } from "./go-hub-factory-mcp-worker.mjs";
 import { createFactoryActionService } from "./go-hub-factory-service.mjs";
 import { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
+import { createNotionLightService } from "./go-hub-notion-light.mjs";
 import {
   createLighthouseControlPortHttpService,
   createLighthouseControlPortMcpService,
@@ -17,6 +18,7 @@ export { GoHubCentreState } from "./go-hub-centre-live.mjs";
 export { GoHubGlobalAuditLog } from "./go-hub-global-audit.mjs";
 export { GoHubCounterState } from "./go-hub-counter.mjs";
 export { GoHubCounterDispatchState } from "./go-hub-counter-dispatcher.mjs";
+export { GoHubNotionLightState } from "./go-hub-notion-light.mjs";
 export { LighthouseControlPortSessionRegistry } from "./go-hub-lighthouse-control-port-session.js";
 
 const CENTRE_API_ROOT = "/hub/api/centre";
@@ -158,6 +160,26 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
       const url = new URL(request.url);
       if (url.pathname === "/mcp") {
         return factoryMcp.fetch(request, env);
+      }
+      if (request.method === "GET" && url.pathname === "/hub/api/notion-light/callback") {
+        const notionLight = createNotionLightService({ namespace:env?.GO_HUB_NOTION_LIGHT_STATE });
+        const result = await notionLight.callback({
+          code:url.searchParams.get("code"),
+          state:url.searchParams.get("state"),
+          error:url.searchParams.get("error"),
+          error_description:url.searchParams.get("error_description"),
+        });
+        const payload = await result.json().catch(() => ({}));
+        if (!result.ok || payload?.ok !== true) {
+          return new Response(
+            `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Notion connection failed</title></head><body><h1>Notion connection failed</h1><p>${String(payload?.code || "NOTION_LIGHT_OAUTH_FAILED")}</p><p>Return to ChatGPT and retry the same Counter ticket.</p></body></html>`,
+            { status:result.status || 400, headers:{ "content-type":"text/html; charset=utf-8", "cache-control":"no-store" } },
+          );
+        }
+        return new Response(
+          `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Notion connected</title></head><body><h1>Notion connected ✅</h1><p>LIGHT is now connected to your Notion workspace.</p><p>You can return to ChatGPT. GO can retry the same Counter ticket.</p></body></html>`,
+          { status:200, headers:{ "content-type":"text/html; charset=utf-8", "cache-control":"no-store" } },
+        );
       }
       if (request.method === "GET" && url.pathname === "/hub/observer") {
         return observerOwnerPage();

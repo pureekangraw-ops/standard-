@@ -85,10 +85,38 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
         doNotChange:state.doNotChange || [],
       });
       const dispatchPayload = await parsed(dispatchResponse);
+
+      let finalPayload = payload;
+      if (dispatchPayload.lightAnswer) {
+        const identity = {
+          counterId:state.counterId,
+          workId:state.workId,
+          checkpointId:state.checkpointId,
+        };
+        const seenResponse = await counter.seen(identity);
+        if (!seenResponse.ok) return seenResponse;
+        const answerResponse = await counter.answer({
+          ...identity,
+          ...dispatchPayload.lightAnswer,
+        });
+        if (!answerResponse.ok) return answerResponse;
+        const answerPayload = await parsed(answerResponse);
+        finalPayload = {
+          ...payload,
+          counter:answerPayload.counter,
+          lightResult:dispatchPayload.lightAnswer,
+        };
+      }
+
       return json({
-        ...payload,
+        ...finalPayload,
         dispatch:dispatchPayload.dispatch || null,
         dispatchCode:dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_FAILED"),
+        lightAuthorizationUrl:dispatchPayload.authorizationUrl || null,
+        lightAuthRequired:dispatchPayload.authRequired === true,
+        lightCapabilityBlocked:dispatchPayload.capabilityBlocked === true,
+        lightCapabilityStatus:dispatchPayload.capabilityStatus || null,
+        lightUpgradeUrl:dispatchPayload.upgradeUrl || null,
       }, response.status);
     },
 
@@ -396,7 +424,10 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
       const globalAudit = createGlobalAuditService({ namespace: env?.GO_HUB_GLOBAL_AUDIT });
       const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE });
-      const dispatch = createCounterDispatchService({ namespace: env?.GO_HUB_COUNTER_DISPATCH_STATE });
+      const dispatch = createCounterDispatchService({
+        namespace: env?.GO_HUB_COUNTER_DISPATCH_STATE,
+        hubOrigin: url.origin,
+      });
       const counterDispatch = createCounterDispatchLifecycle({ counter, dispatch });
       const lighthouseControlPort = createLighthouseControlPortMcpService({ namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS });
       const projectStatus = createProjectStatusReadService({ lifecycle, factoryBinding:env?.GO_HUB_FACTORY_STATE });
