@@ -151,6 +151,43 @@ export function createCounterDispatchCore({
     return publicState(state, { reconciled:alreadyWaiting });
   }
 
+  function waitingAuth(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    const state = clone(current);
+    const targetLeg = state.legs[target];
+    if (!targetLeg) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    if (targetLeg.status === "WAITING_AUTH" && targetLeg.nextAttemptAt == null) {
+      return publicState(state, { idempotent:true });
+    }
+    state.revision += 1;
+    targetLeg.status = "WAITING_AUTH";
+    targetLeg.lastError = "NOTION_LIGHT_AUTH_REQUIRED";
+    targetLeg.nextAttemptAt = null;
+    state.updatedAt = stamp();
+    append(state, "WAITING_AUTH", target, state.updatedAt);
+    return publicState(state);
+  }
+
+  function blocked(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    const state = clone(current);
+    const targetLeg = state.legs[target];
+    if (!targetLeg) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    const code = String(input.error || "DISPATCH_BLOCKED").slice(0, 240);
+    if (targetLeg.status === "BLOCKED" && targetLeg.lastError === code) {
+      return publicState(state, { idempotent:true });
+    }
+    state.revision += 1;
+    targetLeg.status = "BLOCKED";
+    targetLeg.lastError = code;
+    targetLeg.nextAttemptAt = null;
+    state.updatedAt = stamp();
+    append(state, "BLOCKED", target, state.updatedAt, { error:code });
+    return publicState(state);
+  }
+
   function beginAttempt(input = {}, current = null) {
     if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
     const target = required(input.target, "Target").toUpperCase();
@@ -211,7 +248,7 @@ export function createCounterDispatchCore({
     return publicState(state);
   }
 
-  return Object.freeze({ enqueueOpen, enqueueAnswer, waitingTarget, beginAttempt, delivered, failed });
+  return Object.freeze({ enqueueOpen, enqueueAnswer, waitingTarget, waitingAuth, blocked, beginAttempt, delivered, failed });
 }
 
 function endpoint(env, target) {
@@ -264,8 +301,122 @@ export class GoHubCounterDispatchState {
     const when = Date.parse(iso);
     if (Number.isFinite(when)) await this.ctx.storage.setAlarm(when);
   }
-  async deliver(target, current) {
+  async deliver(target, current, hubOrigin = null) {
     let state = current;
+
+    if (target === "LIGHT") {
+      const namespace = this.env?.GO_HUB_NOTION_LIGHT_STATE;
+      const notion = namespace && typeof namespace.getByName === "function"
+        ? namespace.getByName("notion-light-primary")
+        : null;
+      if (!notion || typeof notion.fetch !== "function") {
+        const result = this.core.waitingTarget({ target }, state);
+        if (!result.idempotent) await this.save(result.dispatch);
+        return publicState(result.dispatch, { targetConfigured:false });
+      }
+
+      const statusResponse = await notion.fetch(new Request("https://notion-light.internal/status", {
+        method:"POST",
+        headers:{ "content-type":"application/json" },
+        body:JSON.stringify({ action:"status" }),
+      }));
+      const status = await statusResponse.json().catch(() => ({}));
+
+      if (!statusResponse.ok || status.connected !== true) {
+        let authorizationUrl = null;
+        if (hubOrigin) {
+          const prepareResponse = await notion.fetch(new Request("https://notion-light.internal/prepare", {
+            method:"POST",
+            headers:{ "content-type":"application/json" },
+            body:JSON.stringify({ action:"prepare", hubOrigin }),
+          }));
+          const prepared = await prepareResponse.json().catch(() => ({}));
+          if (prepareResponse.ok) authorizationUrl = prepared.authorizationUrl || null;
+        }
+        const result = this.core.waitingAuth({ target }, state);
+        if (!result.idempotent) await this.save(result.dispatch);
+        return publicState(result.dispatch, {
+          targetConfigured:true,
+          authRequired:true,
+          authorizationUrl,
+        });
+      }
+
+      const attempt = this.core.beginAttempt({ target }, state);
+      state = attempt.dispatch;
+      if (attempt.idempotent) return publicState(state);
+      await this.save(state);
+
+      try {
+        const response = await notion.fetch(new Request("https://notion-light.internal/search", {
+          method:"POST",
+          headers:{ "content-type":"application/json" },
+          body:JSON.stringify({
+            action:"search",
+            query:state.request,
+            counterId:state.counterId,
+            workId:state.workId,
+            checkpointId:state.checkpointId,
+            context:state.context,
+          }),
+        }));
+        const body = await response.json().catch(() => ({}));
+
+        if (body?.code === "NOTION_LIGHT_AUTH_REQUIRED" || body?.code === "NOTION_LIGHT_REAUTH_REQUIRED") {
+          const waiting = this.core.waitingAuth({ target }, state);
+          await this.save(waiting.dispatch);
+          return publicState(waiting.dispatch, { targetConfigured:true, authRequired:true });
+        }
+
+        if (body?.code === "NOTION_AI_SEARCH_UNAVAILABLE") {
+          const denied = this.core.blocked({
+            target,
+            error:"NOTION_AI_SEARCH_UNAVAILABLE:" + String(body.status || "unknown"),
+          }, state);
+          await this.save(denied.dispatch);
+          return publicState(denied.dispatch, {
+            targetConfigured:true,
+            capabilityBlocked:true,
+            capabilityStatus:body.status || null,
+            upgradeUrl:body.upgradeUrl || null,
+          });
+        }
+
+        if (!response.ok || body?.ok !== true) throw new Error(body?.code || "NOTION_LIGHT_SEARCH_FAILED");
+
+        const delivered = this.core.delivered({
+          target,
+          receipt:{
+            httpStatus:response.status,
+            receiptId:"notion-ai-search",
+            workspaceId:body.workspaceId || null,
+            tool:body.tool || "notion-ai-search",
+            resultCount:Number(body.resultCount || 0),
+          },
+        }, state);
+        await this.save(delivered.dispatch);
+        return publicState(delivered.dispatch, {
+          targetConfigured:true,
+          lightAnswer:{
+            status:body.status,
+            answer:body.answer,
+            sources:Array.isArray(body.sources) ? body.sources : [],
+            evidence:Array.isArray(body.evidence) ? body.evidence : [],
+            confidence:body.confidence || null,
+            nextRoute:body.nextRoute || "GO",
+          },
+        });
+      } catch (error) {
+        const result = this.core.failed({
+          target,
+          error:error?.message || "NOTION_LIGHT_SEARCH_FAILED",
+        }, state);
+        await this.save(result.dispatch);
+        await this.schedule(result.dispatch.legs[target].nextAttemptAt);
+        return result;
+      }
+    }
+
     const config = endpoint(this.env, target);
     if (!config.url) {
       const result = this.core.waitingTarget({ target }, state);
@@ -273,10 +424,12 @@ export class GoHubCounterDispatchState {
       if (!result.idempotent) await this.save(state);
       return publicState(state, { targetConfigured:false });
     }
+
     const attempt = this.core.beginAttempt({ target }, state);
     state = attempt.dispatch;
     if (attempt.idempotent) return publicState(state);
     await this.save(state);
+
     try {
       const response = await fetch(config.url, {
         method:"POST",
@@ -298,17 +451,18 @@ export class GoHubCounterDispatchState {
       return result;
     }
   }
+
   async enqueueOpen(input = {}) {
     const current = await this.load();
     const result = this.core.enqueueOpen(input, current);
     if (result.created) await this.save(result.dispatch);
     if (result.idempotent) {
       const status = result.dispatch?.legs?.LIGHT?.status;
-      return ["WAITING_TARGET","RETRY_WAIT"].includes(status)
-        ? this.deliver("LIGHT", result.dispatch)
+      return ["WAITING_TARGET","WAITING_AUTH","BLOCKED","RETRY_WAIT"].includes(status)
+        ? this.deliver("LIGHT", result.dispatch, input.hubOrigin)
         : result;
     }
-    return this.deliver("LIGHT", result.dispatch);
+    return this.deliver("LIGHT", result.dispatch, input.hubOrigin);
   }
   async enqueueAnswer(input = {}) {
     const current = await this.load();
@@ -342,7 +496,7 @@ export class GoHubCounterDispatchState {
     const nowMs = Date.now();
     for (const target of ["LIGHT","GO"]) {
       const targetLeg = state.legs[target];
-      if (!targetLeg || !["WAITING_TARGET","RETRY_WAIT"].includes(targetLeg.status)) continue;
+      if (!targetLeg || targetLeg.status !== "RETRY_WAIT") continue;
       if (targetLeg.nextAttemptAt && Date.parse(targetLeg.nextAttemptAt) > nowMs) continue;
       const latest = await this.load();
       await this.deliver(target, latest);
@@ -370,7 +524,7 @@ function stubFor(namespace, counterId) {
   if (!namespace || typeof namespace.getByName !== "function") return null;
   return namespace.getByName(counterId);
 }
-export function createCounterDispatchService({ namespace } = {}) {
+export function createCounterDispatchService({ namespace, hubOrigin = null } = {}) {
   async function call(action, input = {}) {
     const counterId = required(input.counterId, "Counter ID");
     const stub = stubFor(namespace, counterId);
@@ -378,7 +532,7 @@ export function createCounterDispatchService({ namespace } = {}) {
     return stub.fetch(new Request("https://counter-dispatch.internal/" + action, {
       method:"POST",
       headers:{ "content-type":"application/json" },
-      body:JSON.stringify({ ...input, action }),
+      body:JSON.stringify({ ...input, ...(hubOrigin ? { hubOrigin } : {}), action }),
     }));
   }
   return Object.freeze({
