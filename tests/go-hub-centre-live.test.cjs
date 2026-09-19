@@ -282,3 +282,107 @@ test("expired ownership can be reclaimed by another owner at the current revisio
   assert.equal(reclaimed.body.ownership.revision, 2);
   assert.equal(reclaimed.body.ownership.status, "CLAIMED");
 });
+
+
+test("Centre effect ledger is revisioned and duplicate receipts are idempotent", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?effect=" + Date.now());
+  const instance = new GoHubCentreState({ storage: new MemoryStorage() }, {});
+  const id = { workId: "WORK-EFFECT", checkpointId: "CP-EFFECT", returnAddress: "CP-EFFECT" };
+  await call(instance, { action: "start", ...id });
+
+  const first = await call(instance, {
+    action: "record_effect", ...id,
+    expectedEffectRevision: 0,
+    effectId: "EFFECT-1", effectTool: "go_hub_put_file",
+    effectReceiptRef: "commit:abc", effectStatus: "DONE",
+  });
+  assert.equal(first.status, 200);
+  assert.equal(first.body.effectLedger.revision, 1);
+  assert.equal(first.body.effectRecorded, "RECORDED");
+
+  const duplicate = await call(instance, {
+    action: "record_effect", ...id,
+    expectedEffectRevision: 1,
+    effectId: "EFFECT-1", effectTool: "go_hub_put_file",
+    effectReceiptRef: "commit:abc", effectStatus: "DONE",
+  });
+  assert.equal(duplicate.status, 200);
+  assert.equal(duplicate.body.effectLedger.revision, 1);
+  assert.equal(duplicate.body.effectRecorded, "IDEMPOTENT");
+
+  const conflict = await call(instance, {
+    action: "record_effect", ...id,
+    expectedEffectRevision: 1,
+    effectId: "EFFECT-1", effectTool: "go_hub_put_file",
+    effectReceiptRef: "commit:different", effectStatus: "DONE",
+  });
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.code, "CENTRE_EFFECT_ID_CONFLICT");
+});
+
+test("Execution checkpoint binds a safe snapshot to effect revision and resumes with skip-effect IDs", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?exec-checkpoint=" + Date.now());
+  const instance = new GoHubCentreState({ storage: new MemoryStorage() }, {});
+  const id = { workId: "WORK-EXEC", checkpointId: "CP-EXEC", returnAddress: "CP-EXEC" };
+  await call(instance, { action: "start", ...id });
+  await call(instance, {
+    action: "record_effect", ...id,
+    expectedEffectRevision: 0,
+    effectId: "EFFECT-A", effectTool: "drive.upload",
+    effectReceiptRef: "drive:file-a", effectStatus: "DONE",
+  });
+  const saved = await call(instance, {
+    action: "save_checkpoint", ...id,
+    expectedExecutionCheckpointRevision: 0,
+    expectedEffectRevision: 1,
+    executionCheckpointId: "EXEC-CP-1",
+    safePoint: true,
+    resumeFrom: "archive-readback",
+    snapshot: { artifactId: "A-1", destinationId: "drive:file-a" },
+  });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.executionCheckpoint.revision, 1);
+  assert.equal(saved.body.executionCheckpoint.latest.effectRevision, 1);
+
+  await call(instance, {
+    action: "record_effect", ...id,
+    expectedEffectRevision: 1,
+    effectId: "EFFECT-B", effectTool: "github.merge",
+    effectReceiptRef: "merge:def", effectStatus: "DONE",
+  });
+  const resumed = await call(instance, {
+    action: "resume_checkpoint", ...id,
+    expectedExecutionCheckpointRevision: 1,
+    executionCheckpointId: "EXEC-CP-1",
+    reconciliationEvidence: { kind: "readback", reference: "reconcile:pass" },
+  });
+  assert.equal(resumed.status, 200);
+  assert.equal(resumed.body.phase, "EXECUTION_RESUME");
+  assert.equal(resumed.body.resumePlan.resumeFrom, "archive-readback");
+  assert.deepEqual(resumed.body.resumePlan.skipEffectIds, ["EFFECT-A", "EFFECT-B"]);
+  assert.equal(resumed.body.resumePlan.checkpointEffectRevision, 1);
+  assert.equal(resumed.body.resumePlan.currentEffectRevision, 2);
+});
+
+test("Execution checkpoint refuses stale revisions, unsafe points and secret-bearing snapshots", async () => {
+  const { GoHubCentreState } = await import(moduleUrl + "?exec-guard=" + Date.now());
+  const instance = new GoHubCentreState({ storage: new MemoryStorage() }, {});
+  const id = { workId: "WORK-EXEC-GUARD", checkpointId: "CP-EXEC-GUARD", returnAddress: "CP-EXEC-GUARD" };
+  await call(instance, { action: "start", ...id });
+
+  const unsafe = await call(instance, {
+    action: "save_checkpoint", ...id,
+    expectedExecutionCheckpointRevision: 0, expectedEffectRevision: 0,
+    executionCheckpointId: "EXEC-BAD", safePoint: false, resumeFrom: "x", snapshot: { ok: true },
+  });
+  assert.equal(unsafe.status, 409);
+
+  const secret = await call(instance, {
+    action: "save_checkpoint", ...id,
+    expectedExecutionCheckpointRevision: 0, expectedEffectRevision: 0,
+    executionCheckpointId: "EXEC-SECRET", safePoint: true, resumeFrom: "x",
+    snapshot: { apiToken: "must-not-store" },
+  });
+  assert.equal(secret.status, 400);
+  assert.match(secret.body.code, /SECRET_FIELD_REJECTED/);
+});
