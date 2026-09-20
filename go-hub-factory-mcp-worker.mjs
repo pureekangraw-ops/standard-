@@ -1,8 +1,6 @@
 import { verifyAccessToken } from "./go-hub-oauth.mjs";
 import { createMcpRegistry } from "./go-hub-mcp-registry.mjs";
 import { createMcpHandler } from "./go-hub-mcp.mjs";
-import { createNotionCatalogService } from "./go-hub-notion-catalog.mjs";
-import { createNotionKnowledgeService } from "./go-hub-notion-knowledge.mjs";
 import { createLinearService } from "./go-hub-linear-service.mjs";
 import { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createFactoryControllerService } from "./go-hub-factory-controller.mjs";
@@ -430,16 +428,6 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         ? createFactoryActionService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE })
         : async () => json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
       const maintenance = createMaintenanceService();
-      const catalog = createNotionCatalogService({
-        fetchImpl,
-        token: env?.NOTION_TOKEN,
-        dataSourceId: env?.NOTION_CATALOG_DATA_SOURCE_ID,
-      });
-      const knowledge = createNotionKnowledgeService({
-        fetchImpl,
-        token: env?.NOTION_TOKEN,
-        dataSourceId: env?.NOTION_KNOWLEDGE_DATA_SOURCE_ID,
-      });
       const linear = createLinearService({
         fetchImpl,
         token: env?.LINEAR_API_KEY || env?.["linear-API"],
@@ -484,8 +472,6 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
             : runMutation("factory.foreman." + String(input.action || "unknown"), input, () => lifecycle.factoryForeman(input)),
           factoryAction: input => runMutation("factory.action." + String(input.action || "unknown"), input, () => factoryAction(input)),
           maintenance: input => maintenance.maintenance(input),
-          searchCatalog: input => catalog.searchCatalog(input),
-          searchKnowledge: input => knowledge.searchKnowledge(input),
           observerLatest: () => observer.latest(),
           observerScreenshot: input => observer.screenshot(input),
           auditHistory: input => globalAudit.history(input),
