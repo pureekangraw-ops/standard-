@@ -84,7 +84,8 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
         sourceHints:state.sourceHints || [],
         doNotChange:state.doNotChange || [],
       });
-      const dispatchPayload = await parsed(dispatchResponse);
+      let dispatchPayload = await parsed(dispatchResponse);
+      let dispatchCode = dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_FAILED");
 
       let finalPayload = payload;
       const lightAnswer = dispatchPayload.lightAnswer || dispatchPayload.dispatch?.lightResult || null;
@@ -109,12 +110,33 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
           counter:answerPayload.counter,
           lightResult:lightAnswer,
         };
+
+        if (typeof dispatch.returnInline === "function") {
+          const inlineResponse = await dispatch.returnInline({
+            counterId:state.counterId,
+            workId:state.workId,
+            checkpointId:state.checkpointId,
+            status:answerPayload.counter?.currentState || lightAnswer.status,
+            answer:answerPayload.counter?.answer || lightAnswer.answer,
+            sources:answerPayload.counter?.sources || lightAnswer.sources || [],
+            evidence:answerPayload.counter?.evidence || lightAnswer.evidence || [],
+            confidence:answerPayload.counter?.confidence || lightAnswer.confidence,
+            nextRoute:answerPayload.counter?.nextRoute || lightAnswer.nextRoute || "GO",
+          });
+          const inlinePayload = await parsed(inlineResponse);
+          if (inlineResponse.ok) {
+            dispatchPayload = inlinePayload;
+            dispatchCode = null;
+          } else {
+            dispatchCode = inlinePayload.code || "DISPATCH_INLINE_RETURN_FAILED";
+          }
+        }
       }
 
       return json({
         ...finalPayload,
         dispatch:dispatchPayload.dispatch || null,
-        dispatchCode:dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_FAILED"),
+        dispatchCode,
         lightAuthorizationUrl:dispatchPayload.authorizationUrl || null,
         lightAuthRequired:dispatchPayload.authRequired === true,
         lightCapabilityBlocked:dispatchPayload.capabilityBlocked === true,
