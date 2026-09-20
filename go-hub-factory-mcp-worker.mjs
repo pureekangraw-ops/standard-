@@ -9,6 +9,7 @@ import { createFactoryControllerService } from "./go-hub-factory-controller.mjs"
 import { createFactoryActionService } from "./go-hub-factory-service.mjs";
 import { createMaintenanceService } from "./go-hub-maintenance.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
+import { routeReadOnlyFastLane } from "./go-hub-city-route.js";
 import { createLighthouseControlPortMcpService } from "./go-hub-lighthouse-control-port-service.mjs";
 import { createGoogleDriveService } from "./go-hub-google-drive-service.mjs";
 import { createWorkflowArtifactService } from "./go-hub-workflow-artifact-service.mjs";
@@ -498,6 +499,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
             }
             return response;
           },
+          centreReadOnlyFastLane: input => json(routeReadOnlyFastLane(input)),
           lighthouseControlPortState: input => lighthouseControlPort.state(input),
           lighthouseControlPortCommand: input => lighthouseControlPort.command(input),
           projectStatus: async input => json(await projectStatus.read(input)),
