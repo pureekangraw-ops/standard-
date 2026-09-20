@@ -149,3 +149,114 @@ test("Durable Object writes state and reads the exact same ticket back", async (
   assert.equal(readback.counter.currentState, "OPEN");
   assert.deepEqual(readback.counter.events.map(event => event.type), ["OPEN"]);
 });
+
+
+test("WAIT and NEEDS_INPUT readbacks stay open by default and LIGHT can continue", async () => {
+  const { createCounterCore } = await import(moduleUrl + "?continuation=" + Date.now());
+  const core = createCounterCore({ now: clock() });
+
+  let state = core.create({
+    counterId: "COUNTER-CONTINUE-1",
+    request: "Need a multi-turn result",
+    context: {},
+    workContext,
+  }).counter;
+  state = core.seen({ counterId: "COUNTER-CONTINUE-1", workContext }, state).counter;
+
+  state = core.answer({
+    counterId: "COUNTER-CONTINUE-1",
+    status: "WAIT",
+    answer: "Still working.",
+    sources: [],
+    evidence: [],
+    workContext,
+  }, state).counter;
+
+  state = core.readback({
+    counterId: "COUNTER-CONTINUE-1",
+    evidence: { kind: "go-readback", step: "wait" },
+    workContext,
+  }, state).counter;
+  assert.equal(state.currentState, "WAIT");
+  assert.equal(state.closedAt, null);
+
+  state = core.answer({
+    counterId: "COUNTER-CONTINUE-1",
+    status: "NEEDS_INPUT",
+    answer: "Need one more input.",
+    sources: [],
+    evidence: [],
+    workContext,
+  }, state).counter;
+
+  state = core.readback({
+    counterId: "COUNTER-CONTINUE-1",
+    evidence: { kind: "go-readback", step: "needs-input" },
+    workContext,
+  }, state).counter;
+  assert.equal(state.currentState, "NEEDS_INPUT");
+  assert.equal(state.closedAt, null);
+
+  state = core.answer({
+    counterId: "COUNTER-CONTINUE-1",
+    status: "ANSWERED",
+    answer: "Finished.",
+    sources: ["notion://result/final"],
+    evidence: [{ kind: "result", reference: "notion://result/final" }],
+    workContext,
+  }, state).counter;
+
+  state = core.readback({
+    counterId: "COUNTER-CONTINUE-1",
+    evidence: { kind: "go-readback", step: "final" },
+    workContext,
+  }, state).counter;
+
+  assert.equal(state.currentState, "CLOSED");
+  assert.deepEqual(
+    state.events.map(event => event.type),
+    ["OPEN", "SEEN", "WAIT", "READBACK", "NEEDS_INPUT", "READBACK", "ANSWERED", "READBACK", "CLOSED"],
+  );
+});
+
+test("readback close:false can be followed by a later close", async () => {
+  const { createCounterCore } = await import(moduleUrl + "?deferred-close=" + Date.now());
+  const core = createCounterCore({ now: clock() });
+
+  let state = core.create({
+    counterId: "COUNTER-DEFER-CLOSE-1",
+    request: "Answer now, close later",
+    context: {},
+    workContext,
+  }).counter;
+  state = core.seen({ counterId: "COUNTER-DEFER-CLOSE-1", workContext }, state).counter;
+  state = core.answer({
+    counterId: "COUNTER-DEFER-CLOSE-1",
+    status: "ANSWERED",
+    answer: "Ready.",
+    sources: ["notion://result/1"],
+    evidence: [{ kind: "result", reference: "notion://result/1" }],
+    workContext,
+  }, state).counter;
+
+  state = core.readback({
+    counterId: "COUNTER-DEFER-CLOSE-1",
+    evidence: { kind: "go-readback", reference: "counter://defer/first" },
+    close: false,
+    workContext,
+  }, state).counter;
+  assert.equal(state.currentState, "ANSWERED");
+  assert.equal(state.closedAt, null);
+
+  state = core.readback({
+    counterId: "COUNTER-DEFER-CLOSE-1",
+    evidence: { kind: "go-readback", reference: "counter://defer/final" },
+    workContext,
+  }, state).counter;
+
+  assert.equal(state.currentState, "CLOSED");
+  assert.deepEqual(
+    state.events.map(event => event.type),
+    ["OPEN", "SEEN", "ANSWERED", "READBACK", "READBACK", "CLOSED"],
+  );
+});
