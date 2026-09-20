@@ -20,7 +20,7 @@ test("GO City exposes Bifrost transport, Optician entry, and Heimdall exit guard
   assert.deepEqual(city.guardian.responsibilities, ["SAFETY", "PERMISSION", "STOP"]);
   assert.equal(city.exit.id, "heimdall");
   assert.equal(city.loop.id, "go-work-loop");
-  assert.equal(city.information.id, "mimir");
+  assert.equal(city.information.id, "counter");
   assert.equal(city.destinations.factory.role, "building-entry");
 });
 
@@ -74,10 +74,10 @@ test("outbound passage uses Heimdall before Bifrost and returns to Optician when
   });
 });
 
-test("MIMIR is city-wide information and always resumes at Optician by default", async () => {
+test("Counter is the city-wide information exchange and resumes at Optician by default", async () => {
   const { routeInformation } = await load();
   assert.deepEqual(routeInformation({ question: "where is Factory?" }), {
-    destination: "mimir",
+    destination: "counter",
     purpose: "INFORMATION",
     resumeAt: "optician",
     question: "where is Factory?",
