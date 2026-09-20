@@ -145,6 +145,7 @@ export function createLighthouseControlPortSessionService({
   randomSessionToken = randomToken,
   onEvent = async () => {},
   scheduleReconciliation = async () => {},
+  ensureReconciliation = async () => {},
   cancelReconciliation = async () => {},
 } = {}) {
   if (!storage || typeof storage.get !== "function" || typeof storage.put !== "function") {
@@ -181,6 +182,7 @@ export function createLighthouseControlPortSessionService({
       await cancelReconciliation();
       return { ok:false, code:"SESSION_EXPIRED", state };
     }
+    await ensureReconciliation(current + CENTRE_RECONCILIATION_ALARM_MS);
     return { ok:true, session, state };
   }
   async function authorize({ sessionId, sessionToken } = {}) {
@@ -417,6 +419,7 @@ export class LighthouseControlPortSessionRegistry {
       storage:this.ctx.storage,
       onEvent:event => this.broadcast(event),
       scheduleReconciliation:timestamp => this.scheduleReconciliation(timestamp),
+      ensureReconciliation:timestamp => this.ensureReconciliation(timestamp),
       cancelReconciliation:() => this.cancelReconciliation(),
     });
   }
@@ -425,6 +428,15 @@ export class LighthouseControlPortSessionRegistry {
     if (typeof this.ctx.storage?.setAlarm === "function") {
       await this.ctx.storage.setAlarm(Number(timestamp));
     }
+  }
+
+  async ensureReconciliation(timestamp = Date.now() + CENTRE_RECONCILIATION_ALARM_MS) {
+    if (typeof this.ctx.storage?.getAlarm === "function") {
+      const existing = await this.ctx.storage.getAlarm();
+      if (existing != null) return Number(existing);
+    }
+    await this.scheduleReconciliation(timestamp);
+    return Number(timestamp);
   }
 
   async cancelReconciliation() {
