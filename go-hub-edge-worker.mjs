@@ -2,6 +2,7 @@ import githubWorker, { createGithubLifecycleService } from "./go-hub-worker.mjs"
 import { createBrowserInterface } from "./go-hub-browser-interface.js";
 import { createFactoryMcpWorker } from "./go-hub-factory-mcp-worker.mjs";
 import { createFactoryActionService } from "./go-hub-factory-service.mjs";
+import { createAccessToken } from "./go-hub-oauth.mjs";
 import { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { createNotionLightService } from "./go-hub-notion-light.mjs";
@@ -25,6 +26,8 @@ const CENTRE_API_ROOT = "/hub/api/centre";
 const BROWSER_API_ROOT = "/hub/api/browser";
 const OBSERVER_API_ROOT = `${BROWSER_API_ROOT}/observer`;
 const FACTORY_ACTION_PATH = "/hub/api/github-workspace/factory-action";
+const LIGHT_MCP_OWNER_PATH = "/hub/light-mcp";
+const LIGHT_MCP_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 const encoder = new TextEncoder();
 
 function json(payload, status = 200, headers = {}) {
@@ -141,6 +144,15 @@ function observerStatus(code) {
   return 403;
 }
 
+function lightMcpOwnerPage(result = null) {
+  const resultHtml = result
+    ? `<section><h2>LIGHT MCP ready</h2><p>MCP URL</p><textarea readonly rows="2" style="width:100%">${result.mcpUrl}</textarea><p>Bearer token (expires ${result.expiresLabel})</p><textarea readonly rows="6" style="width:100%">${result.token}</textarea><p>Connect this as a custom MCP server in Notion Agent and enable only the code tools you need.</p></section>`
+    : "";
+  return new Response(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GO Hub LIGHT MCP</title></head><body style="font-family:system-ui;max-width:760px;margin:48px auto;padding:0 20px"><h1>GO Hub × LIGHT</h1><p>Mint a scoped bearer token for LIGHT. This token can only authenticate to the restricted <code>/mcp/light</code> surface; merge/delete are not exposed there.</p><form method="post"><label>Owner passcode <input name="passcode" type="password" autocomplete="current-password" required></label><button type="submit">Create LIGHT token</button></form>${resultHtml}</body></html>`, {
+    headers:{ "content-type":"text/html; charset=utf-8", "cache-control":"no-store" },
+  });
+}
+
 function observerOwnerPage() {
   return new Response(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GO Eye Session</title></head><body><h1>GO Browser Eye</h1><p>Create Eye Session on GO Hub, then copy the bootstrap code into the Firefox Observer. The owner passcode stays on this GO Hub page and is never stored by the Observer.</p><form id="eye-form"><label>Owner passcode<input id="passcode" type="password" autocomplete="current-password" required></label><label>Allowed Gumroad origin<input id="origin" value="https://gumroad.com" required></label><button type="submit">Create Eye Session</button></form><label>GO Hub bootstrap<textarea id="bootstrap" readonly placeholder="Bootstrap appears here"></textarea></label><p id="status"></p><script>const form=document.getElementById('eye-form'),out=document.getElementById('bootstrap'),status=document.getElementById('status');form.addEventListener('submit',async e=>{e.preventDefault();out.value='';status.textContent='Creating…';try{const r=await fetch('/hub/api/browser/observer/session/start',{method:'POST',headers:{'content-type':'application/json','x-go-owner-passcode':document.getElementById('passcode').value},body:JSON.stringify({allowed_origin:document.getElementById('origin').value})});const body=await r.json();if(!r.ok)throw new Error(body.code||'SESSION_START_FAILED');out.value=JSON.stringify(body);document.getElementById('passcode').value='';status.textContent='Bootstrap ready. Copy it into GO Eye.';}catch(err){document.getElementById('passcode').value='';status.textContent=err.message||'SESSION_START_FAILED';}});</script></body></html>`, {
     headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
@@ -158,7 +170,32 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
   return Object.freeze({
     async fetch(request, env) {
       const url = new URL(request.url);
-      if (url.pathname === "/mcp") {
+      if (url.pathname === LIGHT_MCP_OWNER_PATH) {
+        if (request.method === "GET") return lightMcpOwnerPage();
+        if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405);
+        if (!env?.GOHUB_MASTER_KEY || !env?.GOHUB_OWNER_PASSCODE) {
+          return json({ code:"LIGHT_MCP_AUTH_NOT_CONFIGURED" }, 503);
+        }
+        const form = await request.formData().catch(() => null);
+        const supplied = String(form?.get("passcode") || "");
+        if (!timingSafeEqual(supplied, env.GOHUB_OWNER_PASSCODE)) {
+          return json({ code:"OWNER_AUTH_FAILED" }, 403);
+        }
+        const token = await createAccessToken({
+          issuer:url.origin,
+          signingKey:env.GOHUB_MASTER_KEY,
+          resource:url.origin + "/mcp/light",
+          subject:"light",
+          scope:"go-hub-light",
+          ttlSeconds:LIGHT_MCP_TOKEN_TTL_SECONDS,
+        });
+        return lightMcpOwnerPage({
+          mcpUrl:url.origin + "/mcp/light",
+          token,
+          expiresLabel:"in 30 days",
+        });
+      }
+      if (url.pathname === "/mcp" || url.pathname === "/mcp/light") {
         return factoryMcp.fetch(request, env);
       }
       if (request.method === "GET" && url.pathname === "/hub/api/notion-light/callback") {

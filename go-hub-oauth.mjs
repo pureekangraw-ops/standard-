@@ -108,17 +108,24 @@ export async function createTestAuthorizationCode(config = {}) {
   }, config.signingKey);
 }
 
-export async function createTestAccessToken(config = {}) {
+export async function createAccessToken(config = {}) {
   const issuedAt = nowSeconds(config);
+  const ttlSeconds = Number.isFinite(Number(config.ttlSeconds))
+    ? Math.max(60, Number(config.ttlSeconds))
+    : ACCESS_TOKEN_TTL_SECONDS;
   return signEnvelope({
     type: "access",
     iss: config.issuer,
     aud: config.resource || config.issuer + "/mcp",
-    sub: "big",
-    scope: "go-hub",
+    sub: config.subject || "big",
+    scope: config.scope || "go-hub",
     iat: issuedAt,
-    exp: config.expiresAt ?? issuedAt + ACCESS_TOKEN_TTL_SECONDS,
+    exp: config.expiresAt ?? issuedAt + ttlSeconds,
   }, config.signingKey);
+}
+
+export async function createTestAccessToken(config = {}) {
+  return createAccessToken(config);
 }
 
 export async function createTestRefreshToken(config = {}) {
@@ -140,8 +147,11 @@ export async function verifyAccessToken(request, config = {}) {
   const authorization = String(request.headers.get("authorization") || "");
   if (!authorization.startsWith("Bearer ")) throw new Error("missing bearer token");
   const payload = await verifyEnvelope(authorization.slice(7), config.signingKey);
+  const expectedResource = config.resource || config.issuer + "/mcp";
+  const expectedSubject = config.subject || "big";
+  const expectedScope = config.scope || "go-hub";
   if (payload.type !== "access" || payload.iss !== config.issuer ||
-      payload.aud !== config.issuer + "/mcp" || payload.sub !== "big" || payload.scope !== "go-hub") {
+      payload.aud !== expectedResource || payload.sub !== expectedSubject || payload.scope !== expectedScope) {
     throw new Error("invalid access token");
   }
   if (!Number.isFinite(payload.exp) || payload.exp <= nowSeconds(config)) throw new Error("expired access token");
