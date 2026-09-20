@@ -544,6 +544,33 @@ export class GoHubCounterDispatchState {
     }
     return this.deliver("GO", result.dispatch);
   }
+  async returnInline(input = {}) {
+    const current = await this.load();
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const queued = this.core.enqueueAnswer(input, current);
+    let state = queued.dispatch;
+    if (!queued.idempotent) await this.save(state);
+
+    if (state.legs.GO.status === "DELIVERED") {
+      return publicState(state, { idempotent:true, inlineReturn:true });
+    }
+
+    const attempt = this.core.beginAttempt({ target:"GO" }, state);
+    state = attempt.dispatch;
+    if (!attempt.idempotent) await this.save(state);
+
+    const delivered = this.core.delivered({
+      target:"GO",
+      receipt:{
+        httpStatus:200,
+        receiptId:"factory-mcp-inline-return",
+        transport:"INLINE",
+      },
+    }, state);
+    await this.save(delivered.dispatch);
+    return publicState(delivered.dispatch, { inlineReturn:true });
+  }
+
   async get(input = {}) {
     const current = await this.load();
     if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
@@ -578,6 +605,7 @@ export class GoHubCounterDispatchState {
       const action = required(input.action, "Action").toLowerCase();
       const result = action === "open" ? await this.enqueueOpen(input)
         : action === "answer" ? await this.enqueueAnswer(input)
+        : action === "return_inline" ? await this.returnInline(input)
         : action === "get" ? await this.get(input)
         : action === "retry" ? await this.retry(input)
         : (() => { throw Object.assign(new Error("DISPATCH_ACTION_UNSUPPORTED"), { status:400 }); })();
@@ -606,6 +634,7 @@ export function createCounterDispatchService({ namespace, hubOrigin = null } = {
   return Object.freeze({
     open:input => call("open", input),
     answer:input => call("answer", input),
+    returnInline:input => call("return_inline", input),
     get:input => call("get", input),
     retry:input => call("retry", input),
   });
