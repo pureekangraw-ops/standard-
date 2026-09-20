@@ -52,7 +52,7 @@ test("real-device release gate is GO Hub online and offline only", () => {
   const runbookPath = path.join(root, "docs", "go-hub", "real-device-cutover-verification.md");
   assert.equal(fs.existsSync(runbookPath), true, "current cutover runbook must define the owner gate");
   const runbook = fs.readFileSync(runbookPath, "utf8").toLowerCase();
-  for (const requiredMarker of ["Online \`/\` opens GO Hub", "Disable network", "NormalPocket online/offline behavior is not evaluated", "Do not merge", "Do not deploy"]) {
-    assert.equal(runbook.includes(requiredMarker.toLowerCase()), true, \`runbook must contain \${requiredMarker}\`);
+  for (const requiredMarker of ["Online `/` opens GO Hub", "Disable network", "NormalPocket online/offline behavior is not evaluated", "Do not merge", "Do not deploy"]) {
+    assert.equal(runbook.includes(requiredMarker.toLowerCase()), true, "runbook must contain " + requiredMarker);
   }
 });
