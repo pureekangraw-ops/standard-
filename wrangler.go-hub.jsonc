@@ -124,7 +124,9 @@
       "/hub/api/github-workspace/*",
       "/hub/api/notion-light/*",
       "/hub/observer",
+      "/hub/light-mcp",
       "/mcp",
+      "/mcp/*",
       "/oauth/*",
       "/.well-known/*"
     ]
