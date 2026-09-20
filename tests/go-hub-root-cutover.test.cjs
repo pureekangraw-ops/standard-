@@ -49,10 +49,15 @@ test("real-device release gate is GO Hub online and offline only", () => {
   assert.match(sw, /skipWaiting/);
   assert.match(sw, /clients\.claim/);
 
-  const specPath = path.join(root, "docs", "superpowers", "specs", "2026-09-14-go-hub-hard-cutover-design.md");
+  const runbookPath = path.join(root, "docs", "go-hub", "real-device-cutover-verification.md");
+  assert.equal(fs.existsSync(runbookPath), true, "current cutover runbook must define the owner gate");
+  const runbook = fs.readFileSync(runbookPath, "utf8");
+  for (const marker of ["Online `/` opens GO Hub", "Disable network", "NormalPocket online/offline behavior is not evaluated", "Do not merge", "Do not deploy"]) {
+    assert.match(runbook, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\  const specPath = path.join(root, "docs", "superpowers", "specs", "2026-09-14-go-hub-hard-cutover-design.md");
   assert.equal(fs.existsSync(specPath), true, "hard-cutover design must define the owner gate");
   const spec = fs.readFileSync(specPath, "utf8");
   for (const marker of ["Online `/` opens GO Hub", "Disable network", "NormalPocket online/offline behavior is not evaluated", "Do not merge", "Do not deploy"]) {
     assert.match(spec, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), `spec must contain ${marker}`);
+  }"), "i"), `runbook must contain ${marker}`);
   }
 });
