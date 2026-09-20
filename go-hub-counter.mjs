@@ -1,5 +1,7 @@
 const ANSWER_STATES = Object.freeze(["ANSWERED", "WAIT", "UNKNOWN", "NEEDS_INPUT", "FAILED", "EXPIRED"]);
 const ANSWER_STATE_SET = new Set(ANSWER_STATES);
+const CONTINUABLE_ANSWER_STATES = new Set(["SEEN", "WAIT", "NEEDS_INPUT"]);
+const NON_TERMINAL_ANSWER_STATES = new Set(["WAIT", "NEEDS_INPUT"]);
 const SECRET_FIELD = /(authorization|token|secret|passcode|master.?key)/i;
 
 function json(payload, status = 200) {
@@ -185,7 +187,7 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
         JSON.stringify(current.evidence) === JSON.stringify(evidence)) {
       return publicState(current, { idempotent: true });
     }
-    if (current.currentState !== "SEEN") {
+    if (!CONTINUABLE_ANSWER_STATES.has(current.currentState)) {
       throw Object.assign(new Error("COUNTER_INVALID_TRANSITION:" + current.currentState + "->" + status), { status: 409 });
     }
     if (status === "ANSWERED" && (sources.length === 0 || evidence.length === 0)) {
@@ -214,15 +216,30 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
     if (!current) throw Object.assign(new Error("COUNTER_NOT_FOUND"), { status: 404 });
     rejectSecrets(input);
     assertIdentity(current, input);
-    if (current.events.some(item => item.type === "READBACK")) {
+
+    if (current.currentState === "CLOSED" && current.events.some(item => item.type === "READBACK")) {
       return publicState(current, { idempotent: true });
     }
-    if (!ANSWER_STATE_SET.has(current.currentState)) {
+
+    const legacyReadbackState = current.currentState === "READBACK";
+    if (!ANSWER_STATE_SET.has(current.currentState) && !legacyReadbackState) {
       throw Object.assign(new Error("COUNTER_INVALID_TRANSITION:" + current.currentState + "->READBACK"), { status: 409 });
     }
+
     const evidence = objectValue(input.evidence, "Readback evidence");
     if (Object.keys(evidence).length === 0) {
       throw Object.assign(new Error("COUNTER_READBACK_EVIDENCE_REQUIRED"), { status: 400 });
+    }
+
+    const closeRequested =
+      input.close === true ||
+      (input.close !== false && !NON_TERMINAL_ANSWER_STATES.has(current.currentState));
+
+    const latestReadback = [...current.events].reverse().find(item => item.type === "READBACK");
+    if (!closeRequested &&
+        latestReadback &&
+        JSON.stringify(latestReadback.detail || {}) === JSON.stringify(evidence)) {
+      return publicState(current, { idempotent: true });
     }
 
     const state = clone(current);
@@ -230,12 +247,11 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
     state.revision += 1;
     state.readBackAt = at;
     appendEvent(state, "READBACK", "GO", at, evidence);
-    if (input.close !== false) {
+
+    if (closeRequested) {
       state.currentState = "CLOSED";
       state.closedAt = at;
       appendEvent(state, "CLOSED", "HUB", at, { priorState: current.currentState });
-    } else {
-      state.currentState = "READBACK";
     }
     return publicState(state);
   }
