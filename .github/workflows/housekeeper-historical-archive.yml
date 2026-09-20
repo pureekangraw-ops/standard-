@@ -17,31 +17,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tar -czf 'housekeeper-standard-historical-docs-20260920.tar.gz' \
-      'docs/superpowers/plans/2026-09-13-go-hub-foundation-purification.md' \
-      'docs/superpowers/plans/2026-09-13-go-hub-real-device-cutover-verification.md' \
-      'docs/superpowers/plans/2026-09-14-go-hub-code-workstation-lifecycle.md' \
-      'docs/superpowers/plans/2026-09-14-go-hub-factory-engine-3-assembly-product.md' \
-      'docs/superpowers/plans/2026-09-14-go-hub-factory-engine-4-recovery-learning.md' \
-      'docs/superpowers/plans/2026-09-14-go-hub-hard-cutover.md' \
-      'docs/superpowers/plans/2026-09-14-go-hub-mcp-gateway.md' \
-      'docs/superpowers/plans/2026-09-15-go-browser-interface-v0.md' \
-      'docs/superpowers/plans/2026-09-15-go-browser-local-safe-fill-v1.md' \
-      'docs/superpowers/plans/2026-09-15-go-city-optician-v1.md' \
-      'docs/superpowers/plans/2026-09-15-hephaestus-factory-foreman.md' \
-      'docs/superpowers/plans/2026-09-15-hephaestus-mcp-controller.md' \
-      'docs/superpowers/plans/2026-09-16-go-city-runtime-publication-roundtrip.md' \
-      'docs/superpowers/plans/2026-09-18-factory-unified-authority-v1.md' \
-      'docs/superpowers/specs/2026-09-13-go-hub-foundation-purification-design.md' \
-      'docs/superpowers/specs/2026-09-14-go-hub-code-station-engine-map-design.md' \
-      'docs/superpowers/specs/2026-09-14-go-hub-code-workstation-lifecycle-design.md' \
-      'docs/superpowers/specs/2026-09-14-go-hub-hard-cutover-design.md' \
-      'docs/superpowers/specs/2026-09-14-go-hub-mcp-gateway-design.md' \
-      'docs/superpowers/specs/2026-09-15-go-browser-interface-v0-design.md' \
-      'docs/superpowers/specs/2026-09-15-go-browser-local-safe-fill-v1-design.md' \
-      'docs/superpowers/specs/2026-09-15-hephaestus-factory-foreman-design.md' \
-      'docs/superpowers/specs/2026-09-15-hephaestus-mcp-controller-design.md' \
-      'docs/superpowers/specs/2026-09-16-go-city-runtime-publication-roundtrip-design.md'
+          files=(
+            'docs/superpowers/plans/2026-09-13-go-hub-foundation-purification.md'
+            'docs/superpowers/plans/2026-09-13-go-hub-real-device-cutover-verification.md'
+            'docs/superpowers/plans/2026-09-14-go-hub-code-workstation-lifecycle.md'
+            'docs/superpowers/plans/2026-09-14-go-hub-factory-engine-3-assembly-product.md'
+            'docs/superpowers/plans/2026-09-14-go-hub-factory-engine-4-recovery-learning.md'
+            'docs/superpowers/plans/2026-09-14-go-hub-hard-cutover.md'
+            'docs/superpowers/plans/2026-09-14-go-hub-mcp-gateway.md'
+            'docs/superpowers/plans/2026-09-15-go-browser-interface-v0.md'
+            'docs/superpowers/plans/2026-09-15-go-browser-local-safe-fill-v1.md'
+            'docs/superpowers/plans/2026-09-15-go-city-optician-v1.md'
+            'docs/superpowers/plans/2026-09-15-hephaestus-factory-foreman.md'
+            'docs/superpowers/plans/2026-09-15-hephaestus-mcp-controller.md'
+            'docs/superpowers/plans/2026-09-16-go-city-runtime-publication-roundtrip.md'
+            'docs/superpowers/plans/2026-09-18-factory-unified-authority-v1.md'
+            'docs/superpowers/specs/2026-09-13-go-hub-foundation-purification-design.md'
+            'docs/superpowers/specs/2026-09-14-go-hub-code-station-engine-map-design.md'
+            'docs/superpowers/specs/2026-09-14-go-hub-code-workstation-lifecycle-design.md'
+            'docs/superpowers/specs/2026-09-14-go-hub-hard-cutover-design.md'
+            'docs/superpowers/specs/2026-09-14-go-hub-mcp-gateway-design.md'
+            'docs/superpowers/specs/2026-09-15-go-browser-interface-v0-design.md'
+            'docs/superpowers/specs/2026-09-15-go-browser-local-safe-fill-v1-design.md'
+            'docs/superpowers/specs/2026-09-15-hephaestus-factory-foreman-design.md'
+            'docs/superpowers/specs/2026-09-15-hephaestus-mcp-controller-design.md'
+            'docs/superpowers/specs/2026-09-16-go-city-runtime-publication-roundtrip-design.md'
+          )
+          tar -czf 'housekeeper-standard-historical-docs-20260920.tar.gz' "${files[@]}"
           sha256sum 'housekeeper-standard-historical-docs-20260920.tar.gz' > 'housekeeper-standard-historical-docs-20260920.tar.gz.sha256'
           printf 'repository=%s\nbranch=%s\ncommit=%s\n' 'pureekangraw-ops/standard-' 'housekeeping/archive-historical-docs-20260920-standard' "$GITHUB_SHA" > ARCHIVE-METADATA.txt
       - name: Upload historical archive
