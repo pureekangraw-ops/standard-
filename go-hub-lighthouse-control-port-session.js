@@ -1,3 +1,9 @@
+import {
+  CENTRE_RECONCILIATION_ALARM_MS,
+  centreSessionIsActive,
+  createCentreReconciliationService,
+} from "./go-hub-centre-reconciliation.mjs";
+
 const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_SESSION_TTL_MS = DEFAULT_SESSION_TTL_MS;
 const MAX_RECORDS = 200;
@@ -63,7 +69,19 @@ function publicSession(session) {
   return clone(safe);
 }
 function newState() {
-  return { schema:1, session:null, commands:{}, receipts:{}, latest:null };
+  return {
+    schema:1,
+    session:null,
+    commands:{},
+    receipts:{},
+    latest:null,
+    reconciliation:{
+      cursor:0,
+      lastRunAt:null,
+      lastError:null,
+      lastProcessedWorkIds:[],
+    },
+  };
 }
 function trimRecords(record) {
   const entries = Object.entries(record || {});
@@ -126,6 +144,8 @@ export function createLighthouseControlPortSessionService({
   randomUUID = () => crypto.randomUUID(),
   randomSessionToken = randomToken,
   onEvent = async () => {},
+  scheduleReconciliation = async () => {},
+  cancelReconciliation = async () => {},
 } = {}) {
   if (!storage || typeof storage.get !== "function" || typeof storage.put !== "function") {
     throw new TypeError("LIGHTHOUSE control-port storage required");
@@ -133,7 +153,15 @@ export function createLighthouseControlPortSessionService({
 
   async function load() {
     const value = await storage.get("state");
-    return value && value.schema === 1 ? value : newState();
+    if (!value || value.schema !== 1) return newState();
+    return {
+      ...newState(),
+      ...clone(value),
+      reconciliation:{
+        ...newState().reconciliation,
+        ...(value.reconciliation || {}),
+      },
+    };
   }
   async function save(state) {
     const next = clone(state);
@@ -150,6 +178,7 @@ export function createLighthouseControlPortSessionService({
     if (!Number.isFinite(current) || current >= Number(session.expiresAt)) {
       state.session = { ...session, active:false };
       await save(state);
+      await cancelReconciliation();
       return { ok:false, code:"SESSION_EXPIRED", state };
     }
     return { ok:true, session, state };
@@ -227,6 +256,7 @@ export function createLighthouseControlPortSessionService({
         lastSeenAt:null,
       };
       await save(state);
+      await scheduleReconciliation(startedAt + CENTRE_RECONCILIATION_ALARM_MS);
       return {
         ok:true,
         session_id:sessionId,
@@ -342,6 +372,7 @@ export function createLighthouseControlPortSessionService({
         commands:Object.values(current.state.commands).map(clone),
         receipts:Object.values(current.state.receipts).map(clone),
         board:(await boardLatest()).board,
+        reconciliation:clone(current.state.reconciliation || newState().reconciliation),
       };
     },
 
@@ -361,6 +392,7 @@ export function createLighthouseControlPortSessionService({
       if (!auth.ok) return { ok:false, code:auth.code };
       auth.state.session = { ...auth.session, active:false, stoppedAt:Number(now()) };
       await save(auth.state);
+      await cancelReconciliation();
       return { ok:true };
     },
   });
@@ -374,8 +406,9 @@ function internalJson(payload, status = 200) {
 }
 
 export class LighthouseControlPortSessionRegistry {
-  constructor(ctx) {
+  constructor(ctx, env) {
     this.ctx = ctx;
+    this.env = env;
     this.liveClients = new Map();
   }
 
@@ -383,7 +416,61 @@ export class LighthouseControlPortSessionRegistry {
     return createLighthouseControlPortSessionService({
       storage:this.ctx.storage,
       onEvent:event => this.broadcast(event),
+      scheduleReconciliation:timestamp => this.scheduleReconciliation(timestamp),
+      cancelReconciliation:() => this.cancelReconciliation(),
     });
+  }
+
+  async scheduleReconciliation(timestamp = Date.now() + CENTRE_RECONCILIATION_ALARM_MS) {
+    if (typeof this.ctx.storage?.setAlarm === "function") {
+      await this.ctx.storage.setAlarm(Number(timestamp));
+    }
+  }
+
+  async cancelReconciliation() {
+    if (typeof this.ctx.storage?.deleteAlarm === "function") {
+      await this.ctx.storage.deleteAlarm();
+    }
+  }
+
+  async alarm() {
+    const session = this.service();
+    const auditNamespace = this.env?.GO_HUB_GLOBAL_AUDIT;
+    const reconciliation = createCentreReconciliationService({
+      storage:this.ctx.storage,
+      audit:{
+        async history(input) {
+          if (!auditNamespace || typeof auditNamespace.getByName !== "function") {
+            return new Response(JSON.stringify({ code:"GLOBAL_AUDIT_NOT_CONFIGURED" }), {
+              status:503,
+              headers:{ "content-type":"application/json" },
+            });
+          }
+          const audit = auditNamespace.getByName("go-hub-global-audit-v1");
+          if (!audit || typeof audit.fetch !== "function") {
+            return new Response(JSON.stringify({ code:"GLOBAL_AUDIT_NOT_CONFIGURED" }), {
+              status:503,
+              headers:{ "content-type":"application/json" },
+            });
+          }
+          return audit.fetch(new Request("https://global-audit.internal/history", {
+            method:"POST",
+            headers:{ "content-type":"application/json" },
+            body:JSON.stringify({ action:"history", ...input }),
+          }));
+        },
+      },
+      centreNamespace:this.env?.GO_HUB_CENTRE_STATE,
+      projectCentre:view => session.projectCentre(view),
+    });
+    const result = await reconciliation.reconcile();
+    const state = await this.ctx.storage.get("state");
+    if (centreSessionIsActive(state, Date.now())) {
+      await this.scheduleReconciliation();
+    } else {
+      await this.cancelReconciliation();
+    }
+    return result;
   }
 
   broadcast(event) {
