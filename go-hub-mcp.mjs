@@ -20,7 +20,7 @@ function validMessage(message) {
     message.jsonrpc === "2.0" && typeof message.method === "string";
 }
 
-export function createMcpHandler({ registry, authenticate, issuer } = {}) {
+export function createMcpHandler({ registry, authenticate, issuer, allowedOrigins = [] } = {}) {
   if (!registry || typeof authenticate !== "function" || !issuer) {
     throw new Error("MCP handler requires registry, authenticate, and issuer");
   }
@@ -28,8 +28,12 @@ export function createMcpHandler({ registry, authenticate, issuer } = {}) {
   return async function handleMcp(request) {
     const origin = request.headers.get("origin");
     if (origin) {
-      const allowedOrigins = new Set([new URL(issuer).origin, "https://chatgpt.com"]);
-      if (!allowedOrigins.has(origin)) return json({ code: "ORIGIN_NOT_ALLOWED" }, 403);
+      const origins = new Set([
+        new URL(issuer).origin,
+        "https://chatgpt.com",
+        ...allowedOrigins.map(value => String(value || "").trim()).filter(Boolean),
+      ]);
+      if (!origins.has(origin)) return json({ code: "ORIGIN_NOT_ALLOWED" }, 403);
     }
     if (request.method !== "POST") {
       return json({ code: "METHOD_NOT_ALLOWED" }, 405, { allow: "POST" });
