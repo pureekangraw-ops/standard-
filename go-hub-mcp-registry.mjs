@@ -5,7 +5,6 @@ const obj = { type: "object" };
 const priority = { type: "integer", minimum: 0, maximum: 4 };
 const nullableStr = { anyOf: [{ type: "string" }, { type: "null" }] };
 const FACTORY = "destination://factory";
-const MIMIR = "destination://mimir";
 const LINEAR = "destination://linear";
 const MAINTENANCE = "destination://maintenance";
 const DRIVE = "destination://drive";
@@ -59,8 +58,6 @@ const definitions = [
   def("go_hub_counter_seen", "Mark one Counter ticket as seen by LIGHT.", "counterSeen", schema({ counterId: str, workContext }, ["counterId", "workContext"]), ann(false)),
   def("go_hub_counter_answer", "Write LIGHT's bounded answer back to the same Counter ticket.", "counterAnswer", schema({ counterId: str, status: { type: "string", enum: ["ANSWERED", "WAIT", "UNKNOWN", "NEEDS_INPUT", "FAILED", "EXPIRED"] }, answer: str, sources: { type: "array", items: str }, evidence: { type: "array", items: obj }, confidence: { type: "string" }, nextRoute: { type: "string" }, workContext }, ["counterId", "status", "answer", "workContext"]), ann(false)),
   def("go_hub_counter_readback", "Record GO readback on the same Counter ticket and close it by default.", "counterReadback", schema({ counterId: str, evidence: obj, close: { type: "boolean" }, workContext }, ["counterId", "evidence", "workContext"]), ann(false)),
-  def("go_hub_mimir_search_catalog", "Search live MIMIR catalog with Gate-before-Rating.", "searchCatalog", schema({ task: str, requestedResult: str, lensReference: str, workContext }, ["task", "requestedResult", "workContext"]), ann(true)),
-  def("go_hub_mimir_search_knowledge", "Search verified MIMIR knowledge with freshness and evidence gates.", "searchKnowledge", schema({ task: str, requestedResult: str, lensReference: str, workContext }, ["task", "requestedResult", "workContext"]), ann(true)),
   def("go_hub_observer_latest", "Read latest sanitized Browser Observer evidence.", "observerLatest", schema({}), ann(true)),
   def("go_hub_observer_screenshot", "Read one consented Browser Observer screenshot by ref.", "observerScreenshot", schema({ screenshotRef: str }, ["screenshotRef"]), ann(true)),
   def("go_hub_linear_list_projects", "List projects scoped to the configured Linear team.", "linearListProjects", schema({}), ann(true)),
@@ -79,7 +76,6 @@ const definitions = [
 ];
 
 const factoryTools = new Set(["go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_merge_pull_request", "go_hub_factory_action"]);
-const mimirTools = new Set(["go_hub_mimir_search_catalog", "go_hub_mimir_search_knowledge"]);
 const maintenanceTools = new Set(["go_hub_maintenance"]);
 const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linear_update_issue"]);
 const driveMutationTools = new Set(["go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item", "go_hub_archive_workflow_artifact"]);
@@ -110,7 +106,6 @@ function assertWork(value, destination) {
 function assertLifecycle(name, args) {
   if (factoryTools.has(name)) assertWork(args.workContext, FACTORY);
   if (linearMutationTools.has(name)) assertWork(args.workContext, LINEAR);
-  if (mimirTools.has(name)) assertWork(args.workContext, MIMIR);
   if (maintenanceTools.has(name)) assertWork(args.workContext, MAINTENANCE);
   if (driveMutationTools.has(name)) assertWork(args.workContext, DRIVE);
   if (counterTools.has(name)) assertWork(args.workContext, COUNTER);

@@ -10,7 +10,6 @@ const factoryWorkContext = Object.freeze({
   destination: "destination://factory", task: "Build GO City",
   requestedResult: "Verified result", lensReference: "lens://city",
 });
-const mimirWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://mimir" });
 const linearWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://linear" });
 const driveWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://drive" });
 const counterWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://counter" });
@@ -33,8 +32,8 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_get_failure_evidence", "go_hub_rerun_failed_jobs", "go_hub_factory_action", "go_hub_factory_foreman",
     "go_hub_maintenance", "go_hub_merge_pull_request", "go_hub_get_workflow_runs", "go_hub_list_workflow_artifacts", "go_hub_archive_workflow_artifact", "go_hub_audit_history", "go_hub_centre_live_action", "go_hub_centre_read_only_fast_lane",
     "go_hub_lighthouse_control_port_state", "go_hub_lighthouse_control_port_command", "go_hub_project_status", "go_hub_board_pin_route",
-    "go_hub_counter_create", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_answer", "go_hub_counter_readback", "go_hub_mimir_search_catalog",
-    "go_hub_mimir_search_knowledge", "go_hub_observer_latest", "go_hub_observer_screenshot", "go_hub_linear_list_projects", "go_hub_linear_get_issue",
+    "go_hub_counter_create", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_answer", "go_hub_counter_readback",
+    "go_hub_observer_latest", "go_hub_observer_screenshot", "go_hub_linear_list_projects", "go_hub_linear_get_issue",
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
     "go_hub_drive_capabilities", "go_hub_drive_health", "go_hub_drive_diagnostics", "go_hub_drive_root", "go_hub_drive_get_item", "go_hub_drive_list_children",
     "go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item",
@@ -43,7 +42,6 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(tools.find(tool => tool.name === "go_hub_factory_foreman").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_maintenance").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_merge_pull_request").annotations.destructiveHint, true);
-  assert.equal(tools.find(tool => tool.name === "go_hub_mimir_search_knowledge").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_list_workflow_artifacts").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_archive_workflow_artifact").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_audit_history").annotations.readOnlyHint, true);
@@ -77,7 +75,6 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file",
     "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_factory_action",
     "go_hub_merge_pull_request", "go_hub_counter_create", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_answer", "go_hub_counter_readback",
-    "go_hub_mimir_search_catalog", "go_hub_mimir_search_knowledge",
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
     "go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item",
   ]) {
@@ -149,13 +146,7 @@ test("city lifecycle tools require exact Centre identity and correct destination
     workContext: { ...factoryWorkContext, returnAddress: "CENTRE-002" },
   }), /Return Address|returnAddress/);
   await assert.rejects(registry.callTool("go_hub_counter_get", {
-    counterId: "COUNTER-0001", workContext: mimirWorkContext,
-  }), /destination/i);
-  await assert.rejects(registry.callTool("go_hub_mimir_search_catalog", {
-    task: "Find Factory", requestedResult: "Route evidence", workContext: factoryWorkContext,
-  }), /destination/i);
-  await assert.rejects(registry.callTool("go_hub_mimir_search_knowledge", {
-    task: "Find knowledge", requestedResult: "Evidence", workContext: factoryWorkContext,
+    counterId: "COUNTER-0001", workContext: driveWorkContext,
   }), /destination/i);
   await assert.rejects(registry.callTool("go_hub_factory_foreman", {
     action: "request", repository: "pureekangraw-ops/standard-", slot: "assembly", goId: "go-a", jobId: "job-a",
@@ -163,18 +154,6 @@ test("city lifecycle tools require exact Centre identity and correct destination
   await assert.rejects(registry.callTool("go_hub_linear_create_issue", {
     title: "Wrong route", workContext: factoryWorkContext,
   }), /destination/i);
-
-  await registry.callTool("go_hub_mimir_search_catalog", {
-    task: "Find Factory", requestedResult: "Route evidence", lensReference: "lens://city", workContext: mimirWorkContext,
-  });
-  assert.equal(calls.at(-1).name, "searchCatalog");
-  assert.deepEqual(calls.at(-1).input.workContext, mimirWorkContext);
-
-  await registry.callTool("go_hub_mimir_search_knowledge", {
-    task: "Find software quality knowledge", requestedResult: "Evidence", lensReference: "lens://knowledge", workContext: mimirWorkContext,
-  });
-  assert.equal(calls.at(-1).name, "searchKnowledge");
-  assert.deepEqual(calls.at(-1).input.workContext, mimirWorkContext);
 
   await registry.callTool("go_hub_linear_create_issue", {
     title: "Bridge", workContext: linearWorkContext,
