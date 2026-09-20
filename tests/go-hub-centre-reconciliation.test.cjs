@@ -11,12 +11,20 @@ class MemoryStorage {
   constructor(initial = null) {
     this.map = new Map(initial ? [["state", structuredClone(initial)]] : []);
     this.alarms = [];
+    this.alarm = null;
     this.deletedAlarms = 0;
   }
   async get(key) { return this.map.get(key); }
   async put(key, value) { this.map.set(key, structuredClone(value)); }
-  async setAlarm(timestamp) { this.alarms.push(Number(timestamp)); }
-  async deleteAlarm() { this.deletedAlarms += 1; }
+  async setAlarm(timestamp) {
+    this.alarm = Number(timestamp);
+    this.alarms.push(this.alarm);
+  }
+  async getAlarm() { return this.alarm; }
+  async deleteAlarm() {
+    this.alarm = null;
+    this.deletedAlarms += 1;
+  }
 }
 
 function response(body, status = 200) {
@@ -209,4 +217,30 @@ test("Centre Board projection is idempotent when reconciliation sees the same tr
   assert.equal(first.changed, true);
   assert.equal(second.changed, false);
   assert.equal(second.board.revision, 1);
+});
+
+test("deployed service re-arms an active pre-existing LIGHT session without rotating the session", async () => {
+  const m = await import(sessionUrl + "?migration=" + Date.now());
+  const state = activeState(0);
+  state.session.expiresAt = Date.now() + 60_000;
+  const storage = new MemoryStorage(state);
+  const registry = new m.LighthouseControlPortSessionRegistry({ storage }, {});
+
+  const first = await registry.fetch(new Request("https://lighthouse-control-port.internal/latest", {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body:"{}",
+  }));
+  const firstBody = await first.json();
+  assert.equal(firstBody.ok, true);
+  assert.equal(storage.alarms.length, 1);
+  assert.equal((await storage.get("state")).session.sessionId, "lh-1");
+
+  const second = await registry.fetch(new Request("https://lighthouse-control-port.internal/latest", {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body:"{}",
+  }));
+  assert.equal((await second.json()).ok, true);
+  assert.equal(storage.alarms.length, 1);
 });
