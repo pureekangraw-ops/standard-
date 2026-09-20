@@ -1,0 +1,212 @@
+"use strict";
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const path = require("node:path");
+const { pathToFileURL } = require("node:url");
+
+const moduleUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-centre-reconciliation.mjs")).href;
+const sessionUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-lighthouse-control-port-session.js")).href;
+
+class MemoryStorage {
+  constructor(initial = null) {
+    this.map = new Map(initial ? [["state", structuredClone(initial)]] : []);
+    this.alarms = [];
+    this.deletedAlarms = 0;
+  }
+  async get(key) { return this.map.get(key); }
+  async put(key, value) { this.map.set(key, structuredClone(value)); }
+  async setAlarm(timestamp) { this.alarms.push(Number(timestamp)); }
+  async deleteAlarm() { this.deletedAlarms += 1; }
+}
+
+function response(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function activeState(cursor = 0) {
+  return {
+    schema:1,
+    session:{ active:true, expiresAt:100_000, sessionId:"lh-1" },
+    commands:{},
+    receipts:{},
+    latest:null,
+    reconciliation:{ cursor, lastRunAt:null, lastError:null, lastProcessedWorkIds:[] },
+  };
+}
+
+test("reconciliation advances cursor, filters CENTRE events, and merges duplicate Work IDs", async () => {
+  const { createCentreReconciliationService } = await import(moduleUrl + "?filter=" + Date.now());
+  const storage = new MemoryStorage(activeState(4));
+  const inspected = [];
+  const projected = [];
+  const service = createCentreReconciliationService({
+    storage,
+    now:() => 50_000,
+    audit:{
+      async history(input) {
+        assert.deepEqual(input, { afterSequence:4, limit:100 });
+        return response({
+          ok:true,
+          lastSequence:9,
+          events:[
+            { sequence:5, event:{ type:"CENTRE_START", workId:"WORK-A" } },
+            { sequence:6, event:{ type:"OTHER_EVENT", workId:"WORK-B" } },
+            { sequence:7, event:{ type:"CENTRE_REVIEW", workId:"WORK-A" } },
+            { sequence:8, event:{ type:"CENTRE_RETURN", workId:"WORK-B" } },
+          ],
+        });
+      },
+    },
+    centreNamespace:{
+      getByName(workId) {
+        return {
+          async fetch(request) {
+            const body = await request.json();
+            inspected.push({ workId, body });
+            return response({
+              ok:true,
+              workId,
+              phase:"AWAY",
+              work:{ workId, status:"AWAY", task:"Reconcile " + workId, requestedResult:"Project truth" },
+            });
+          },
+        };
+      },
+    },
+    projectCentre:async view => {
+      projected.push(view.workId);
+      return { ok:true, changed:false };
+    },
+  });
+
+  const result = await service.reconcile();
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.processedWorkIds, ["WORK-A", "WORK-B"]);
+  assert.deepEqual(projected, ["WORK-A", "WORK-B"]);
+  assert.deepEqual(inspected.map(item => item.body), [
+    { action:"inspect", workId:"WORK-A" },
+    { action:"inspect", workId:"WORK-B" },
+  ]);
+  assert.equal((await storage.get("state")).reconciliation.cursor, 9);
+});
+
+test("failed reconciliation preserves cursor and retries the same audit window", async () => {
+  const { createCentreReconciliationService } = await import(moduleUrl + "?retry=" + Date.now());
+  const storage = new MemoryStorage(activeState(2));
+  let attempts = 0;
+  const service = createCentreReconciliationService({
+    storage,
+    now:() => 50_000,
+    audit:{
+      async history() {
+        attempts += 1;
+        return response({
+          ok:true,
+          lastSequence:3,
+          events:[{ sequence:3, event:{ type:"CENTRE_REVIEW", workId:"WORK-RETRY" } }],
+        });
+      },
+    },
+    centreNamespace:{
+      getByName() {
+        return {
+          async fetch() {
+            return response({ ok:true, workId:"WORK-RETRY", phase:"AWAY", work:{
+              workId:"WORK-RETRY", status:"AWAY", task:"Retry", requestedResult:"Retry safely",
+            } });
+          },
+        };
+      },
+    },
+    projectCentre:async () => {
+      if (attempts === 1) throw new Error("PROJECT_TEMPORARY_FAILURE");
+      return { ok:true, changed:false };
+    },
+  });
+
+  const first = await service.reconcile();
+  assert.equal(first.ok, false);
+  assert.equal((await storage.get("state")).reconciliation.cursor, 2);
+  assert.equal((await storage.get("state")).reconciliation.lastError, "PROJECT_TEMPORARY_FAILURE");
+
+  const second = await service.reconcile();
+  assert.equal(second.ok, true);
+  assert.equal((await storage.get("state")).reconciliation.cursor, 3);
+  assert.equal((await storage.get("state")).reconciliation.lastError, null);
+});
+
+test("existing Lighthouse Durable Object schedules alarms only for active LIGHT sessions", async () => {
+  const m = await import(sessionUrl + "?alarm=" + Date.now());
+  const storage = new MemoryStorage();
+  const registry = new m.LighthouseControlPortSessionRegistry({ storage }, {
+    GO_HUB_GLOBAL_AUDIT:{
+      getByName() {
+        return {
+          async fetch() {
+            return response({ ok:true, lastSequence:0, events:[] });
+          },
+        };
+      },
+    },
+    GO_HUB_CENTRE_STATE:{ getByName() { throw new Error("should not inspect without events"); } },
+  });
+
+  const started = await registry.fetch(new Request("https://lighthouse-control-port.internal/start", {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body:JSON.stringify({ deviceLabel:"LIGHT", ttlMs:60_000 }),
+  }));
+  const session = await started.json();
+  assert.equal(started.status, 200);
+  assert.equal(storage.alarms.length, 1);
+
+  const alarmResult = await registry.alarm();
+  assert.equal(alarmResult.ok, true);
+  assert.equal(alarmResult.active, true);
+  assert.equal(storage.alarms.length, 2);
+
+  const stopped = await registry.fetch(new Request("https://lighthouse-control-port.internal/stop", {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body:JSON.stringify({ sessionId:session.session_id, sessionToken:session.session_token }),
+  }));
+  assert.equal((await stopped.json()).ok, true);
+  assert.equal(storage.deletedAlarms, 1);
+});
+
+test("Centre Board projection is idempotent when reconciliation sees the same truth again", async () => {
+  const m = await import(sessionUrl + "?idempotency=" + Date.now());
+  const storage = new MemoryStorage();
+  const service = m.createLighthouseControlPortSessionService({
+    storage,
+    now:() => 50_000,
+    randomUUID:() => "lh-idempotent",
+    randomSessionToken:() => "token-idempotent",
+  });
+  await service.start({ ttlMs:60_000 });
+  const view = {
+    ok:true,
+    phase:"AWAY",
+    workId:"WORK-IDEMPOTENT",
+    work:{
+      workId:"WORK-IDEMPOTENT",
+      status:"AWAY",
+      task:"Idempotent projection",
+      requestedResult:"One board revision",
+    },
+    ownership:{ active:false },
+    interruption:null,
+    executionCheckpoint:{ latest:null },
+    realityEvidence:null,
+    validationEvidence:null,
+  };
+
+  const first = await service.projectCentre(view);
+  const second = await service.projectCentre(view);
+  assert.equal(first.changed, true);
+  assert.equal(second.changed, false);
+  assert.equal(second.board.revision, 1);
+});
