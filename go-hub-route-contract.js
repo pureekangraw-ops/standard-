@@ -1,6 +1,6 @@
 const DESTINATIONS = Object.freeze({
   factory: Object.freeze({ id: "factory", role: "building-entry", route: "destination://factory" }),
-  mimir: Object.freeze({ id: "mimir", role: "information-entry", route: "destination://mimir" }),
+  drive: Object.freeze({ id: "drive", role: "storage-entry", route: "destination://drive" }),
   linear: Object.freeze({ id: "linear", role: "work-tracking-entry", route: "destination://linear" }),
   browser: Object.freeze({ id: "browser", role: "reality-entry", route: "destination://browser" }),
   maintenance: Object.freeze({ id: "maintenance", role: "maintenance-entry", route: "destination://maintenance" }),
