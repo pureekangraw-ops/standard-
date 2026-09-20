@@ -26,7 +26,9 @@ test("GO Hub API routes run the edge Worker before SPA asset fallback", () => {
     "/hub/api/github-workspace/*",
     "/hub/api/notion-light/*",
     "/hub/observer",
+    "/hub/light-mcp",
     "/mcp",
+    "/mcp/*",
     "/oauth/*",
     "/.well-known/*"
   ]);
