@@ -534,7 +534,11 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           linearCreateIssue: input => runMutation("linear.create_issue", input, () => linear.createIssue(input)),
           linearUpdateIssue: input => runMutation("linear.update_issue", input, () => linear.updateIssue(input)),
           driveCapabilities: () => drive.capabilities(),
-          driveHealth: () => drive.health(),
+          driveHealth: async () => {
+            const response = await drive.health();
+            const payload = await response.json().catch(() => ({}));
+            return json({ ...payload, hubOrigin: url.origin });
+          },
           driveDiagnostics: () => drive.diagnostics(),
           driveRoot: () => drive.root(),
           driveGetItem: input => drive.getItem(input),
