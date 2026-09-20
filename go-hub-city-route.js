@@ -6,6 +6,9 @@ const HEIMDALL = Object.freeze({
   responsibilities: Object.freeze(["SAFETY", "PERMISSION", "STOP"]),
 });
 
+const READ_ONLY_FAST_LANE_OPERATIONS = Object.freeze(["SEARCH", "LIST", "READ", "INSPECT", "METADATA"]);
+const READ_ONLY_FAST_LANE_OPERATION_SET = new Set(READ_ONLY_FAST_LANE_OPERATIONS);
+
 const CITY_ROUTE = Object.freeze({
   bridge: Object.freeze({ id: "bifrost", role: "CHAT_HUB_TRANSPORT" }),
   entry: Object.freeze({
@@ -23,6 +26,13 @@ const CITY_ROUTE = Object.freeze({
     id: "mimir",
     role: "INFORMATION",
     scope: "city-wide",
+  }),
+  readOnlyFastLane: Object.freeze({
+    id: "read-only-fast-lane",
+    role: "READ_ONLY",
+    purpose: "READ_TELL",
+    operations: READ_ONLY_FAST_LANE_OPERATIONS,
+    returnTo: "big-chat",
   }),
   exit: HEIMDALL,
   returnTo: "big-chat",
@@ -159,6 +169,60 @@ export function routeInformation({ question = "", resumeAt = "optician" } = {}) 
     purpose: "INFORMATION",
     resumeAt: String(resumeAt || "optician"),
     question: String(question || ""),
+  });
+}
+
+export function routeReadOnlyFastLane({ purpose = "", operations = [] } = {}) {
+  const normalizedPurpose = String(purpose || "").trim().toUpperCase();
+  const normalizedOperations = Array.isArray(operations)
+    ? [...new Set(operations.map(value => String(value || "").trim().toUpperCase()).filter(Boolean))]
+    : [];
+  const forbiddenOperations = normalizedOperations.filter(
+    operation => !READ_ONLY_FAST_LANE_OPERATION_SET.has(operation),
+  );
+
+  if (normalizedPurpose !== "READ_TELL") {
+    return Object.freeze({
+      gate: "ESCALATE",
+      destination: "optician",
+      reason: "READ_SERVES_WORK",
+      workRequired: true,
+      fastLane: false,
+      next: "normal-work-intake",
+    });
+  }
+  if (!normalizedOperations.length) {
+    return Object.freeze({
+      gate: "WAIT",
+      destination: "optician",
+      reason: "READ_OPERATION_REQUIRED",
+      workRequired: false,
+      fastLane: false,
+    });
+  }
+  if (forbiddenOperations.length) {
+    return Object.freeze({
+      gate: "ESCALATE",
+      destination: "optician",
+      reason: "READ_ONLY_BOUNDARY_EXCEEDED",
+      workRequired: true,
+      fastLane: false,
+      forbiddenOperations: Object.freeze(forbiddenOperations),
+      next: "normal-work-intake",
+    });
+  }
+
+  return Object.freeze({
+    gate: "PASS",
+    destination: "read-only-fast-lane",
+    via: "optician",
+    purpose: "READ_TELL",
+    operations: Object.freeze(normalizedOperations),
+    workRequired: false,
+    plannerRequired: false,
+    fastLane: true,
+    returnTo: "big-chat",
+    reason: "READ_TELL_ONLY",
   });
 }
 
