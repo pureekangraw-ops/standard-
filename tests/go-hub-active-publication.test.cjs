@@ -19,6 +19,7 @@ const activeHubFiles = [
   "go-hub-runtime.js",
   "go-hub-operator-model.js",
   "go-hub-factory-authority.js",
+  "go-hub-lean-flow.js",
   "go-hub-work-lifecycle.js",
   "go-hub-route-contract.js",
   "go-hub-utils.js",

@@ -129,6 +129,9 @@
       "path": "go-hub-factory-authority.js"
     },
     {
+      "path": "go-hub-lean-flow.js"
+    },
+    {
       "path": "go-hub-work-lifecycle.js"
     },
     {
