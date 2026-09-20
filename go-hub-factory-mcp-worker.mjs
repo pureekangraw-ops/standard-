@@ -32,6 +32,31 @@ function firstEnv(env, names) {
   return "";
 }
 
+const LIGHT_CODE_TOOL_NAMES = new Set([
+  "go_hub_inspect_repository",
+  "go_hub_list_repositories",
+  "go_hub_read_file",
+  "go_hub_create_branch",
+  "go_hub_put_file",
+  "go_hub_compare_refs",
+  "go_hub_open_pull_request",
+  "go_hub_get_pull_request",
+  "go_hub_get_ci",
+  "go_hub_get_failure_evidence",
+]);
+
+function restrictRegistry(registry, allowedTools) {
+  return Object.freeze({
+    listTools() {
+      return registry.listTools().filter(tool => allowedTools.has(tool.name));
+    },
+    callTool(name, args = {}) {
+      if (!allowedTools.has(name)) throw new Error("LIGHT_TOOL_NOT_ALLOWED");
+      return registry.callTool(name, args);
+    },
+  });
+}
+
 function workText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -410,7 +435,8 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
   return Object.freeze({
     async fetch(request, env) {
       const url = new URL(request.url);
-      if (url.pathname !== "/mcp") return json({ code: "NOT_FOUND" }, 404);
+      const lightMcp = url.pathname === "/mcp/light";
+      if (url.pathname !== "/mcp" && !lightMcp) return json({ code: "NOT_FOUND" }, 404);
       if (!env?.GITHUB_TOKEN) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
 
       const oauthConfig = {
@@ -421,6 +447,14 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         clientSecret: env?.GOHUB_OWNER_PASSCODE,
         redirectUri: "https://chatgpt.com/connector_platform_oauth_redirect",
       };
+      const accessConfig = lightMcp
+        ? {
+            ...oauthConfig,
+            resource:url.origin + "/mcp/light",
+            subject:"light",
+            scope:"go-hub-light",
+          }
+        : oauthConfig;
       const github = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
       const factory = createFactoryControllerService({ namespace: env?.HEPHAESTUS });
       const lifecycle = createFactoryGuardedLifecycle({ lifecycle: github, factory });
@@ -514,9 +548,12 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       });
 
       return createMcpHandler({
-        registry,
+        registry: lightMcp ? restrictRegistry(registry, LIGHT_CODE_TOOL_NAMES) : registry,
         issuer: url.origin,
-        authenticate: current => verifyAccessToken(current, oauthConfig),
+        authenticate: current => verifyAccessToken(current, accessConfig),
+        allowedOrigins: lightMcp
+          ? ["https://www.notion.so", "https://notion.so", "https://app.notion.com"]
+          : [],
       })(request);
     },
   });
