@@ -23,8 +23,8 @@ const CITY_ROUTE = Object.freeze({
     roundGate: "optician",
   }),
   information: Object.freeze({
-    id: "mimir",
-    role: "INFORMATION",
+    id: "counter",
+    role: "INFORMATION_EXCHANGE",
     scope: "city-wide",
   }),
   readOnlyFastLane: Object.freeze({
@@ -165,7 +165,7 @@ export function routeOutbound({ heimdall = {}, needsOptician = false } = {}) {
 
 export function routeInformation({ question = "", resumeAt = "optician" } = {}) {
   return Object.freeze({
-    destination: "mimir",
+    destination: "counter",
     purpose: "INFORMATION",
     resumeAt: String(resumeAt || "optician"),
     question: String(question || ""),
