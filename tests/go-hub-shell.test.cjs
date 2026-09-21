@@ -178,3 +178,21 @@ test("owner must choose a Work Target explicitly and LIGHTHOUSE is available wit
     assert.match(html, /data-centre-target/);
   }
 });
+
+
+test("Counter surface keeps one form and exposes two distinct bells on both shell entry points", () => {
+  const source = read("go-hub-shell.js");
+  for (const html of [read("index.html"), read("go-hub.html")]) {
+    assert.match(html, /data-counter-form/);
+    assert.match(html, /name="counterRequest"/);
+    assert.match(html, /name="counterRequestedResult"/);
+    assert.match(html, /data-counter-light-bell/);
+    assert.match(html, /data-counter-mirror-bell/);
+    assert.match(html, /Magnificent Architect/);
+    assert.match(html, /อัพเดท มิเร่อ/);
+  }
+  assert.match(source, /\/hub\/api\/counter\/handoff/);
+  assert.match(source, /\/hub\/api\/counter\/mirror/);
+  assert.match(source, /centreWork\.workId/);
+  assert.match(source, /centreWork\.checkpointId/);
+});
