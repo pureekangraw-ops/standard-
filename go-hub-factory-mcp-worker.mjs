@@ -50,6 +50,7 @@ const LIGHT_CODE_TOOL_NAMES = new Set([
   "go_hub_counter_inbox",
   "go_hub_counter_get",
   "go_hub_counter_seen",
+  "go_hub_counter_pickup",
   "go_hub_counter_answer",
   "go_hub_counter_readback",
 ]);
@@ -628,6 +629,11 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
             const actor = lightMcp ? "LIGHT" : "GO";
             const routed = { ...input, actor };
             return runMutation("counter.seen." + actor.toLowerCase(), routed, () => counter.seen(routed));
+          },
+          counterPickup: input => {
+            const actor = lightMcp ? "LIGHT" : "GO";
+            const routed = { ...input, actor };
+            return runMutation("counter.pickup." + actor.toLowerCase(), routed, () => counter.seen(routed));
           },
           counterAnswer: input => {
             const actor = lightMcp ? "LIGHT" : "GO";
