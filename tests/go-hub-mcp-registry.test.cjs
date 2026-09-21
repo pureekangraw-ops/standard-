@@ -30,7 +30,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_compare_refs",
     "go_hub_open_pull_request", "go_hub_get_pull_request", "go_hub_get_ci",
     "go_hub_get_failure_evidence", "go_hub_rerun_failed_jobs", "go_hub_factory_action", "go_hub_factory_foreman",
-    "go_hub_maintenance", "go_hub_merge_pull_request", "go_hub_get_workflow_runs", "go_hub_list_workflow_artifacts", "go_hub_archive_workflow_artifact", "go_hub_audit_history", "go_hub_centre_live_action", "go_hub_centre_read_only_fast_lane",
+    "go_hub_maintenance", "go_hub_merge_pull_request", "go_hub_get_workflow_runs", "go_hub_list_workflow_artifacts", "go_hub_archive_workflow_artifact", "go_hub_audit_history", "go_hub_centre_inspect", "go_hub_centre_audit_history", "go_hub_centre_live_action", "go_hub_centre_read_only_fast_lane",
     "go_hub_lighthouse_control_port_state", "go_hub_lighthouse_control_port_command", "go_hub_project_status", "go_hub_board_pin_route",
     "go_hub_counter_create", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_answer", "go_hub_counter_readback",
     "go_hub_observer_latest", "go_hub_observer_screenshot", "go_hub_linear_list_projects", "go_hub_linear_get_issue",
@@ -45,6 +45,8 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(tools.find(tool => tool.name === "go_hub_list_workflow_artifacts").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_archive_workflow_artifact").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_audit_history").annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_centre_inspect").annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_centre_audit_history").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_centre_live_action").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_centre_read_only_fast_lane").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_lighthouse_control_port_state").annotations.readOnlyHint, true);
@@ -105,6 +107,10 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(calls.at(-1).name, "counterGet");
   await registry.callTool("go_hub_audit_history", { workId: "WORK-LIVE", afterSequence: 0, limit: 50 });
   assert.equal(calls.at(-1).name, "auditHistory");
+  await registry.callTool("go_hub_centre_inspect", { workId: "WORK-LIVE", checkpointId: "CENTRE-001" });
+  assert.equal(calls.at(-1).name, "centreInspect");
+  await registry.callTool("go_hub_centre_audit_history", { workId: "WORK-LIVE", afterSequence: 0, limit: 50 });
+  assert.equal(calls.at(-1).name, "centreAuditHistory");
   await registry.callTool("go_hub_centre_live_action", { action: "inspect", workId: "WORK-LIVE" });
   assert.equal(calls.at(-1).name, "centreLiveAction");
   await registry.callTool("go_hub_centre_read_only_fast_lane", { purpose: "READ_TELL", operations: ["READ"] });
