@@ -55,7 +55,8 @@ const definitions = [
   def("go_hub_lighthouse_control_port_command", "Queue one governed command for paired LIGHTHOUSE Control Port. Owner confirmation remains enforced on-device by capability guard.", "lighthouseControlPortCommand", schema({ targetId: str, requestId: str, capabilityId: str, payload: obj }, ["targetId", "requestId", "capabilityId", "payload"]), ann(false)),
   def("go_hub_project_status", "Read normalized Project Status from current GitHub truth and optional Factory task truth.", "projectStatus", schema({ targetId: str, factoryTaskId: str }, ["targetId"]), ann(true)),
   def("go_hub_board_pin_route", "Resolve first-command Pin identity routing without mutating the Board.", "boardPinRoute", schema({ firstCommand: str, pin: obj }, ["firstCommand"]), ann(true)),
-  def("go_hub_counter_create", "Create one governed GO↔LIGHT Counter ticket.", "counterCreate", schema({ counterId: str, request: str, context: obj, sourceHints: { type: "array", items: str }, doNotChange: { type: "array", items: str }, workContext }, ["counterId", "request", "workContext"]), ann(false)),
+  def("go_hub_counter_create", "Create one governed GO↔LIGHT Counter ticket with an explicit SEARCH, HANDOFF, or reserved MONITOR route.", "counterCreate", schema({ counterId: str, mode: { type: "string", enum: ["SEARCH", "HANDOFF", "MONITOR"] }, request: str, requestedResult: str, authority: str, target: str, projectRef: str, context: obj, sourceHints: { type: "array", items: str }, doNotChange: { type: "array", items: str }, workContext }, ["counterId", "request", "workContext"]), ann(false)),
+  def("go_hub_counter_inbox", "List bounded pending HANDOFF Counter tickets for the same WorkContext.", "counterInbox", schema({ limit: { type: "integer", minimum: 1, maximum: 50 }, workContext }, ["workContext"]), ann(true)),
   def("go_hub_counter_get", "Read the current GO↔LIGHT Counter ticket and append-only event history.", "counterGet", schema({ counterId: str, workContext }, ["counterId", "workContext"]), ann(true)),
   def("go_hub_counter_seen", "Mark one Counter ticket as seen by LIGHT.", "counterSeen", schema({ counterId: str, workContext }, ["counterId", "workContext"]), ann(false)),
   def("go_hub_counter_answer", "Write LIGHT's bounded answer back to the same Counter ticket.", "counterAnswer", schema({ counterId: str, status: { type: "string", enum: ["ANSWERED", "WAIT", "UNKNOWN", "NEEDS_INPUT", "FAILED", "EXPIRED"] }, answer: str, sources: { type: "array", items: str }, evidence: { type: "array", items: obj }, confidence: { type: "string" }, nextRoute: { type: "string" }, workContext }, ["counterId", "status", "answer", "workContext"]), ann(false)),
@@ -81,7 +82,7 @@ const factoryTools = new Set(["go_hub_create_branch", "go_hub_put_file", "go_hub
 const maintenanceTools = new Set(["go_hub_maintenance"]);
 const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linear_update_issue"]);
 const driveMutationTools = new Set(["go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item", "go_hub_archive_workflow_artifact"]);
-const counterTools = new Set(["go_hub_counter_create", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_answer", "go_hub_counter_readback"]);
+const counterTools = new Set(["go_hub_counter_create", "go_hub_counter_inbox", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_answer", "go_hub_counter_readback"]);
 
 function assertArgs(definition, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("invalid MCP tool arguments");
@@ -97,12 +98,15 @@ function assertArgs(definition, args) {
   }
 }
 
-function assertWork(value, destination) {
+function assertWork(value, destination, { ownershipRequired = false } = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("workContext is required");
   for (const field of workContext.required) if (!String(value[field] || "").trim()) throw new Error("workContext missing field: " + field);
   for (const key of Object.keys(value)) if (!Object.hasOwn(workContext.properties, key)) throw new Error("unknown workContext field: " + key);
   if (String(value.checkpointId) !== String(value.returnAddress)) throw new Error("workContext Return Address must match Checkpoint ID");
   if (String(value.destination) !== destination) throw new Error("workContext destination must be " + destination);
+  if (ownershipRequired && (!String(value.ownerId || "").trim() || !String(value.leaseId || "").trim() || !Number.isSafeInteger(value.ownershipRevision))) {
+    throw new Error("workContext ownership fields are required for Counter operations");
+  }
 }
 
 function assertLifecycle(name, args) {
@@ -110,7 +114,7 @@ function assertLifecycle(name, args) {
   if (linearMutationTools.has(name)) assertWork(args.workContext, LINEAR);
   if (maintenanceTools.has(name)) assertWork(args.workContext, MAINTENANCE);
   if (driveMutationTools.has(name)) assertWork(args.workContext, DRIVE);
-  if (counterTools.has(name)) assertWork(args.workContext, COUNTER);
+  if (counterTools.has(name)) assertWork(args.workContext, COUNTER, { ownershipRequired:true });
   if (name === "go_hub_factory_foreman" && args.action !== "state") assertWork(args.workContext, FACTORY);
 }
 
