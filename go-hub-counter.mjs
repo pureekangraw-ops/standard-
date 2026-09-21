@@ -433,35 +433,109 @@ export class GoHubCounterInboxState {
 }
 
 export function createCounterService({ namespace, inboxNamespace } = {}) {
+  async function inboxCall(recipient, action, body) {
+    const inbox = inboxStub(inboxNamespace, recipient);
+    if (!inbox || typeof inbox.fetch !== "function") {
+      return json({ code:"COUNTER_INBOX_NOT_CONFIGURED", actor:recipient }, 503);
+    }
+    return inbox.fetch(new Request("https://counter-inbox.internal/" + action, {
+      method:"POST",
+      headers:{ "content-type":"application/json" },
+      body:JSON.stringify({ ...body, action }),
+    }));
+  }
+
   async function call(action, input = {}) {
     if (action === "inbox") {
       const recipient = actor(input.actor, "LIGHT");
-      const stub = inboxStub(inboxNamespace, recipient);
-      if (!stub || typeof stub.fetch !== "function") return json({ code:"COUNTER_INBOX_NOT_CONFIGURED" }, 503);
-      return stub.fetch(new Request("https://counter-inbox.internal/list", { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify({ ...input, action:"list" }) }));
+      return inboxCall(recipient, "list", input);
     }
+
     const counterId = required(input.counterId, "Counter ID");
     const stub = counterStub(namespace, counterId);
     if (!stub || typeof stub.fetch !== "function") return json({ code:"COUNTER_STATE_NOT_CONFIGURED" }, 503);
     const response = await stub.fetch(new Request("https://counter-state.internal/action", {
-      method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify({ ...input, action }),
+      method:"POST",
+      headers:{ "content-type":"application/json" },
+      body:JSON.stringify({ ...input, action }),
     }));
-    if (!response.ok || !["create", "seen", "answer"].includes(action)) return response;
+    if (!response.ok || !["create", "seen", "answer", "readback"].includes(action)) return response;
+
     const payload = await response.clone().json().catch(() => ({}));
     const state = payload.counter || {};
+    if (state.mode !== "HANDOFF") return response;
+
+    const workContext = state.workContext || input.workContext;
     const recipient = actor(state.to, "LIGHT");
-    const inbox = inboxStub(inboxNamespace, recipient);
-    if (state.mode === "HANDOFF" && inbox && typeof inbox.fetch === "function") {
+
+    if (["create", "seen", "answer"].includes(action)) {
       const inboxAction = action === "create" ? "enqueue" : "mark";
       const body = action === "create"
-        ? { ...input, mode:"HANDOFF", counterId:state.counterId, fromActor:state.from, toActor:state.to, workContext:state.workContext || input.workContext }
-        : { counterId:state.counterId, workContext:input.workContext, status:state.currentState };
-      await inbox.fetch(new Request("https://counter-inbox.internal/" + inboxAction, {
-        method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify({ ...body, action:inboxAction }),
-      }));
+        ? {
+            ...input,
+            mode:"HANDOFF",
+            counterId:state.counterId,
+            fromActor:state.from,
+            toActor:state.to,
+            workContext,
+          }
+        : {
+            counterId:state.counterId,
+            workContext,
+            status:state.currentState,
+          };
+      const inboxResponse = await inboxCall(recipient, inboxAction, body);
+      if (!inboxResponse.ok) return inboxResponse;
     }
+
+    if (action === "answer") {
+      const origin = actor(state.from, "GO");
+      const answer = {
+        status:state.currentState,
+        answer:state.answer,
+        sources:clone(state.sources || []),
+        evidence:clone(state.evidence || []),
+        confidence:state.confidence,
+        nextRoute:state.nextRoute,
+      };
+      const returnResponse = await inboxCall(origin, "enqueue", {
+        counterId:state.counterId,
+        mode:"HANDOFF",
+        fromActor:recipient,
+        toActor:origin,
+        request:required(state.answer, "Answer"),
+        requestedResult:"Origin actor reads back and closes this same Counter ticket.",
+        authority:state.authority,
+        target:state.target,
+        projectRef:state.projectRef,
+        context:{
+          ...(state.context && typeof state.context === "object" ? clone(state.context) : {}),
+          kind:"COUNTER_ANSWER_READY",
+          answer,
+        },
+        sourceHints:clone(state.sources || []),
+        doNotChange:[
+          "Do not create a new Work or Checkpoint",
+          "Read back this same Counter ticket",
+        ],
+        workContext,
+      });
+      if (!returnResponse.ok) return returnResponse;
+    }
+
+    if (action === "readback") {
+      const origin = actor(state.from, "GO");
+      const returnResponse = await inboxCall(origin, "mark", {
+        counterId:state.counterId,
+        workContext,
+        status:state.currentState,
+      });
+      if (!returnResponse.ok) return returnResponse;
+    }
+
     return response;
   }
+
   return Object.freeze({
     create: input => call("create", input),
     inbox: input => call("inbox", input),
