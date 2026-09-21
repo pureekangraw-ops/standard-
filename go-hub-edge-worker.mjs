@@ -221,6 +221,47 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
           { status:200, headers:{ "content-type":"text/html; charset=utf-8", "cache-control":"no-store" } },
         );
       }
+      if (url.pathname === `${COUNTER_API_ROOT}/inbox` || url.pathname === `${COUNTER_API_ROOT}/pickup`) {
+        if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405);
+        const body = await request.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code:"INVALID_JSON" }, 400);
+
+        const workId = String(body.workId || "").trim();
+        const checkpointId = String(body.checkpointId || "").trim();
+        if (!workId) return json({ code:"COUNTER_WORK_REQUIRED" }, 400);
+        if (!checkpointId) return json({ code:"COUNTER_CHECKPOINT_REQUIRED" }, 400);
+
+        const centreLive = createCentreLiveService({ namespace:env?.GO_HUB_CENTRE_STATE });
+        const inspected = await centreLive.action({ action:"inspect", workId, checkpointId });
+        if (!inspected.ok) return inspected;
+        const centre = await inspected.clone().json().catch(() => ({}));
+        if (String(centre.workId || "") !== workId || String(centre.checkpointId || "") !== checkpointId) {
+          return json({ code:"COUNTER_CENTRE_IDENTITY_MISMATCH" }, 409);
+        }
+
+        const ownership = centre.ownership && typeof centre.ownership === "object" ? centre.ownership : {};
+        const workContext = {
+          workId,
+          checkpointId,
+          returnAddress:checkpointId,
+          ...(ownership.ownerId ? { ownerId:String(ownership.ownerId) } : {}),
+          ...(ownership.leaseId ? { leaseId:String(ownership.leaseId) } : {}),
+          ...(Number.isSafeInteger(ownership.revision) ? { ownershipRevision:ownership.revision } : {}),
+        };
+        const counter = createCounterService({
+          namespace:env?.GO_HUB_COUNTER_STATE,
+          inboxNamespace:env?.GO_HUB_COUNTER_INBOX,
+        });
+
+        if (url.pathname === `${COUNTER_API_ROOT}/inbox`) {
+          const limit = Math.min(Math.max(Number(body.limit || 10), 1), 50);
+          return counter.inbox({ actor:"GO", workContext, limit });
+        }
+
+        const counterId = String(body.counterId || "").trim();
+        if (!counterId) return json({ code:"COUNTER_ID_REQUIRED" }, 400);
+        return counter.seen({ counterId, actor:"GO", workContext });
+      }
       if (url.pathname === `${COUNTER_API_ROOT}/handoff` || url.pathname === `${COUNTER_API_ROOT}/mirror`) {
         if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405);
         const body = await request.json().catch(() => null);
