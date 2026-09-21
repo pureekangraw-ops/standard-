@@ -403,6 +403,42 @@ export class GoHubNotionLightState {
     };
   }
 
+  async ring(input = {}) {
+    const pageId = text(input.pageId || this.env?.LIGHT_BELL_PAGE_ID);
+    const counterId = text(input.counterId);
+    const workId = text(input.workId);
+    const checkpointId = text(input.checkpointId);
+    if (!pageId) throw Object.assign(new Error("LIGHT_BELL_PAGE_REQUIRED"), { status:400 });
+    if (!counterId) throw Object.assign(new Error("LIGHT_BELL_COUNTER_REQUIRED"), { status:400 });
+    if (!workId) throw Object.assign(new Error("LIGHT_BELL_WORK_REQUIRED"), { status:400 });
+    if (!checkpointId) throw Object.assign(new Error("LIGHT_BELL_CHECKPOINT_REQUIRED"), { status:400 });
+    const token = await this.accessToken();
+    const markdown = [
+      "🔔 GO Hub Counter",
+      "Counter: " + counterId,
+      "Work: " + workId,
+      "Checkpoint: " + checkpointId,
+      "Action: Open GO Hub MCP counter inbox and pick up this HANDOFF ticket.",
+    ].join("\\n");
+    const toolResult = await callNotionTool(this.fetchImpl, token, "notion-create-comment", {
+      page_id:pageId,
+      markdown,
+    });
+    const payload = contentJson(toolResult) || {};
+    const resultPayload = payload?.result && typeof payload.result === "object" ? payload.result : payload;
+    const commentId = pickString(resultPayload, ["id","comment_id"]);
+    return {
+      ok:true,
+      tool:"notion-create-comment",
+      signal:"LIGHT_BELL_COMMENT_CREATED",
+      pageId,
+      counterId,
+      workId,
+      checkpointId,
+      receiptId:commentId || null,
+    };
+  }
+
   async fetch(request) {
     try {
       if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405);
@@ -412,6 +448,7 @@ export class GoHubNotionLightState {
         : action === "prepare" ? await this.prepare(input)
         : action === "callback" ? await this.callback(input)
         : action === "search" ? await this.search(input)
+        : action === "ring" ? await this.ring(input)
         : (() => { throw Object.assign(new Error("NOTION_LIGHT_ACTION_UNSUPPORTED"), { status:400 }); })();
       return json(result, result?.ok === false ? 409 : 200);
     } catch (error) {
@@ -440,6 +477,7 @@ export function createNotionLightService({ namespace } = {}) {
     prepare:input => call("prepare", input),
     callback:input => call("callback", input),
     search:input => call("search", input),
+    ring:input => call("ring", input),
   });
 }
 
