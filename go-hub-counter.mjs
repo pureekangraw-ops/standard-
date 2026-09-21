@@ -1,3 +1,5 @@
+const COUNTER_MODES = Object.freeze(["SEARCH", "HANDOFF", "MONITOR"]);
+const COUNTER_MODE_SET = new Set(COUNTER_MODES);
 const ANSWER_STATES = Object.freeze(["ANSWERED", "WAIT", "UNKNOWN", "NEEDS_INPUT", "FAILED", "EXPIRED"]);
 const ANSWER_STATE_SET = new Set(ANSWER_STATES);
 const CONTINUABLE_ANSWER_STATES = new Set(["SEEN", "WAIT", "NEEDS_INPUT"]);
@@ -96,7 +98,18 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
     rejectSecrets(input);
     const identity = workIdentity(input);
     const counterId = required(input.counterId, "Counter ID");
+    const mode = String(input.mode || "SEARCH").trim().toUpperCase();
+    if (!COUNTER_MODE_SET.has(mode)) {
+      throw Object.assign(new Error("COUNTER_MODE_INVALID"), { status: 400 });
+    }
     const request = required(input.request, "Request");
+    const requestedResult = input.requestedResult == null ? null : required(input.requestedResult, "Requested result");
+    const authority = input.authority == null ? null : required(input.authority, "Authority");
+    const target = input.target == null ? null : required(input.target, "Target");
+    const projectRef = input.projectRef == null ? null : required(input.projectRef, "Project reference");
+    if (mode === "HANDOFF" && !requestedResult) {
+      throw Object.assign(new Error("HANDOFF_REQUESTED_RESULT_REQUIRED"), { status: 400 });
+    }
     const context = objectValue(input.context, "Context", { optional: true });
     const sourceHints = stringList(input.sourceHints, "Source hints");
     const doNotChange = stringList(input.doNotChange, "Do not change");
@@ -110,6 +123,9 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
       if (current.request !== request) {
         throw Object.assign(new Error("COUNTER_REQUEST_MISMATCH"), { status: 409 });
       }
+      if ((current.mode || "SEARCH") !== mode) {
+        throw Object.assign(new Error("COUNTER_MODE_MISMATCH"), { status: 409 });
+      }
       return publicState(current, { idempotent: true });
     }
 
@@ -119,6 +135,11 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
       revision: 1,
       workId: identity.workId,
       checkpointId: identity.checkpointId,
+      mode,
+      requestedResult,
+      authority,
+      target,
+      projectRef,
       from: "GO",
       to: "LIGHT",
       request,
