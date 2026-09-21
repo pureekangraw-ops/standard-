@@ -1,5 +1,5 @@
 const NOTION_MCP_URL = "https://mcp.notion.com/mcp";
-const MAGNIFICENT_ARCHITECT_AGENT_MENTION = '@<mention url="agent://1277043d-9861-8158-a732-000347bf2bab/3e27043d-9861-8026-8e4b-009237cacaec">Magnificent Architect</mention>';
+const MAGNIFICENT_ARCHITECT_AGENT_MENTION = '<mention url="agent://1277043d-9861-8158-a732-000347bf2bab/3e27043d-9861-8026-8e4b-009237cacaec">Magnificent Architect</mention>';
 const OAUTH_PENDING_TTL_MS = 10 * 60 * 1000;
 const TOKEN_SKEW_MS = 60 * 1000;
 const MCP_PROTOCOL_VERSION = "2025-11-25";
