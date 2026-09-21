@@ -21,6 +21,10 @@ test("LIGHTHOUSE Control Port MCP service reads paired state and queues commands
             calls.push({ op:"latest" });
             return new Response(JSON.stringify({ ok:true, latest:{ snapshot:{ freshness:"LIVE", revision:9 } }, commands:[], receipts:[] }), { status:200, headers:{ "content-type":"application/json" } });
           }
+          if (url.pathname === "/board/latest") {
+            calls.push({ op:"boardLatest" });
+            return new Response(JSON.stringify({ ok:true, board:{ boardId:"BOARD-LIGHTHOUSE-CENTRE", revision:12, pins:[{ pinId:"PIN:WORK-1", workId:"WORK-1", status:"DOING" }], updatedAt:"2026-09-21T00:00:00.000Z", audit:[{ type:"BOARD_UPDATED" }] } }), { status:200, headers:{ "content-type":"application/json" } });
+          }
           if (url.pathname === "/enqueue") {
             calls.push({ op:"enqueue", input });
             return new Response(JSON.stringify({ ok:true, duplicate:false, command:{ ...input, status:"QUEUED" } }), { status:200, headers:{ "content-type":"application/json" } });
@@ -37,6 +41,17 @@ test("LIGHTHOUSE Control Port MCP service reads paired state and queues commands
   const state = await service.state({ targetId:"lighthouse" });
   assert.equal(state.status, 200);
   assert.equal((await state.json()).latest.snapshot.freshness, "LIVE");
+
+  const board = await service.boardRead();
+  assert.equal(board.status, 200);
+  assert.deepEqual(await board.json(), {
+    ok:true,
+    boardId:"BOARD-LIGHTHOUSE-CENTRE",
+    revision:12,
+    pins:[{ pinId:"PIN:WORK-1", workId:"WORK-1", status:"DOING" }],
+    updatedAt:"2026-09-21T00:00:00.000Z",
+  });
+  assert.equal(calls.at(-1).op, "boardLatest");
 
   const command = await service.command({
     targetId:"lighthouse",

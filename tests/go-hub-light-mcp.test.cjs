@@ -74,6 +74,7 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.ok(names.includes("go_hub_open_pull_request"));
   assert.ok(names.includes("go_hub_centre_inspect"));
   assert.ok(names.includes("go_hub_centre_audit_history"));
+  assert.ok(names.includes("go_hub_board_read"));
   assert.equal(names.includes("go_hub_delete_file"), false);
   assert.equal(names.includes("go_hub_merge_pull_request"), false);
   assert.equal(names.includes("go_hub_centre_live_action"), false);
@@ -167,6 +168,67 @@ test("LIGHT Centre read tools perform bounded read-only calls", async () => {
   assert.deepEqual(second.events.map(record => record.sequence), [4]);
   assert.equal(second.nextSequence, 4);
   assert.equal(second.events.every(record => record.event.type.startsWith("CENTRE_")), true);
+});
+
+test("LIGHT MCP board.read returns bounded authoritative Board truth without mutation tools", async () => {
+  const { createAccessToken } = await import(oauthUrl + "?light-board-read=" + Date.now());
+  const { createFactoryMcpWorker } = await import(factoryUrl + "?light-board-read=" + Date.now());
+  const token = await createAccessToken({
+    issuer:"https://hub.example",
+    signingKey:"master-secret",
+    resource:"https://hub.example/mcp/light",
+    subject:"light",
+    scope:"go-hub-light",
+    ttlSeconds:3600,
+  });
+  const lighthouseNamespace = {
+    getByName(name) {
+      assert.equal(name, "lighthouse-control-port-v1");
+      return {
+        async fetch(request) {
+          assert.equal(new URL(request.url).pathname, "/board/latest");
+          return new Response(JSON.stringify({
+            ok:true,
+            board:{
+              boardId:"BOARD-LIGHTHOUSE-CENTRE",
+              revision:7,
+              pins:[{ pinId:"PIN:WORK-BOARD-1", workId:"WORK-BOARD-1", status:"DOING" }],
+              updatedAt:"2026-09-21T00:30:00.000Z",
+              audit:[{ type:"BOARD_UPDATED" }],
+            },
+          }), { status:200, headers:{ "content-type":"application/json" } });
+        },
+      };
+    },
+  };
+  const worker = createFactoryMcpWorker({ fetchImpl: async () => { throw new Error("network should not be used"); } });
+  const response = await worker.fetch(new Request("https://hub.example/mcp/light", {
+    method:"POST",
+    headers:{ authorization:"Bearer " + token, "content-type":"application/json", origin:"https://www.notion.so" },
+    body:JSON.stringify({
+      jsonrpc:"2.0",
+      id:20,
+      method:"tools/call",
+      params:{ name:"go_hub_board_read", arguments:{} },
+    }),
+  }), {
+    GITHUB_TOKEN:"github-token",
+    GOHUB_MASTER_KEY:"master-secret",
+    GOHUB_OWNER_PASSCODE:"owner-passcode",
+    LIGHTHOUSE_CONTROL_PORT_SESSIONS:lighthouseNamespace,
+  });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.error, undefined);
+  const board = JSON.parse(payload.result.content[0].text);
+  assert.deepEqual(board, {
+    ok:true,
+    boardId:"BOARD-LIGHTHOUSE-CENTRE",
+    revision:7,
+    pins:[{ pinId:"PIN:WORK-BOARD-1", workId:"WORK-BOARD-1", status:"DOING" }],
+    updatedAt:"2026-09-21T00:30:00.000Z",
+  });
+  assert.equal(Object.hasOwn(board, "audit"), false);
 });
 
 test("LIGHT owner page mints scoped bearer without echoing owner passcode", async () => {

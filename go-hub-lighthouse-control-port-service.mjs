@@ -188,6 +188,22 @@ export function createLighthouseControlPortMcpService({ namespace } = {}) {
     if (clean(value).toLowerCase() !== "lighthouse") throw Object.assign(new Error("WORK_TARGET_REQUIRED"), { status:400 });
   }
   return Object.freeze({
+    async boardRead() {
+      const current = sessions();
+      if (!current || typeof current.latestBoard !== "function") return json({ code:"HUB_UNAVAILABLE" }, 503);
+      const result = await current.latestBoard();
+      if (!result?.ok) return json({ code:result?.code || "HUB_UNAVAILABLE" }, statusFor(result?.code));
+      const board = result.board && typeof result.board === "object" ? result.board : {};
+      const revision = Number(board.revision);
+      return json({
+        ok:true,
+        boardId:clean(board.boardId) || null,
+        revision:Number.isSafeInteger(revision) && revision >= 0 ? revision : 0,
+        pins:Array.isArray(board.pins) ? board.pins : [],
+        updatedAt:board.updatedAt == null ? null : clean(board.updatedAt),
+      }, 200);
+    },
+
     async state({ targetId } = {}) {
       requireTarget(targetId);
       const current = sessions();
