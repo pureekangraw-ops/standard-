@@ -620,21 +620,24 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
             const mode = String(input?.mode || "SEARCH").trim().toUpperCase();
             if (lightMcp && mode !== "HANDOFF") return json({ code:"LIGHT_COUNTER_CREATE_HANDOFF_ONLY" }, 400);
             const routed = { ...input, fromActor, toActor };
-            return runMutation("counter.create", routed, () => counterDispatch.create(routed));
+            return runMutation("counter.create." + fromActor.toLowerCase(), routed, () => counterDispatch.create(routed));
           },
           counterInbox: input => counter.inbox({ ...input, actor:lightMcp ? "LIGHT" : "GO" }),
           counterGet: input => counterDispatch.get(input),
           counterSeen: input => {
-            const routed = { ...input, actor:lightMcp ? "LIGHT" : "GO" };
-            return runMutation("counter.seen", routed, () => counter.seen(routed));
+            const actor = lightMcp ? "LIGHT" : "GO";
+            const routed = { ...input, actor };
+            return runMutation("counter.seen." + actor.toLowerCase(), routed, () => counter.seen(routed));
           },
           counterAnswer: input => {
-            const routed = { ...input, actor:lightMcp ? "LIGHT" : "GO" };
-            return runMutation("counter.answer", routed, () => counterDispatch.answer(routed));
+            const actor = lightMcp ? "LIGHT" : "GO";
+            const routed = { ...input, actor };
+            return runMutation("counter.answer." + actor.toLowerCase(), routed, () => counterDispatch.answer(routed));
           },
           counterReadback: input => {
-            const routed = { ...input, actor:lightMcp ? "LIGHT" : "GO" };
-            return runMutation("counter.readback", routed, () => counter.readback(routed));
+            const actor = lightMcp ? "LIGHT" : "GO";
+            const routed = { ...input, actor };
+            return runMutation("counter.readback." + actor.toLowerCase(), routed, () => counter.readback(routed));
           },
           linearListProjects: input => linear.listProjects(input),
           linearGetIssue: input => linear.getIssue(input),
