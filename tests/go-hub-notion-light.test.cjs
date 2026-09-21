@@ -209,8 +209,8 @@ test("Notion LIGHT ring creates a signal-only comment on the configured LIGHT mi
       assert.equal(body.params.arguments.page_id, "88970e1da0a64ceebaa1ac1928361911");
       assert.match(body.params.arguments.markdown, /COUNTER-BELL-001/);
       assert.match(body.params.arguments.markdown, /WORK-BELL-001/);
-      assert.match(body.params.arguments.markdown, /<mention-agent url="agent:\/\/workspace\/magnificent-architect"\/>/);
-      assert.match(body.params.arguments.markdown, /Wake LIGHT/);
+      assert.match(body.params.arguments.markdown, /Trigger: NOTION_PAGE_COMMENT/);\n      assert.doesNotMatch(body.params.arguments.markdown, /mention-agent/);
+      assert.match(body.params.arguments.markdown, /page-comment trigger/);
       assert.doesNotMatch(body.params.arguments.markdown, /requestedResult|doNotChange|sourceHints/);
       return jsonResponse({
         jsonrpc:"2.0",
@@ -224,7 +224,6 @@ test("Notion LIGHT ring creates a signal-only comment on the configured LIGHT mi
     const { GoHubNotionLightState } = await import(moduleUrl + "?ring=" + Date.now());
     const light = new GoHubNotionLightState({ storage }, {
       LIGHT_BELL_PAGE_ID:"88970e1da0a64ceebaa1ac1928361911",
-      COUNTER_HANDOFF_AGENT_URL:"agent://workspace/magnificent-architect",
     });
     const result = await light.ring({
       counterId:"COUNTER-BELL-001",
@@ -240,7 +239,7 @@ test("Notion LIGHT ring creates a signal-only comment on the configured LIGHT mi
   }
 });
 
-test("Notion LIGHT Mirror bell mentions the Mirror worker without creating a Counter ticket", async () => {
+test("Notion LIGHT Mirror bell uses the Bell page comment trigger without creating a Counter ticket", async () => {
   const originalFetch = globalThis.fetch;
   const storage = memoryStorage({
     client:{ clientId:"client-1", clientSecret:null, redirectUri:"https://hub.example/callback" },
@@ -261,7 +260,7 @@ test("Notion LIGHT Mirror bell mentions the Mirror worker without creating a Cou
       assert.equal(body.params.name, "notion-create-comment");
       assert.equal(body.params.arguments.page_id, "88970e1da0a64ceebaa1ac1928361911");
       assert.match(body.params.arguments.markdown, /GO Hub Mirror Bell/);
-      assert.match(body.params.arguments.markdown, /<mention-agent url="agent:\/\/workspace\/mirror-worker"\/>/);
+      assert.match(body.params.arguments.markdown, /Trigger: NOTION_PAGE_COMMENT/);\n      assert.doesNotMatch(body.params.arguments.markdown, /mention-agent/);
       assert.match(body.params.arguments.markdown, /อัพเดทมิเรอร์/);
       assert.match(body.params.arguments.markdown, /WORK-MIRROR-001/);
       assert.doesNotMatch(body.params.arguments.markdown, /Counter:/);
@@ -277,7 +276,6 @@ test("Notion LIGHT Mirror bell mentions the Mirror worker without creating a Cou
     const { GoHubNotionLightState } = await import(moduleUrl + "?mirror-ring=" + Date.now());
     const light = new GoHubNotionLightState({ storage }, {
       LIGHT_BELL_PAGE_ID:"88970e1da0a64ceebaa1ac1928361911",
-      MIRROR_REFRESH_AGENT_URL:"agent://workspace/mirror-worker",
     });
     const result = await light.ring({
       bellType:"MIRROR_REFRESH",
