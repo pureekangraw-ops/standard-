@@ -20,6 +20,7 @@ test("GO Hub API routes run the edge Worker before SPA asset fallback", () => {
   });
   assert.deepEqual(config.assets?.run_worker_first, [
     "/hub/api/centre/*",
+    "/hub/api/counter/*",
     "/hub/api/lighthouse-control-port/*",
     "/hub/lighthouse",
     "/hub/api/browser/*",
@@ -32,4 +33,15 @@ test("GO Hub API routes run the edge Worker before SPA asset fallback", () => {
     "/oauth/*",
     "/.well-known/*"
   ]);
+});
+
+
+test("Counter HTTP surface reuses Centre identity, Counter runtime, and the two Notion bell routes", () => {
+  const source = require("node:fs").readFileSync(require("node:path").resolve(__dirname, "../go-hub-edge-worker.mjs"), "utf8");
+  assert.match(source, /COUNTER_API_ROOT = "\/hub\/api\/counter"/);
+  assert.match(source, /COUNTER_API_ROOT}\/handoff/);
+  assert.match(source, /COUNTER_API_ROOT}\/mirror/);
+  assert.match(source, /action:"inspect", workId, checkpointId/);
+  assert.match(source, /createCounterDispatchLifecycle/);
+  assert.match(source, /bellType:"MIRROR_REFRESH"/);
 });

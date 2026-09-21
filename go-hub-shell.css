@@ -138,4 +138,102 @@ h1 { margin: 8px 0; font-size: clamp(2rem, 8vw, 4rem); }
 .centre-route { margin: 0; font-size: .82rem; opacity: .8; }
 .centre-error { min-height: 1.25em; margin: 0; color: #ff9b9b; }
 
+
+.counter-panel {
+  margin-bottom: 24px;
+  padding: 20px;
+  border: 1px solid rgba(244, 246, 248, .55);
+  border-radius: 18px;
+  background: rgba(244, 246, 248, .03);
+}
+
+.counter-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.counter-heading h2 { margin: 4px 0 16px; }
+
+.counter-state {
+  padding: 7px 10px;
+  border: 1px solid rgba(244, 246, 248, .35);
+  border-radius: 999px;
+  font-size: .72rem;
+  letter-spacing: .08em;
+}
+
+.counter-identity {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.counter-identity div { min-width: 0; }
+.counter-identity dt {
+  font-size: .68rem;
+  letter-spacing: .08em;
+  opacity: .65;
+  text-transform: uppercase;
+}
+.counter-identity dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.counter-form { display: grid; gap: 12px; }
+.counter-form label {
+  display: grid;
+  gap: 6px;
+  font-size: .78rem;
+  letter-spacing: .04em;
+}
+.counter-form textarea {
+  width: 100%;
+  border: 1px solid rgba(244, 246, 248, .35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #171a20;
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+.counter-bells {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.counter-bells button {
+  min-height: 48px;
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.counter-bells button:first-child {
+  background: #65d6a6;
+  color: #111318;
+}
+
+.counter-mirror-bell {
+  background: #f4f6f8;
+  color: #111318;
+}
+
+.counter-bells button:disabled { opacity: .55; cursor: default; }
+.counter-route { margin: 0; font-size: .8rem; opacity: .72; }
+.counter-result { min-height: 1.25em; margin: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 520px) {
+  .counter-bells { grid-template-columns: 1fr; }
+}
+
 [hidden] { display: none !important; }

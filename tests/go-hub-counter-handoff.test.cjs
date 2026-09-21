@@ -84,6 +84,7 @@ test("HANDOFF rings the existing Notion LIGHT mirror and remains waiting for pic
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
     action:"ring",
+    bellType:"LIGHT_HANDOFF",
     pageId:"88970e1da0a64ceebaa1ac1928361911",
     counterId:"COUNTER-HANDOFF-001",
     workId:workContext.workId,

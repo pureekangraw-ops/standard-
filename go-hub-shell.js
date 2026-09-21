@@ -42,9 +42,18 @@ const centreForm = document.querySelector("[data-centre-form]");
 const centreAction = document.querySelector("[data-centre-action]");
 const centreError = document.querySelector("[data-centre-error]");
 const centreTarget = document.querySelector("[data-centre-target]");
+const counterForm = document.querySelector("[data-counter-form]");
+const counterLightBell = document.querySelector("[data-counter-light-bell]");
+const counterMirrorBell = document.querySelector("[data-counter-mirror-bell]");
+const counterResult = document.querySelector("[data-counter-result]");
+const counterState = document.querySelector("[data-counter-state]");
 
 function field(name) {
   return centreForm?.elements.namedItem(name) || null;
+}
+
+function counterField(name) {
+  return counterForm?.elements.namedItem(name) || null;
 }
 
 function activeTarget() {
@@ -303,6 +312,31 @@ function renderCentre() {
   centreAction.disabled = centreWork.status === CENTRE_STATES.RETURNED;
 }
 
+function renderCounter() {
+  const workNode = document.querySelector("[data-counter-work]");
+  const checkpointNode = document.querySelector("[data-counter-checkpoint]");
+  const available = Boolean(centreWork?.workId && centreWork?.checkpointId);
+
+  if (workNode) workNode.textContent = centreWork?.workId || "—";
+  if (checkpointNode) checkpointNode.textContent = centreWork?.checkpointId || "—";
+  if (counterState) counterState.textContent = available ? "READY" : "UNAVAILABLE";
+  if (counterLightBell) counterLightBell.disabled = !available;
+  if (counterMirrorBell) counterMirrorBell.disabled = !available;
+}
+
+async function postCounterAction(path, payload) {
+  const response = await fetch(path, {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body:JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || body?.ok === false) {
+    throw new Error(body?.code || "COUNTER_ACTION_FAILED");
+  }
+  return body;
+}
+
 function render() {
   syncFactoryAccess();
   const capabilities = runtime.list();
@@ -328,9 +362,63 @@ function render() {
     }),
   );
   renderCentre();
+  renderCounter();
   renderWorkbench(taskSnapshot());
   renderOperator(taskSnapshot());
 }
+
+counterForm?.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!centreWork?.workId || !centreWork?.checkpointId) {
+    if (counterResult) counterResult.textContent = "COUNTER_WORK_UNAVAILABLE";
+    return;
+  }
+  if (counterResult) counterResult.textContent = "🔔 Ringing…";
+  if (counterState) counterState.textContent = "RINGING";
+  if (counterLightBell) counterLightBell.disabled = true;
+  try {
+    const body = await postCounterAction("/hub/api/counter/handoff", {
+      workId:centreWork.workId,
+      checkpointId:centreWork.checkpointId,
+      request:counterField("counterRequest")?.value,
+      requestedResult:counterField("counterRequestedResult")?.value,
+      authority:centreWork.authority || "BIG",
+      projectRef:centreWork.targetId || "GO Hub",
+    });
+    const lightLeg = body?.dispatch?.legs?.LIGHT?.status || "QUEUED";
+    const counterId = body?.counter?.counterId || "Counter";
+    if (counterResult) counterResult.textContent = `🔔 ${counterId} · ${lightLeg}`;
+    if (counterState) counterState.textContent = lightLeg;
+  } catch (error) {
+    if (counterResult) counterResult.textContent = error instanceof Error ? error.message : String(error);
+    if (counterState) counterState.textContent = "ERROR";
+  } finally {
+    if (counterLightBell) counterLightBell.disabled = !centreWork?.workId;
+  }
+});
+
+counterMirrorBell?.addEventListener("click", async () => {
+  if (!centreWork?.workId || !centreWork?.checkpointId) {
+    if (counterResult) counterResult.textContent = "COUNTER_WORK_UNAVAILABLE";
+    return;
+  }
+  if (counterResult) counterResult.textContent = "🪞 Ringing…";
+  if (counterState) counterState.textContent = "RINGING";
+  counterMirrorBell.disabled = true;
+  try {
+    const body = await postCounterAction("/hub/api/counter/mirror", {
+      workId:centreWork.workId,
+      checkpointId:centreWork.checkpointId,
+    });
+    if (counterResult) counterResult.textContent = `🪞 ${body.signal || "MIRROR_REFRESH_BELL_COMMENT_CREATED"}`;
+    if (counterState) counterState.textContent = "RUNG";
+  } catch (error) {
+    if (counterResult) counterResult.textContent = error instanceof Error ? error.message : String(error);
+    if (counterState) counterState.textContent = "ERROR";
+  } finally {
+    counterMirrorBell.disabled = !centreWork?.workId;
+  }
+});
 
 centreForm?.addEventListener("submit", async event => {
   event.preventDefault();
