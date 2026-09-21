@@ -114,6 +114,7 @@
     }
   ],
   "vars": {
+    "LIGHT_BELL_PAGE_ID": "88970e1da0a64ceebaa1ac1928361911",
     "BROWSER_POLICY": {
       "allowedHostnames": [
         "gumroad.com",
