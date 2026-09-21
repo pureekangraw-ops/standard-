@@ -20,6 +20,7 @@ test("GO Hub API routes run the edge Worker before SPA asset fallback", () => {
   });
   assert.deepEqual(config.assets?.run_worker_first, [
     "/hub/api/centre/*",
+    "/hub/api/counter/*",
     "/hub/api/lighthouse-control-port/*",
     "/hub/lighthouse",
     "/hub/api/browser/*",
