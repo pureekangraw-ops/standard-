@@ -354,7 +354,7 @@ export class GoHubCounterDispatchState {
   async deliver(target, current, hubOrigin = null) {
     let state = current;
 
-    if ((state.mode || "SEARCH") === "HANDOFF") {
+    if ((state.mode || "SEARCH") === "HANDOFF" && !state.answer && target === actor(state.toActor, "LIGHT")) {
       const config = endpoint(this.env, target);
       if (!config.url) {
         const result = this.core.waitingPickup({ target }, state);
