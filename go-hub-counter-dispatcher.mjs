@@ -389,6 +389,7 @@ export class GoHubCounterDispatchState {
               headers:{ "content-type":"application/json" },
               body:JSON.stringify({
                 action:"ring",
+                bellType:"LIGHT_HANDOFF",
                 pageId:bellPageId,
                 counterId:state.counterId,
                 workId:state.workId,
