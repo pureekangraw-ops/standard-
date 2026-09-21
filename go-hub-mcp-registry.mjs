@@ -114,7 +114,7 @@ function assertLifecycle(name, args) {
   if (linearMutationTools.has(name)) assertWork(args.workContext, LINEAR);
   if (maintenanceTools.has(name)) assertWork(args.workContext, MAINTENANCE);
   if (driveMutationTools.has(name)) assertWork(args.workContext, DRIVE);
-  if (counterTools.has(name)) assertWork(args.workContext, COUNTER, { ownershipRequired:true });
+  if (counterTools.has(name)) assertWork(args.workContext, COUNTER);
   if (name === "go_hub_factory_foreman" && args.action !== "state") assertWork(args.workContext, FACTORY);
 }
 
