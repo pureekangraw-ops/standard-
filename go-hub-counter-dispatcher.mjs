@@ -334,6 +334,61 @@ export function createCounterDispatchCore({
     return publicState(state);
   }
 
+  function bellWaitingPickup(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    if (!["LIGHT","GO"].includes(target)) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    const state = clone(current);
+    const currentBell = state.bell || bell();
+    state.revision += 1;
+    currentBell.status = "RETRY_WAIT";
+    currentBell.target = target;
+    currentBell.deliveredAt = null;
+    currentBell.nextAttemptAt = new Date(Number(now()) + WAITING_TARGET_RETRY_MS).toISOString();
+    currentBell.lastError = null;
+    currentBell.receipt = input.receipt && typeof input.receipt === "object" ? clone(input.receipt) : {};
+    state.bell = currentBell;
+    state.updatedAt = stamp();
+    append(state, "BELL_RUNG_WAITING_PICKUP", target, state.updatedAt, {
+      receipt:clone(currentBell.receipt),
+      nextAttemptAt:currentBell.nextAttemptAt,
+    });
+    return publicState(state);
+  }
+
+  function pickedUp(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    if (!["LIGHT","GO"].includes(target)) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    const state = clone(current);
+    const targetLeg = state.legs[target];
+    if (!targetLeg) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    const currentBell = state.bell || bell();
+    if (targetLeg.status === "DELIVERED" && currentBell.status === "DELIVERED") {
+      state.bell = currentBell;
+      return publicState(state, { idempotent:true });
+    }
+    const at = stamp();
+    state.revision += 1;
+    targetLeg.status = "DELIVERED";
+    targetLeg.deliveredAt = at;
+    targetLeg.nextAttemptAt = null;
+    targetLeg.lastError = null;
+    targetLeg.receipt = input.receipt && typeof input.receipt === "object"
+      ? clone(input.receipt)
+      : { adapter:"counter-pickup" };
+    currentBell.status = "DELIVERED";
+    currentBell.target = target;
+    currentBell.deliveredAt = at;
+    currentBell.nextAttemptAt = null;
+    currentBell.lastError = null;
+    currentBell.receipt = clone(targetLeg.receipt);
+    state.bell = currentBell;
+    state.updatedAt = at;
+    append(state, "PICKED_UP", target, at, targetLeg.receipt);
+    return publicState(state);
+  }
+
   function bellFailed(input = {}, current = null) {
     if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
     const target = required(input.target, "Target").toUpperCase();
@@ -379,7 +434,7 @@ export function createCounterDispatchCore({
     return publicState(state);
   }
 
-  return Object.freeze({ enqueueOpen, enqueueAnswer, waitingTarget, waitingPickup, rung, waitingAuth, blocked, beginAttempt, delivered, failed, beginBellAttempt, bellDelivered, bellFailed });
+  return Object.freeze({ enqueueOpen, enqueueAnswer, waitingTarget, waitingPickup, rung, waitingAuth, blocked, beginAttempt, delivered, failed, beginBellAttempt, bellDelivered, bellWaitingPickup, pickedUp, bellFailed });
 }
 
 function endpoint(env, target) {
@@ -485,10 +540,16 @@ export class GoHubCounterDispatchState {
               mode:"HANDOFF",
               pageId:bellPageId,
             };
-            const deliveredBell = this.core.bellDelivered({ target, receipt }, state);
-            const waiting = this.core.rung({ target, receipt }, deliveredBell.dispatch);
-            await this.save(waiting.dispatch);
-            return publicState(waiting.dispatch, { targetConfigured:true, handoff:true, bell:true });
+            const waiting = this.core.rung({ target, receipt }, state);
+            const retryableBell = this.core.bellWaitingPickup({ target, receipt }, waiting.dispatch);
+            await this.save(retryableBell.dispatch);
+            await this.schedule(retryableBell.dispatch.bell?.nextAttemptAt);
+            return publicState(retryableBell.dispatch, {
+              targetConfigured:true,
+              handoff:true,
+              bell:true,
+              waitingPickup:true,
+            });
           } catch (error) {
             const bellFailure = this.core.bellFailed({ target, error:error?.message || "LIGHT_BELL_FAILED" }, state);
             const waiting = this.core.waitingPickup({ target }, bellFailure.dispatch);
@@ -824,6 +885,21 @@ export class GoHubCounterDispatchState {
     assertIdentity(current, input);
     return publicState(current);
   }
+  async pickup(input = {}) {
+    const current = await this.load();
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    assertIdentity(current, input);
+    const target = actor(input.target || input.actor, current.toActor || "LIGHT");
+    const result = this.core.pickedUp({
+      target,
+      receipt:{
+        adapter:"counter-pickup",
+        actor:target,
+      },
+    }, current);
+    if (!result.idempotent) await this.save(result.dispatch);
+    return result;
+  }
   async retry(input = {}) {
     const current = await this.load();
     if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
@@ -859,6 +935,7 @@ export class GoHubCounterDispatchState {
         : action === "answer" ? await this.enqueueAnswer(input)
         : action === "return_inline" ? await this.returnInline(input)
         : action === "get" ? await this.get(input)
+        : action === "pickup" ? await this.pickup(input)
         : action === "retry" ? await this.retry(input)
         : (() => { throw Object.assign(new Error("DISPATCH_ACTION_UNSUPPORTED"), { status:400 }); })();
       return json(result);
@@ -888,6 +965,7 @@ export function createCounterDispatchService({ namespace, hubOrigin = null } = {
     answer:input => call("answer", input),
     returnInline:input => call("return_inline", input),
     get:input => call("get", input),
+    pickup:input => call("pickup", input),
     retry:input => call("retry", input),
   });
 }
