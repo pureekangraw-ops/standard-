@@ -405,21 +405,49 @@ export class GoHubNotionLightState {
 
   async ring(input = {}) {
     const pageId = text(input.pageId || this.env?.LIGHT_BELL_PAGE_ID);
+    const bellType = text(input.bellType || "LIGHT_HANDOFF").toUpperCase();
     const counterId = text(input.counterId);
     const workId = text(input.workId);
     const checkpointId = text(input.checkpointId);
     if (!pageId) throw Object.assign(new Error("LIGHT_BELL_PAGE_REQUIRED"), { status:400 });
-    if (!counterId) throw Object.assign(new Error("LIGHT_BELL_COUNTER_REQUIRED"), { status:400 });
+    if (!["LIGHT_HANDOFF","MIRROR_REFRESH"].includes(bellType)) {
+      throw Object.assign(new Error("LIGHT_BELL_TYPE_INVALID"), { status:400 });
+    }
+    if (bellType === "LIGHT_HANDOFF" && !counterId) {
+      throw Object.assign(new Error("LIGHT_BELL_COUNTER_REQUIRED"), { status:400 });
+    }
     if (!workId) throw Object.assign(new Error("LIGHT_BELL_WORK_REQUIRED"), { status:400 });
     if (!checkpointId) throw Object.assign(new Error("LIGHT_BELL_CHECKPOINT_REQUIRED"), { status:400 });
+
+    const agentUrl = bellType === "MIRROR_REFRESH"
+      ? text(this.env?.MIRROR_REFRESH_AGENT_URL)
+      : text(this.env?.COUNTER_HANDOFF_AGENT_URL);
+    if (!agentUrl) {
+      throw Object.assign(new Error(
+        bellType === "MIRROR_REFRESH" ? "MIRROR_REFRESH_AGENT_REQUIRED" : "COUNTER_HANDOFF_AGENT_REQUIRED"
+      ), { status:503 });
+    }
+
     const token = await this.accessToken();
-    const markdown = [
-      "🔔 GO Hub Counter",
-      "Counter: " + counterId,
-      "Work: " + workId,
-      "Checkpoint: " + checkpointId,
-      "Action: Open GO Hub MCP counter inbox and pick up this HANDOFF ticket.",
-    ].join("\n");
+    const mention = `<mention-agent url="${agentUrl}"/>`;
+    const markdown = bellType === "MIRROR_REFRESH"
+      ? [
+          "🪞 GO Hub Mirror Bell",
+          mention,
+          "อัพเดทมิเรอร์",
+          "Work: " + workId,
+          "Checkpoint: " + checkpointId,
+          "Action: Refresh GO HUB BOARD — LIGHT MIRROR from the existing Work and verified Owner Source. Do not create a new Work or Checkpoint.",
+        ].join("\n")
+      : [
+          "🔔 GO Hub Counter",
+          mention,
+          "Counter: " + counterId,
+          "Work: " + workId,
+          "Checkpoint: " + checkpointId,
+          "Action: Wake LIGHT and pass it this HANDOFF. LIGHT must open GO Hub MCP counter inbox and pick up this ticket.",
+        ].join("\n");
+
     const toolResult = await callNotionTool(this.fetchImpl, token, "notion-create-comment", {
       page_id:pageId,
       markdown,
@@ -430,9 +458,10 @@ export class GoHubNotionLightState {
     return {
       ok:true,
       tool:"notion-create-comment",
-      signal:"LIGHT_BELL_COMMENT_CREATED",
+      signal:bellType === "MIRROR_REFRESH" ? "MIRROR_REFRESH_BELL_COMMENT_CREATED" : "LIGHT_BELL_COMMENT_CREATED",
+      bellType,
       pageId,
-      counterId,
+      counterId:counterId || null,
       workId,
       checkpointId,
       receiptId:commentId || null,
