@@ -17,7 +17,7 @@ export { GoHubFactoryState } from "./go-hub-factory-state.mjs";
 export { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 export { GoHubCentreState } from "./go-hub-centre-live.mjs";
 export { GoHubGlobalAuditLog } from "./go-hub-global-audit.mjs";
-export { GoHubCounterState } from "./go-hub-counter.mjs";
+export { GoHubCounterState, GoHubCounterInboxState } from "./go-hub-counter.mjs";
 export { GoHubCounterDispatchState } from "./go-hub-counter-dispatcher.mjs";
 export { GoHubNotionLightState } from "./go-hub-notion-light.mjs";
 export { LighthouseControlPortSessionRegistry } from "./go-hub-lighthouse-control-port-session.js";
