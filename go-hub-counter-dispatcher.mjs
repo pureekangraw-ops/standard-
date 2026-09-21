@@ -377,7 +377,7 @@ export class GoHubCounterDispatchState {
         await this.save(delivered.dispatch);
         return publicState(delivered.dispatch, { targetConfigured:true, handoff:true });
       } catch (error) {
-        const result = this.core.failed({ target, error:error?.message || "LIGHT_HANDOFF_WAKE_FAILED" }, state);
+        const result = this.core.failed({ target, error:error?.message || target + "_HANDOFF_WAKE_FAILED" }, state);
         await this.save(result.dispatch);
         await this.schedule(result.dispatch.legs[target].nextAttemptAt);
         return publicState(result.dispatch, { handoff:true });
