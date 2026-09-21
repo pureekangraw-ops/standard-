@@ -45,6 +45,7 @@ const LIGHT_CODE_TOOL_NAMES = new Set([
   "go_hub_get_failure_evidence",
   "go_hub_centre_inspect",
   "go_hub_centre_audit_history",
+  "go_hub_counter_create",
   "go_hub_counter_inbox",
   "go_hub_counter_get",
   "go_hub_counter_seen",
