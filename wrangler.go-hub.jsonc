@@ -111,7 +111,7 @@
       "new_sqlite_classes": [
         "GoHubCounterInboxState"
       ]
-    },
+    }
   ],
   "vars": {
     "BROWSER_POLICY": {
