@@ -445,7 +445,7 @@ export class GoHubNotionLightState {
           "Counter: " + counterId,
           "Work: " + workId,
           "Checkpoint: " + checkpointId,
-          "Action: Wake LIGHT and pass it this HANDOFF. LIGHT must open GO Hub MCP counter inbox and pick up this ticket.",
+          "Action: Wake LIGHT and pass it this HANDOFF. LIGHT must open GO Hub MCP counter inbox, call go_hub_counter_pickup for this Counter first, then process the ticket and return through the same Counter.",
         ].join("\n");
 
     const toolResult = await callNotionTool(this.fetchImpl, token, "notion-create-comment", {
