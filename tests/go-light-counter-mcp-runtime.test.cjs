@@ -5,6 +5,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const counterUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-counter.mjs")).href;
+const dispatcherUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-counter-dispatcher.mjs")).href;
 const workerUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-factory-mcp-worker.mjs")).href;
 const oauthUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-oauth.mjs")).href;
 
@@ -12,7 +13,7 @@ function namespace(factory) {
   const instances = new Map();
   return {
     getByName(name) {
-      if (!instances.has(name)) instances.set(name, factory());
+      if (!instances.has(name)) instances.set(name, factory(name));
       const instance = instances.get(name);
       return { fetch: request => instance.fetch(request) };
     },
@@ -57,29 +58,15 @@ async function callMcp(worker, env, token, name, args, id) {
   return payload.result.structuredContent;
 }
 
-test("LIGHT MCP picks up a waiting HANDOFF through governed Counter operations", async () => {
-  const { GoHubCounterState, GoHubCounterInboxState, createCounterService } = await import(counterUrl + "?runtime=" + Date.now());
-  const { createFactoryMcpWorker } = await import(workerUrl + "?runtime=" + Date.now());
-  const { createAccessToken } = await import(oauthUrl + "?runtime=" + Date.now());
+test("public LIGHT MCP Counter E2E enforces Centre ownership and lease state", async () => {
+  const { GoHubCounterState, GoHubCounterInboxState } = await import(counterUrl + "?final-e2e=" + Date.now());
+  const { GoHubCounterDispatchState } = await import(dispatcherUrl + "?final-e2e=" + Date.now());
+  const { createFactoryMcpWorker } = await import(workerUrl + "?final-e2e=" + Date.now());
+  const { createAccessToken } = await import(oauthUrl + "?final-e2e=" + Date.now());
 
   const counterNamespace = namespace(() => new GoHubCounterState({ storage: storage() }, {}));
   const inboxNamespace = namespace(() => new GoHubCounterInboxState({ storage: storage() }, {}));
-  const counter = createCounterService({ namespace: counterNamespace, inboxNamespace });
-  const created = await counter.create({
-    counterId: "COUNTER-RUNTIME-HANDOFF-001",
-    mode: "HANDOFF",
-    request: "Read the current dispatcher contract.",
-    requestedResult: "Evidence-backed dispatcher answer.",
-    authority: "GO governs route; LIGHT uses bounded tools only.",
-    target: "pureekangraw-ops/standard-",
-    projectRef: "GO Hub",
-    context: { repository: "pureekangraw-ops/standard-" },
-    sourceHints: ["GitHub"],
-    doNotChange: ["Do not search Notion", "Do not delete or merge"],
-    workContext,
-  });
-  assert.equal(created.ok, true);
-
+  const dispatchNamespace = namespace(() => new GoHubCounterDispatchState({ storage: storage() }, {}));
   const centreCalls = [];
   const auditCalls = [];
   const centreNamespace = namespace(() => ({
@@ -90,29 +77,17 @@ test("LIGHT MCP picks up a waiting HANDOFF through governed Counter operations",
         ok: true,
         workId: workContext.workId,
         checkpointId: workContext.checkpointId,
-        ownership: {
-          enforced: true,
-          active: true,
-          ownerId: "GO",
-          leaseId: workContext.leaseId,
-          revision: 21,
-        },
+        ownership: { enforced: true, active: true, ownerId: "GO", leaseId: workContext.leaseId, revision: 21 },
       }), { status: 200 });
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     },
   }));
   const auditNamespace = namespace(() => ({
     async fetch(request) {
-      const input = await request.json();
-      auditCalls.push(input);
+      auditCalls.push(await request.json());
       return new Response(JSON.stringify({ ok: true, sequence: auditCalls.length }), { status: 200 });
     },
   }));
-  const dispatchNamespace = {
-    getByName() {
-      return { fetch: async () => new Response(JSON.stringify({ code: "DISPATCH_NOT_SEEDED" }), { status: 404 }) };
-    },
-  };
   const worker = createFactoryMcpWorker({ fetchImpl: async () => new Response("unused", { status: 500 }) });
   const env = {
     GITHUB_TOKEN: "github-token",
@@ -133,33 +108,66 @@ test("LIGHT MCP picks up a waiting HANDOFF through governed Counter operations",
     ttlSeconds: 3600,
   });
 
-  const inbox = await callMcp(worker, env, token, "go_hub_counter_inbox", { workContext, limit: 10 }, 1);
+  const created = await callMcp(worker, env, token, "go_hub_counter_create", {
+    counterId: "COUNTER-FINAL-E2E-001",
+    mode: "HANDOFF",
+    request: "Read the current dispatcher contract.",
+    requestedResult: "Evidence-backed dispatcher answer.",
+    authority: "GO governs route; LIGHT uses bounded tools only.",
+    target: "pureekangraw-ops/standard-",
+    projectRef: "GO Hub",
+    context: { repository: "pureekangraw-ops/standard-" },
+    sourceHints: ["GitHub"],
+    doNotChange: ["Do not search Notion", "Do not delete or merge"],
+    workContext,
+  }, 1);
+  assert.equal(created.counter.currentState, "OPEN");
+  assert.equal(created.dispatch.legs.LIGHT.status, "WAITING_PICKUP");
+
+  const inbox = await callMcp(worker, env, token, "go_hub_counter_inbox", { workContext, limit: 10 }, 2);
   assert.equal(inbox.inbox.status, "WAITING_PICKUP");
   assert.equal(inbox.inbox.count, 1);
-  assert.equal(inbox.inbox.tickets[0].counterId, "COUNTER-RUNTIME-HANDOFF-001");
-  assert.deepEqual(inbox.inbox.tickets[0].workContext, workContext);
+  assert.equal(inbox.inbox.tickets[0].counterId, "COUNTER-FINAL-E2E-001");
 
   const seen = await callMcp(worker, env, token, "go_hub_counter_seen", {
-    counterId: "COUNTER-RUNTIME-HANDOFF-001", workContext,
-  }, 2);
+    counterId: "COUNTER-FINAL-E2E-001", workContext,
+  }, 3);
   assert.equal(seen.counter.currentState, "SEEN");
 
   const answered = await callMcp(worker, env, token, "go_hub_counter_answer", {
-    counterId: "COUNTER-RUNTIME-HANDOFF-001",
+    counterId: "COUNTER-FINAL-E2E-001",
     status: "ANSWERED",
     answer: "Dispatcher contract is available for GO review.",
     sources: ["https://github.com/pureekangraw-ops/standard-"],
-    evidence: [{ kind: "runtime-test", name: "go-light-counter-mcp-runtime" }],
+    evidence: [{ kind: "runtime-test", name: "public-light-counter-e2e" }],
     confidence: "verified",
     nextRoute: "GO",
     workContext,
-  }, 3);
+  }, 4);
   assert.equal(answered.counter.currentState, "ANSWERED");
   assert.equal(answered.counter.workId, workContext.workId);
   assert.equal(answered.counter.checkpointId, workContext.checkpointId);
-  assert.ok(centreCalls.length >= 2);
-  assert.ok(auditCalls.length >= 2);
+  assert.ok(centreCalls.length >= 3);
+  assert.ok(auditCalls.length >= 3);
 
-  const empty = await callMcp(worker, env, token, "go_hub_counter_inbox", { workContext, limit: 10 }, 4);
+  const empty = await callMcp(worker, env, token, "go_hub_counter_inbox", { workContext, limit: 10 }, 5);
   assert.equal(empty.inbox.count, 0);
+
+  const missingLease = await callMcp(worker, env, token, "go_hub_counter_create", {
+    counterId: "COUNTER-FINAL-E2E-MISSING-LEASE",
+    mode: "HANDOFF",
+    request: "Must be rejected without lease.",
+    requestedResult: "No creation.",
+    workContext: { ...workContext, leaseId: undefined },
+  }, 6);
+  assert.equal(missingLease.code, "CENTRE_WORK_LEASE_REQUIRED");
+
+  const staleLease = await callMcp(worker, env, token, "go_hub_counter_create", {
+    counterId: "COUNTER-FINAL-E2E-STALE-LEASE",
+    mode: "HANDOFF",
+    request: "Must be rejected with stale ownership revision.",
+    requestedResult: "No creation.",
+    workContext: { ...workContext, ownershipRevision: 20 },
+  }, 7);
+  assert.equal(staleLease.code, "CENTRE_OWNERSHIP_STALE_REVISION");
 });
