@@ -43,6 +43,8 @@ const LIGHT_CODE_TOOL_NAMES = new Set([
   "go_hub_get_pull_request",
   "go_hub_get_ci",
   "go_hub_get_failure_evidence",
+  "go_hub_centre_inspect",
+  "go_hub_centre_audit_history",
 ]);
 
 function restrictRegistry(registry, allowedTools) {
@@ -84,6 +86,16 @@ function mutationEvent({ correlationId, stage, operation, workContext, result = 
 
 async function responsePayload(response) {
   return response.clone().json().catch(() => ({}));
+}
+
+async function centreAuditHistory(globalAudit, input = {}) {
+  const response = await globalAudit.history(input);
+  const payload = await responsePayload(response);
+  if (!response.ok) return response;
+  const events = Array.isArray(payload.events)
+    ? payload.events.filter(record => String(record?.event?.type || "").startsWith("CENTRE_"))
+    : [];
+  return json({ ...payload, events, source: "CENTRE_AUDIT" });
 }
 
 export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
@@ -509,6 +521,13 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           observerLatest: () => observer.latest(),
           observerScreenshot: input => observer.screenshot(input),
           auditHistory: input => globalAudit.history(input),
+          centreInspect: input => centreLive.action({
+            action: "inspect",
+            workId: input.workId,
+            checkpointId: input.checkpointId,
+            returnAddress: input.checkpointId,
+          }),
+          centreAuditHistory: input => centreAuditHistory(globalAudit, input),
           centreLiveAction: async input => {
             const response = await centreLive.action(input);
             if (response.ok) {
