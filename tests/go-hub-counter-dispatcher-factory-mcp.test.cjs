@@ -204,3 +204,50 @@ test("Factory MCP counter answer keeps GO return transport separate", async () =
   const payload = await result.json();
   assert.equal(payload.dispatch.legs.GO.status, "WAITING_TARGET");
 });
+
+
+test("Factory MCP HANDOFF answer uses Counter inbox return transport", async () => {
+  const { createCounterDispatchLifecycle } = await import(moduleUrl + "?handoff-inbox=" + Date.now());
+  const answered = counterState({
+    mode:"HANDOFF",
+    currentState:"ANSWERED",
+    answer:"MIRROR_RING_OK",
+    sources:["counter://COUNTER-FMCP-1"],
+    evidence:[{ kind:"LIGHT_PICKUP" }],
+    nextRoute:"GO readback",
+  });
+  let returnInput = null;
+  const lifecycle = createCounterDispatchLifecycle({
+    counter:{
+      async create() { return response({ code:"unused" }, 500); },
+      async get() { return response({ code:"unused" }, 500); },
+      async seen() { return response({ code:"unused" }, 500); },
+      async answer() { return response({ ok:true, counter:answered }); },
+    },
+    dispatch:{
+      async open() { return response({ code:"unused" }, 500); },
+      async get() { return response({ code:"unused" }, 500); },
+      async answer() { return response({ code:"unexpected-route" }, 500); },
+      async returnInline(input) {
+        returnInput = input;
+        return response({
+          ok:true,
+          dispatch:{
+            counterId:input.counterId,
+            workId:input.workId,
+            checkpointId:input.checkpointId,
+            legs:{ LIGHT:{ status:"WAITING_PICKUP" }, GO:{ status:"DELIVERED", receipt:{ transport:input.transport } } },
+          },
+        });
+      },
+    },
+  });
+
+  const result = await lifecycle.answer({});
+  const payload = await result.json();
+  assert.equal(result.status, 200);
+  assert.equal(returnInput.transport, "COUNTER_INBOX");
+  assert.equal(returnInput.receiptId, "go-counter-inbox");
+  assert.equal(payload.dispatch.legs.GO.status, "DELIVERED");
+  assert.equal(payload.dispatch.legs.GO.receipt.transport, "COUNTER_INBOX");
+});
