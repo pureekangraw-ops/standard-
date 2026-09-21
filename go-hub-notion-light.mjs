@@ -419,33 +419,23 @@ export class GoHubNotionLightState {
     if (!workId) throw Object.assign(new Error("LIGHT_BELL_WORK_REQUIRED"), { status:400 });
     if (!checkpointId) throw Object.assign(new Error("LIGHT_BELL_CHECKPOINT_REQUIRED"), { status:400 });
 
-    const agentUrl = bellType === "MIRROR_REFRESH"
-      ? text(this.env?.MIRROR_REFRESH_AGENT_URL)
-      : text(this.env?.COUNTER_HANDOFF_AGENT_URL);
-    if (!agentUrl) {
-      throw Object.assign(new Error(
-        bellType === "MIRROR_REFRESH" ? "MIRROR_REFRESH_AGENT_REQUIRED" : "COUNTER_HANDOFF_AGENT_REQUIRED"
-      ), { status:503 });
-    }
-
     const token = await this.accessToken();
-    const mention = `<mention-agent url="${agentUrl}"/>`;
     const markdown = bellType === "MIRROR_REFRESH"
       ? [
           "🪞 GO Hub Mirror Bell",
-          mention,
+          "Trigger: NOTION_PAGE_COMMENT",
           "อัพเดทมิเรอร์",
           "Work: " + workId,
           "Checkpoint: " + checkpointId,
-          "Action: Refresh GO HUB BOARD — LIGHT MIRROR from the existing Work and verified Owner Source. Do not create a new Work or Checkpoint.",
+          "Action: The LIGHT Custom Agent page-comment trigger must refresh GO HUB BOARD — LIGHT MIRROR from the existing Work and verified Owner Source. Do not create a new Work or Checkpoint.",
         ].join("\n")
       : [
           "🔔 GO Hub Counter",
-          mention,
+          "Trigger: NOTION_PAGE_COMMENT",
           "Counter: " + counterId,
           "Work: " + workId,
           "Checkpoint: " + checkpointId,
-          "Action: Wake LIGHT and pass it this HANDOFF. LIGHT must open GO Hub MCP counter inbox, call go_hub_counter_pickup for this Counter first, then process the ticket and return through the same Counter.",
+          "Action: The LIGHT Custom Agent page-comment trigger must open GO Hub MCP counter inbox, call go_hub_counter_pickup for this Counter first, then process the ticket and return through the same Counter.",
         ].join("\n");
 
     const toolResult = await callNotionTool(this.fetchImpl, token, "notion-create-comment", {
