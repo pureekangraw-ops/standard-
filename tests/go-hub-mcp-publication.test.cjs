@@ -30,6 +30,7 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
     { name: "OBSERVER_SESSIONS", class_name: "ObserverSessionRegistry" },
     { name: "GO_HUB_GLOBAL_AUDIT", class_name: "GoHubGlobalAuditLog" },
     { name: "GO_HUB_COUNTER_STATE", class_name: "GoHubCounterState" },
+    { name: "GO_HUB_COUNTER_INBOX", class_name: "GoHubCounterInboxState" },
     { name: "GO_HUB_COUNTER_DISPATCH_STATE", class_name: "GoHubCounterDispatchState" },
     { name: "GO_HUB_NOTION_LIGHT_STATE", class_name: "GoHubNotionLightState" },
   ]);
@@ -47,6 +48,8 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
     Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("GoHubGlobalAuditLog")));
   assert.ok(wrangler.migrations?.some(item =>
     Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("GoHubCounterState")));
+  assert.ok(wrangler.migrations?.some(item =>
+    Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("GoHubCounterInboxState")));
   assert.ok(wrangler.migrations?.some(item =>
     Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("GoHubCounterDispatchState")));
   assert.ok(wrangler.migrations?.some(item =>
