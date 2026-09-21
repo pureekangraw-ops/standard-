@@ -270,6 +270,25 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
       }, response.status);
     },
 
+    async pickup(input = {}) {
+      const response = await counter.seen(input);
+      const payload = await parsed(response);
+      if (!response.ok) return response;
+      const state = payload.counter || {};
+      const dispatchResponse = await dispatch.pickup({
+        counterId:state.counterId,
+        workId:state.workId,
+        checkpointId:state.checkpointId,
+        actor:input.actor || state.to || "LIGHT",
+      });
+      const dispatchPayload = await parsed(dispatchResponse);
+      return json({
+        ...payload,
+        dispatch:dispatchPayload.dispatch || null,
+        dispatchCode:dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_PICKUP_FAILED"),
+      }, response.status);
+    },
+
     async answer(input = {}) {
       const response = await counter.answer(input);
       const payload = await parsed(response);
@@ -636,12 +655,12 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           counterSeen: input => {
             const actor = lightMcp ? "LIGHT" : "GO";
             const routed = { ...input, actor };
-            return runMutation("counter.seen." + actor.toLowerCase(), routed, () => counter.seen(routed));
+            return runMutation("counter.seen." + actor.toLowerCase(), routed, () => counterDispatch.pickup(routed));
           },
           counterPickup: input => {
             const actor = lightMcp ? "LIGHT" : "GO";
             const routed = { ...input, actor };
-            return runMutation("counter.pickup." + actor.toLowerCase(), routed, () => counter.seen(routed));
+            return runMutation("counter.pickup." + actor.toLowerCase(), routed, () => counterDispatch.pickup(routed));
           },
           counterAnswer: input => {
             const actor = lightMcp ? "LIGHT" : "GO";
