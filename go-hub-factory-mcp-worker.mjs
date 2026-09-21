@@ -43,6 +43,8 @@ const LIGHT_CODE_TOOL_NAMES = new Set([
   "go_hub_get_pull_request",
   "go_hub_get_ci",
   "go_hub_get_failure_evidence",
+  "go_hub_centre_inspect",
+  "go_hub_centre_audit_history",
 ]);
 
 function restrictRegistry(registry, allowedTools) {
@@ -84,6 +86,66 @@ function mutationEvent({ correlationId, stage, operation, workContext, result = 
 
 async function responsePayload(response) {
   return response.clone().json().catch(() => ({}));
+}
+
+const CENTRE_AUDIT_PAGE_SIZE = 200;
+
+function sequenceOf(record) {
+  const sequence = Number(record?.sequence);
+  return Number.isSafeInteger(sequence) && sequence >= 0 ? sequence : null;
+}
+
+function auditSequence(value, fallback = 0) {
+  const sequence = Number(value);
+  return Number.isSafeInteger(sequence) && sequence >= 0 ? sequence : fallback;
+}
+
+async function centreAuditHistory(globalAudit, input = {}) {
+  const requestedLimit = input.limit == null ? 100 : Number(input.limit);
+  const initialSequence = auditSequence(input.afterSequence);
+  if (!Number.isSafeInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 200) {
+    return json({ code: "CENTRE_AUDIT_INVALID_QUERY" }, 400);
+  }
+
+  const events = [];
+  let cursor = initialSequence;
+  let lastSequence = initialSequence;
+  while (events.length < requestedLimit) {
+    const response = await globalAudit.history({
+      ...input,
+      afterSequence: cursor,
+      limit: CENTRE_AUDIT_PAGE_SIZE,
+    });
+    const payload = await responsePayload(response);
+    if (!response.ok) return response;
+
+    lastSequence = Math.max(lastSequence, auditSequence(payload.lastSequence, cursor));
+    const page = Array.isArray(payload.events) ? payload.events : [];
+    const centreEvents = page.filter(record => String(record?.event?.type || "").startsWith("CENTRE_"));
+    for (const record of centreEvents) {
+      if (events.length >= requestedLimit) break;
+      events.push(record);
+    }
+
+    const pageSequence = page.reduce((highest, record) => Math.max(highest, sequenceOf(record) ?? highest), cursor);
+    if (events.length >= requestedLimit || page.length === 0 || pageSequence <= cursor) break;
+    cursor = pageSequence;
+    if (cursor >= lastSequence) break;
+  }
+
+  const nextSequence = events.length
+    ? (sequenceOf(events[events.length - 1]) ?? initialSequence)
+    : lastSequence;
+  return json({
+    ok: true,
+    workId: input.workId || null,
+    afterSequence: initialSequence,
+    events,
+    lastSequence,
+    nextSequence,
+    hasMore: nextSequence < lastSequence,
+    source: "CENTRE_AUDIT",
+  });
 }
 
 export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
@@ -509,6 +571,13 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           observerLatest: () => observer.latest(),
           observerScreenshot: input => observer.screenshot(input),
           auditHistory: input => globalAudit.history(input),
+          centreInspect: input => centreLive.action({
+            action: "inspect",
+            workId: input.workId,
+            checkpointId: input.checkpointId,
+            returnAddress: input.checkpointId,
+          }),
+          centreAuditHistory: input => centreAuditHistory(globalAudit, input),
           centreLiveAction: async input => {
             const response = await centreLive.action(input);
             if (response.ok) {
