@@ -43,6 +43,9 @@ const LIGHT_CODE_TOOL_NAMES = new Set([
   "go_hub_get_pull_request",
   "go_hub_get_ci",
   "go_hub_get_failure_evidence",
+  "go_hub_get_workflow_runs",
+  "go_hub_centre_inspect",
+  "go_hub_audit_history",
 ]);
 
 function restrictRegistry(registry, allowedTools) {
@@ -519,6 +522,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
             }
             return response;
           },
+          centreInspect: input => centreLive.action({ action:"inspect", workId:input.workId }),
           centreReadOnlyFastLane: input => json(routeReadOnlyFastLane(input)),
           lighthouseControlPortState: input => lighthouseControlPort.state(input),
           lighthouseControlPortCommand: input => lighthouseControlPort.command(input),
