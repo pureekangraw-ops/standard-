@@ -157,23 +157,29 @@ test("GO -> LIGHT HANDOFF uses recipient inbox and enforced LIGHT mutations", as
   assert.equal(inbox.inbox.tickets[0].from, "GO");
   assert.equal(inbox.inbox.tickets[0].to, "LIGHT");
 
-  const missingLease = await callMcp(worker, env, lightToken, "/mcp/light", "go_hub_counter_seen", {
+  const missingLease = await callMcp(worker, env, lightToken, "/mcp/light", "go_hub_counter_pickup", {
     counterId: "COUNTER-BIDIR-GO-LIGHT-001",
     workContext: { ...workContext, leaseId: undefined },
   }, 3);
   assert.equal(missingLease.code, "CENTRE_WORK_LEASE_REQUIRED");
 
-  const staleRevision = await callMcp(worker, env, lightToken, "/mcp/light", "go_hub_counter_seen", {
+  const staleRevision = await callMcp(worker, env, lightToken, "/mcp/light", "go_hub_counter_pickup", {
     counterId: "COUNTER-BIDIR-GO-LIGHT-001",
     workContext: { ...workContext, ownershipRevision: 21 },
   }, 4);
   assert.equal(staleRevision.code, "CENTRE_OWNERSHIP_STALE_REVISION");
 
-  const seen = await callMcp(worker, env, lightToken, "/mcp/light", "go_hub_counter_seen", {
+  const pickedUp = await callMcp(worker, env, lightToken, "/mcp/light", "go_hub_counter_pickup", {
     counterId: "COUNTER-BIDIR-GO-LIGHT-001", workContext,
   }, 5);
-  assert.equal(seen.counter.currentState, "SEEN");
-  assert.equal(seen.counter.events.at(-1).actor, "LIGHT");
+  assert.equal(pickedUp.counter.currentState, "SEEN");
+  assert.equal(pickedUp.counter.events.at(-1).actor, "LIGHT");
+
+  const legacySeen = await callMcp(worker, env, lightToken, "/mcp/light", "go_hub_counter_seen", {
+    counterId: "COUNTER-BIDIR-GO-LIGHT-001", workContext,
+  }, 51);
+  assert.equal(legacySeen.idempotent, true);
+  assert.equal(legacySeen.counter.currentState, "SEEN");
 
   const answered = await callMcp(worker, env, lightToken, "/mcp/light", "go_hub_counter_answer", {
     counterId: "COUNTER-BIDIR-GO-LIGHT-001",
@@ -234,11 +240,11 @@ test("LIGHT -> GO HANDOFF is explicit, HANDOFF-only, and supports GO answer plus
   assert.equal(goInbox.inbox.tickets[0].from, "LIGHT");
   assert.equal(goInbox.inbox.tickets[0].to, "GO");
 
-  const seen = await callMcp(worker, env, goToken, "/mcp", "go_hub_counter_seen", {
+  const pickedUp = await callMcp(worker, env, goToken, "/mcp", "go_hub_counter_pickup", {
     counterId: "COUNTER-BIDIR-LIGHT-GO-001", workContext,
   }, 23);
-  assert.equal(seen.counter.currentState, "SEEN");
-  assert.equal(seen.counter.events.at(-1).actor, "GO");
+  assert.equal(pickedUp.counter.currentState, "SEEN");
+  assert.equal(pickedUp.counter.events.at(-1).actor, "GO");
 
   const answered = await callMcp(worker, env, goToken, "/mcp", "go_hub_counter_answer", {
     counterId: "COUNTER-BIDIR-LIGHT-GO-001",
