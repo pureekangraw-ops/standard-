@@ -45,6 +45,7 @@ const LIGHT_CODE_TOOL_NAMES = new Set([
   "go_hub_get_failure_evidence",
   "go_hub_centre_inspect",
   "go_hub_centre_audit_history",
+  "go_hub_board_read",
 ]);
 
 function restrictRegistry(registry, allowedTools) {
@@ -592,6 +593,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           lighthouseControlPortState: input => lighthouseControlPort.state(input),
           lighthouseControlPortCommand: input => lighthouseControlPort.command(input),
           projectStatus: async input => json(await projectStatus.read(input)),
+          boardRead: () => lighthouseControlPort.boardRead(),
           boardPinRoute: input => json(boardPinRoute.read(input)),
           counterCreate: input => runMutation("counter.create", input, () => counterDispatch.create(input)),
           counterGet: input => counterDispatch.get(input),
