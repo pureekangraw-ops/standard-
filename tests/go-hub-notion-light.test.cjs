@@ -209,7 +209,8 @@ test("Notion LIGHT ring creates a signal-only comment on the configured LIGHT mi
       assert.equal(body.params.arguments.page_id, "88970e1da0a64ceebaa1ac1928361911");
       assert.match(body.params.arguments.markdown, /COUNTER-BELL-001/);
       assert.match(body.params.arguments.markdown, /WORK-BELL-001/);
-      assert.match(body.params.arguments.markdown, /Trigger: NOTION_PAGE_COMMENT/);\n      assert.doesNotMatch(body.params.arguments.markdown, /mention-agent/);
+      assert.match(body.params.arguments.markdown, /Trigger: NOTION_PAGE_COMMENT/);
+      assert.doesNotMatch(body.params.arguments.markdown, /mention-agent/);
       assert.match(body.params.arguments.markdown, /page-comment trigger/);
       assert.doesNotMatch(body.params.arguments.markdown, /requestedResult|doNotChange|sourceHints/);
       return jsonResponse({
@@ -260,7 +261,8 @@ test("Notion LIGHT Mirror bell uses the Bell page comment trigger without creati
       assert.equal(body.params.name, "notion-create-comment");
       assert.equal(body.params.arguments.page_id, "88970e1da0a64ceebaa1ac1928361911");
       assert.match(body.params.arguments.markdown, /GO Hub Mirror Bell/);
-      assert.match(body.params.arguments.markdown, /Trigger: NOTION_PAGE_COMMENT/);\n      assert.doesNotMatch(body.params.arguments.markdown, /mention-agent/);
+      assert.match(body.params.arguments.markdown, /Trigger: NOTION_PAGE_COMMENT/);
+      assert.doesNotMatch(body.params.arguments.markdown, /mention-agent/);
       assert.match(body.params.arguments.markdown, /อัพเดทมิเรอร์/);
       assert.match(body.params.arguments.markdown, /WORK-MIRROR-001/);
       assert.doesNotMatch(body.params.arguments.markdown, /Counter:/);
