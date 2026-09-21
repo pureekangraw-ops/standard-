@@ -776,13 +776,26 @@ export class GoHubCounterDispatchState {
   async returnInline(input = {}) {
     const current = await this.load();
     if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const transport = String(input.transport || "INLINE").trim().toUpperCase();
+    if (!["INLINE","COUNTER_INBOX"].includes(transport)) {
+      throw Object.assign(new Error("DISPATCH_RETURN_TRANSPORT_INVALID"), { status:400 });
+    }
+    const receiptId = String(input.receiptId || (transport === "COUNTER_INBOX"
+      ? "go-counter-inbox"
+      : "factory-mcp-inline-return")).trim();
+
     const queued = this.core.enqueueAnswer(input, current);
     let state = queued.dispatch;
     if (!queued.idempotent) await this.save(state);
 
     const targetActor = actor(state.fromActor, "GO");
     if (state.legs[targetActor].status === "DELIVERED") {
-      return publicState(state, { idempotent:true, inlineReturn:true });
+      return publicState(state, {
+        idempotent:true,
+        inlineReturn:transport === "INLINE",
+        inboxReturn:transport === "COUNTER_INBOX",
+        returnTransport:transport,
+      });
     }
 
     const attempt = this.core.beginAttempt({ target:targetActor }, state);
@@ -793,12 +806,16 @@ export class GoHubCounterDispatchState {
       target:targetActor,
       receipt:{
         httpStatus:200,
-        receiptId:"factory-mcp-inline-return",
-        transport:"INLINE",
+        receiptId,
+        transport,
       },
     }, state);
     await this.save(delivered.dispatch);
-    return publicState(delivered.dispatch, { inlineReturn:true });
+    return publicState(delivered.dispatch, {
+      inlineReturn:transport === "INLINE",
+      inboxReturn:transport === "COUNTER_INBOX",
+      returnTransport:transport,
+    });
   }
 
   async get(input = {}) {
