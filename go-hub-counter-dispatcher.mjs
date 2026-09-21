@@ -47,6 +47,18 @@ function leg() {
     receipt:null,
   };
 }
+function bell() {
+  return {
+    status:"IDLE",
+    target:null,
+    attempts:0,
+    lastAttemptAt:null,
+    nextAttemptAt:null,
+    deliveredAt:null,
+    lastError:null,
+    receipt:null,
+  };
+}
 function append(state, type, target, at, detail = null) {
   state.events.push({
     sequence:state.events.length + 1,
@@ -110,6 +122,7 @@ export function createCounterDispatchCore({
       answer:null,
       lightResult:null,
       legs:{ LIGHT:leg(), GO:leg() },
+      bell:bell(),
       events:[],
       createdAt:at,
       updatedAt:at,
@@ -280,6 +293,70 @@ export function createCounterDispatchCore({
     return publicState(state);
   }
 
+  function beginBellAttempt(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    if (!["LIGHT","GO"].includes(target)) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    const state = clone(current);
+    const currentBell = state.bell || bell();
+    if (currentBell.status === "DELIVERED" || currentBell.status === "DEAD_LETTER") {
+      state.bell = currentBell;
+      return publicState(state, { idempotent:true });
+    }
+    state.revision += 1;
+    currentBell.status = "DISPATCHING";
+    currentBell.target = target;
+    currentBell.attempts += 1;
+    currentBell.lastAttemptAt = stamp();
+    currentBell.nextAttemptAt = null;
+    currentBell.lastError = null;
+    state.bell = currentBell;
+    state.updatedAt = currentBell.lastAttemptAt;
+    append(state, "BELL_ATTEMPT", target, state.updatedAt, { attempt:currentBell.attempts });
+    return publicState(state);
+  }
+
+  function bellDelivered(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    const state = clone(current);
+    const currentBell = state.bell || bell();
+    state.revision += 1;
+    currentBell.status = "DELIVERED";
+    currentBell.target = target;
+    currentBell.deliveredAt = stamp();
+    currentBell.nextAttemptAt = null;
+    currentBell.lastError = null;
+    currentBell.receipt = input.receipt && typeof input.receipt === "object" ? clone(input.receipt) : {};
+    state.bell = currentBell;
+    state.updatedAt = currentBell.deliveredAt;
+    append(state, "BELL_DELIVERED", target, state.updatedAt, currentBell.receipt);
+    return publicState(state);
+  }
+
+  function bellFailed(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    const state = clone(current);
+    const currentBell = state.bell || bell();
+    state.revision += 1;
+    currentBell.target = target;
+    currentBell.lastError = String(input.error || "BELL_FAILED").slice(0, 240);
+    const exhausted = currentBell.attempts >= maxAttempts;
+    currentBell.status = exhausted ? "DEAD_LETTER" : "RETRY_WAIT";
+    currentBell.nextAttemptAt = exhausted ? null : new Date(
+      Number(now()) + RETRY_DELAYS_MS[Math.min(Math.max(currentBell.attempts - 1, 0), RETRY_DELAYS_MS.length - 1)]
+    ).toISOString();
+    state.bell = currentBell;
+    state.updatedAt = stamp();
+    append(state, exhausted ? "BELL_DEAD_LETTER" : "BELL_RETRY_WAIT", target, state.updatedAt, {
+      attempts:currentBell.attempts,
+      error:currentBell.lastError,
+      nextAttemptAt:currentBell.nextAttemptAt,
+    });
+    return publicState(state);
+  }
+
   function failed(input = {}, current = null) {
     if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
     const target = required(input.target, "Target").toUpperCase();
@@ -302,7 +379,7 @@ export function createCounterDispatchCore({
     return publicState(state);
   }
 
-  return Object.freeze({ enqueueOpen, enqueueAnswer, waitingTarget, waitingPickup, rung, waitingAuth, blocked, beginAttempt, delivered, failed });
+  return Object.freeze({ enqueueOpen, enqueueAnswer, waitingTarget, waitingPickup, rung, waitingAuth, blocked, beginAttempt, delivered, failed, beginBellAttempt, bellDelivered, bellFailed });
 }
 
 function endpoint(env, target) {
@@ -379,7 +456,10 @@ export class GoHubCounterDispatchState {
           ? namespace.getByName("notion-light-primary")
           : null;
         if (notion && typeof notion.fetch === "function" && bellPageId) {
-          const attempt = this.core.beginAttempt({ target }, state);
+          if (state.bell?.status === "DELIVERED") {
+            return publicState(state, { targetConfigured:true, handoff:true, bell:true, idempotent:true });
+          }
+          const attempt = this.core.beginBellAttempt({ target }, state);
           state = attempt.dispatch;
           if (attempt.idempotent) return publicState(state, { handoff:true, bell:true });
           await this.save(state);
@@ -398,20 +478,25 @@ export class GoHubCounterDispatchState {
             }));
             const body = await response.json().catch(() => ({}));
             if (!response.ok || body?.ok !== true) throw new Error(body?.code || "NOTION_LIGHT_BELL_FAILED");
-            const rung = this.core.rung({ target, receipt:{
+            const receipt = {
               httpStatus:Number(response.status || 0),
               receiptId:body.receiptId == null ? null : String(body.receiptId).slice(0, 160),
               adapter:"notion-light-counter-bell",
               mode:"HANDOFF",
               pageId:bellPageId,
-            } }, state);
-            await this.save(rung.dispatch);
-            return publicState(rung.dispatch, { targetConfigured:true, handoff:true, bell:true });
+            };
+            const deliveredBell = this.core.bellDelivered({ target, receipt }, state);
+            const waiting = this.core.rung({ target, receipt }, deliveredBell.dispatch);
+            await this.save(waiting.dispatch);
+            return publicState(waiting.dispatch, { targetConfigured:true, handoff:true, bell:true });
           } catch (error) {
-            const result = this.core.failed({ target, error:error?.message || "LIGHT_BELL_FAILED" }, state);
-            await this.save(result.dispatch);
-            await this.schedule(result.dispatch.legs[target].nextAttemptAt);
-            return publicState(result.dispatch, { handoff:true, bell:true });
+            const bellFailure = this.core.bellFailed({ target, error:error?.message || "LIGHT_BELL_FAILED" }, state);
+            const waiting = this.core.waitingPickup({ target }, bellFailure.dispatch);
+            const next = waiting.dispatch;
+            next.legs[target].lastError = null;
+            await this.save(next);
+            await this.schedule(next.bell?.nextAttemptAt);
+            return publicState(next, { targetConfigured:true, handoff:true, bell:true, bellFailed:true });
           }
         }
         const result = this.core.waitingPickup({ target }, state);
@@ -734,6 +819,11 @@ export class GoHubCounterDispatchState {
     const state = await this.load();
     if (!state) return;
     const nowMs = Date.now();
+    if (state.bell?.status === "RETRY_WAIT" &&
+        (!state.bell.nextAttemptAt || Date.parse(state.bell.nextAttemptAt) <= nowMs)) {
+      const latest = await this.load();
+      await this.deliver(state.bell.target || latest.toActor, latest);
+    }
     for (const target of ["LIGHT","GO"]) {
       const targetLeg = state.legs[target];
       if (!targetLeg || targetLeg.status !== "RETRY_WAIT") continue;
