@@ -46,6 +46,12 @@ const LIGHT_CODE_TOOL_NAMES = new Set([
   "go_hub_centre_inspect",
   "go_hub_centre_audit_history",
   "go_hub_board_read",
+  "go_hub_counter_create",
+  "go_hub_counter_inbox",
+  "go_hub_counter_get",
+  "go_hub_counter_seen",
+  "go_hub_counter_answer",
+  "go_hub_counter_readback",
 ]);
 
 function restrictRegistry(registry, allowedTools) {
@@ -166,7 +172,15 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
         counterId:state.counterId,
         workId:state.workId,
         checkpointId:state.checkpointId,
+        workContext:state.workContext || input.workContext || {},
+        mode:state.mode || input.mode || "SEARCH",
         request:state.request,
+        requestedResult:state.requestedResult || input.requestedResult || null,
+        authority:state.authority || input.authority || null,
+        target:state.target || input.target || null,
+        projectRef:state.projectRef || input.projectRef || null,
+        fromActor:state.from || input.fromActor || "GO",
+        toActor:state.to || input.toActor || "LIGHT",
         context:state.context || {},
         sourceHints:state.sourceHints || [],
         doNotChange:state.doNotChange || [],
@@ -175,8 +189,9 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
       let dispatchCode = dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_FAILED");
 
       let finalPayload = payload;
+      const mode = String(state.mode || input.mode || "SEARCH").toUpperCase();
       const lightAnswer = dispatchPayload.lightAnswer || dispatchPayload.dispatch?.lightResult || null;
-      if (lightAnswer) {
+      if (lightAnswer && mode === "SEARCH") {
         const identity = {
           counterId:state.counterId,
           workContext:{
@@ -230,6 +245,10 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
         lightCapabilityStatus:dispatchPayload.capabilityStatus || null,
         lightUpgradeUrl:dispatchPayload.upgradeUrl || null,
       }, response.status);
+    },
+
+    async inbox(input = {}) {
+      return counter.inbox(input);
     },
 
     async get(input = {}) {
@@ -534,7 +553,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const observer = createObserverEvidenceService({ namespace: env?.OBSERVER_SESSIONS });
       const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
       const globalAudit = createGlobalAuditService({ namespace: env?.GO_HUB_GLOBAL_AUDIT });
-      const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE });
+      const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE, inboxNamespace: env?.GO_HUB_COUNTER_INBOX });
       const dispatch = createCounterDispatchService({
         namespace: env?.GO_HUB_COUNTER_DISPATCH_STATE,
         hubOrigin: url.origin,
@@ -595,11 +614,31 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           projectStatus: async input => json(await projectStatus.read(input)),
           boardRead: () => lighthouseControlPort.boardRead(),
           boardPinRoute: input => json(boardPinRoute.read(input)),
-          counterCreate: input => runMutation("counter.create", input, () => counterDispatch.create(input)),
+          counterCreate: input => {
+            const fromActor = lightMcp ? "LIGHT" : "GO";
+            const toActor = lightMcp ? "GO" : "LIGHT";
+            const mode = String(input?.mode || "SEARCH").trim().toUpperCase();
+            if (lightMcp && mode !== "HANDOFF") return json({ code:"LIGHT_COUNTER_CREATE_HANDOFF_ONLY" }, 400);
+            const routed = { ...input, fromActor, toActor };
+            return runMutation("counter.create." + fromActor.toLowerCase(), routed, () => counterDispatch.create(routed));
+          },
+          counterInbox: input => counter.inbox({ ...input, actor:lightMcp ? "LIGHT" : "GO" }),
           counterGet: input => counterDispatch.get(input),
-          counterSeen: input => runMutation("counter.seen", input, () => counter.seen(input)),
-          counterAnswer: input => runMutation("counter.answer", input, () => counterDispatch.answer(input)),
-          counterReadback: input => runMutation("counter.readback", input, () => counter.readback(input)),
+          counterSeen: input => {
+            const actor = lightMcp ? "LIGHT" : "GO";
+            const routed = { ...input, actor };
+            return runMutation("counter.seen." + actor.toLowerCase(), routed, () => counter.seen(routed));
+          },
+          counterAnswer: input => {
+            const actor = lightMcp ? "LIGHT" : "GO";
+            const routed = { ...input, actor };
+            return runMutation("counter.answer." + actor.toLowerCase(), routed, () => counterDispatch.answer(routed));
+          },
+          counterReadback: input => {
+            const actor = lightMcp ? "LIGHT" : "GO";
+            const routed = { ...input, actor };
+            return runMutation("counter.readback." + actor.toLowerCase(), routed, () => counter.readback(routed));
+          },
           linearListProjects: input => linear.listProjects(input),
           linearGetIssue: input => linear.getIssue(input),
           linearCreateIssue: input => runMutation("linear.create_issue", input, () => linear.createIssue(input)),

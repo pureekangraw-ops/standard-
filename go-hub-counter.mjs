@@ -1,3 +1,5 @@
+const COUNTER_MODES = Object.freeze(["SEARCH", "HANDOFF", "MONITOR"]);
+const COUNTER_MODE_SET = new Set(COUNTER_MODES);
 const ANSWER_STATES = Object.freeze(["ANSWERED", "WAIT", "UNKNOWN", "NEEDS_INPUT", "FAILED", "EXPIRED"]);
 const ANSWER_STATE_SET = new Set(ANSWER_STATES);
 const CONTINUABLE_ANSWER_STATES = new Set(["SEEN", "WAIT", "NEEDS_INPUT"]);
@@ -18,6 +20,12 @@ function clone(value) {
 function required(value, label) {
   const text = String(value || "").trim();
   if (!text) throw Object.assign(new Error(label + " is required"), { status: 400 });
+  return text;
+}
+
+function actor(value, fallback = null) {
+  const text = String(value || fallback || "").trim().toUpperCase();
+  if (!["GO", "LIGHT"].includes(text)) throw Object.assign(new Error("COUNTER_ACTOR_INVALID"), { status: 400 });
   return text;
 }
 
@@ -96,7 +104,17 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
     rejectSecrets(input);
     const identity = workIdentity(input);
     const counterId = required(input.counterId, "Counter ID");
+    const mode = String(input.mode || "SEARCH").trim().toUpperCase();
+    if (!COUNTER_MODE_SET.has(mode)) throw Object.assign(new Error("COUNTER_MODE_INVALID"), { status:400 });
+    const fromActor = actor(input.fromActor, "GO");
+    const toActor = actor(input.toActor, fromActor === "GO" ? "LIGHT" : "GO");
+    if (fromActor === toActor) throw Object.assign(new Error("COUNTER_ACTOR_ROUTE_INVALID"), { status:400 });
     const request = required(input.request, "Request");
+    const requestedResult = input.requestedResult == null ? null : required(input.requestedResult, "Requested result");
+    const authority = input.authority == null ? null : required(input.authority, "Authority");
+    const target = input.target == null ? null : required(input.target, "Target");
+    const projectRef = input.projectRef == null ? null : required(input.projectRef, "Project reference");
+    if (mode === "HANDOFF" && !requestedResult) throw Object.assign(new Error("HANDOFF_REQUESTED_RESULT_REQUIRED"), { status:400 });
     const context = objectValue(input.context, "Context", { optional: true });
     const sourceHints = stringList(input.sourceHints, "Source hints");
     const doNotChange = stringList(input.doNotChange, "Do not change");
@@ -110,6 +128,10 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
       if (current.request !== request) {
         throw Object.assign(new Error("COUNTER_REQUEST_MISMATCH"), { status: 409 });
       }
+      if ((current.mode || "SEARCH") !== mode) throw Object.assign(new Error("COUNTER_MODE_MISMATCH"), { status:409 });
+      if ((current.from || "GO") !== fromActor || (current.to || "LIGHT") !== toActor) {
+        throw Object.assign(new Error("COUNTER_ACTOR_ROUTE_MISMATCH"), { status:409 });
+      }
       return publicState(current, { idempotent: true });
     }
 
@@ -119,8 +141,14 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
       revision: 1,
       workId: identity.workId,
       checkpointId: identity.checkpointId,
-      from: "GO",
-      to: "LIGHT",
+      workContext: clone(input.workContext),
+      mode,
+      requestedResult,
+      authority,
+      target,
+      projectRef,
+      from: fromActor,
+      to: toActor,
       request,
       context,
       sourceHints,
@@ -138,7 +166,7 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
       nextRoute: null,
       events: [],
     };
-    appendEvent(state, "OPEN", "GO", at, { request });
+    appendEvent(state, "OPEN", fromActor, at, { request, to:toActor });
     return publicState(state, { created: true });
   }
 
@@ -152,6 +180,8 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
     if (!current) throw Object.assign(new Error("COUNTER_NOT_FOUND"), { status: 404 });
     rejectSecrets(input);
     assertIdentity(current, input);
+    const seenActor = actor(input.actor, current.to || "LIGHT");
+    if (seenActor !== (current.to || "LIGHT")) throw Object.assign(new Error("COUNTER_RECIPIENT_ACTOR_MISMATCH"), { status:403 });
     if (current.events.some(item => item.type === "SEEN")) {
       return publicState(current, { idempotent: true });
     }
@@ -163,7 +193,7 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
     state.revision += 1;
     state.currentState = "SEEN";
     state.seenAt = at;
-    appendEvent(state, "SEEN", "LIGHT", at);
+    appendEvent(state, "SEEN", seenActor, at);
     return publicState(state);
   }
 
@@ -171,6 +201,8 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
     if (!current) throw Object.assign(new Error("COUNTER_NOT_FOUND"), { status: 404 });
     rejectSecrets(input);
     assertIdentity(current, input);
+    const answerActor = actor(input.actor, current.to || "LIGHT");
+    if (answerActor !== (current.to || "LIGHT")) throw Object.assign(new Error("COUNTER_RECIPIENT_ACTOR_MISMATCH"), { status:403 });
     const status = required(input.status, "Answer status").toUpperCase();
     if (!ANSWER_STATE_SET.has(status)) {
       throw Object.assign(new Error("COUNTER_INVALID_ANSWER_STATUS"), { status: 400 });
@@ -204,7 +236,7 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
     state.evidence = evidence;
     state.confidence = confidence;
     state.nextRoute = nextRoute;
-    appendEvent(state, status, "LIGHT", at, {
+    appendEvent(state, status, answerActor, at, {
       sources: sources.length,
       evidence: evidence.length,
       nextRoute,
@@ -216,6 +248,8 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
     if (!current) throw Object.assign(new Error("COUNTER_NOT_FOUND"), { status: 404 });
     rejectSecrets(input);
     assertIdentity(current, input);
+    const readbackActor = actor(input.actor, current.from || "GO");
+    if (readbackActor !== (current.from || "GO")) throw Object.assign(new Error("COUNTER_ORIGIN_ACTOR_MISMATCH"), { status:403 });
 
     if (current.currentState === "CLOSED" && current.events.some(item => item.type === "READBACK")) {
       return publicState(current, { idempotent: true });
@@ -246,7 +280,7 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
     const at = now();
     state.revision += 1;
     state.readBackAt = at;
-    appendEvent(state, "READBACK", "GO", at, evidence);
+    appendEvent(state, "READBACK", readbackActor, at, evidence);
 
     if (closeRequested) {
       state.currentState = "CLOSED";
@@ -310,20 +344,127 @@ function counterStub(namespace, counterId) {
   return namespace.getByName(counterId);
 }
 
-export function createCounterService({ namespace } = {}) {
+function inboxStub(namespace, recipient = "LIGHT") {
+  if (!namespace || typeof namespace.getByName !== "function") return null;
+  return namespace.getByName(actor(recipient, "LIGHT").toLowerCase());
+}
+
+function inboxEnvelope(input = {}) {
+  const mode = String(input.mode || "SEARCH").trim().toUpperCase();
+  if (mode !== "HANDOFF") throw Object.assign(new Error("COUNTER_INBOX_HANDOFF_ONLY"), { status:400 });
+  const workContext = objectValue(input.workContext, "workContext");
+  const fromActor = actor(input.fromActor, "GO");
+  const toActor = actor(input.toActor, fromActor === "GO" ? "LIGHT" : "GO");
+  if (fromActor === toActor) throw Object.assign(new Error("COUNTER_ACTOR_ROUTE_INVALID"), { status:400 });
+  return {
+    counterId:required(input.counterId, "Counter ID"),
+    workId:required(workContext.workId, "Work ID"),
+    checkpointId:required(workContext.checkpointId, "Checkpoint ID"),
+    mode,
+    from:fromActor,
+    to:toActor,
+    request:required(input.request, "Request"),
+    requestedResult:required(input.requestedResult, "Requested result"),
+    authority:input.authority == null ? null : required(input.authority, "Authority"),
+    target:input.target == null ? null : required(input.target, "Target"),
+    projectRef:input.projectRef == null ? null : required(input.projectRef, "Project reference"),
+    context:objectValue(input.context, "Context", { optional:true }),
+    sourceHints:stringList(input.sourceHints, "Source hints"),
+    doNotChange:stringList(input.doNotChange, "Do not change"),
+    workContext:clone(workContext),
+  };
+}
+
+export class GoHubCounterInboxState {
+  constructor(ctx, env) { this.ctx = ctx; this.env = env; }
+  async load() { return (await this.ctx.storage.get("handoffs")) || []; }
+  async save(records) {
+    await this.ctx.storage.put("handoffs", clone(records));
+    const readback = await this.ctx.storage.get("handoffs");
+    if (JSON.stringify(readback) !== JSON.stringify(records)) throw Object.assign(new Error("COUNTER_INBOX_DURABLE_READBACK_MISMATCH"), { status:500 });
+  }
+  async act(input = {}) {
+    const action = required(input.action, "Counter inbox action").toLowerCase();
+    let records = await this.load();
+    if (action === "enqueue") {
+      rejectSecrets(input);
+      const envelope = inboxEnvelope(input);
+      const existing = records.find(item => item.counterId === envelope.counterId);
+      if (existing) return { ok:true, inbox:clone(existing), idempotent:true };
+      const record = { ...envelope, status:"WAITING_PICKUP", queuedAt:new Date().toISOString() };
+      records = [...records, record];
+      await this.save(records);
+      return { ok:true, inbox:clone(record), created:true };
+    }
+    if (action === "list") {
+      rejectSecrets(input);
+      const workContext = objectValue(input.workContext, "workContext");
+      const limit = Math.min(Math.max(Number(input.limit || 20), 1), 50);
+      const workId = required(workContext.workId, "Work ID");
+      const checkpointId = required(workContext.checkpointId, "Checkpoint ID");
+      const recipient = actor(input.actor, "LIGHT");
+      const pending = records.filter(item => item.status === "WAITING_PICKUP" && item.workId === workId && item.checkpointId === checkpointId && (item.to || "LIGHT") === recipient).slice(0, limit);
+      return { ok:true, inbox:{ status:"WAITING_PICKUP", count:pending.length, tickets:clone(pending) } };
+    }
+    if (action === "mark") {
+      rejectSecrets(input);
+      const counterId = required(input.counterId, "Counter ID");
+      const status = required(input.status, "Inbox status").toUpperCase();
+      const workContext = objectValue(input.workContext, "workContext");
+      assertIdentity({ counterId, workId:workContext.workId, checkpointId:workContext.checkpointId }, input);
+      const index = records.findIndex(item => item.counterId === counterId);
+      if (index < 0) return { ok:true, missing:true };
+      const next = clone(records);
+      next[index].status = status;
+      next[index].updatedAt = new Date().toISOString();
+      await this.save(next);
+      return { ok:true, inbox:clone(next[index]) };
+    }
+    throw Object.assign(new Error("COUNTER_INBOX_ACTION_UNSUPPORTED"), { status:400 });
+  }
+  async fetch(request) {
+    try {
+      if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405);
+      const input = await request.json().catch(() => null);
+      if (!input || typeof input !== "object" || Array.isArray(input)) return json({ code:"INVALID_JSON" }, 400);
+      return json(await this.act(input));
+    } catch (error) { return json({ code:error?.message || "COUNTER_INBOX_ERROR" }, error?.status || 400); }
+  }
+}
+
+export function createCounterService({ namespace, inboxNamespace } = {}) {
   async function call(action, input = {}) {
+    if (action === "inbox") {
+      const recipient = actor(input.actor, "LIGHT");
+      const stub = inboxStub(inboxNamespace, recipient);
+      if (!stub || typeof stub.fetch !== "function") return json({ code:"COUNTER_INBOX_NOT_CONFIGURED" }, 503);
+      return stub.fetch(new Request("https://counter-inbox.internal/list", { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify({ ...input, action:"list" }) }));
+    }
     const counterId = required(input.counterId, "Counter ID");
     const stub = counterStub(namespace, counterId);
-    if (!stub || typeof stub.fetch !== "function") return json({ code: "COUNTER_STATE_NOT_CONFIGURED" }, 503);
-    return stub.fetch(new Request("https://counter-state.internal/action", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...input, action }),
+    if (!stub || typeof stub.fetch !== "function") return json({ code:"COUNTER_STATE_NOT_CONFIGURED" }, 503);
+    const response = await stub.fetch(new Request("https://counter-state.internal/action", {
+      method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify({ ...input, action }),
     }));
+    if (!response.ok || !["create", "seen", "answer"].includes(action)) return response;
+    const payload = await response.clone().json().catch(() => ({}));
+    const state = payload.counter || {};
+    const recipient = actor(state.to, "LIGHT");
+    const inbox = inboxStub(inboxNamespace, recipient);
+    if (state.mode === "HANDOFF" && inbox && typeof inbox.fetch === "function") {
+      const inboxAction = action === "create" ? "enqueue" : "mark";
+      const body = action === "create"
+        ? { ...input, mode:"HANDOFF", counterId:state.counterId, fromActor:state.from, toActor:state.to, workContext:state.workContext || input.workContext }
+        : { counterId:state.counterId, workContext:input.workContext, status:state.currentState };
+      await inbox.fetch(new Request("https://counter-inbox.internal/" + inboxAction, {
+        method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify({ ...body, action:inboxAction }),
+      }));
+    }
+    return response;
   }
-
   return Object.freeze({
     create: input => call("create", input),
+    inbox: input => call("inbox", input),
     get: input => call("get", input),
     seen: input => call("seen", input),
     answer: input => call("answer", input),

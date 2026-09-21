@@ -15,6 +15,11 @@ function required(value, label) {
   if (!text) throw Object.assign(new Error(label + " is required"), { status:400 });
   return text;
 }
+function actor(value, fallback = null) {
+  const text = String(value || fallback || "").trim().toUpperCase();
+  if (!["GO","LIGHT"].includes(text)) throw Object.assign(new Error("DISPATCH_ACTOR_INVALID"), { status:400 });
+  return text;
+}
 function objectValue(value, label, optional = false) {
   if (value == null && optional) return {};
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -72,7 +77,18 @@ export function createCounterDispatchCore({
     const counterId = required(input.counterId, "Counter ID");
     const workId = required(input.workId, "Work ID");
     const checkpointId = required(input.checkpointId, "Checkpoint ID");
+    const mode = String(input.mode || "SEARCH").trim().toUpperCase();
+    if (!["SEARCH", "HANDOFF", "MONITOR"].includes(mode)) throw Object.assign(new Error("DISPATCH_MODE_INVALID"), { status:400 });
+    const fromActor = actor(input.fromActor, "GO");
+    const toActor = actor(input.toActor, fromActor === "GO" ? "LIGHT" : "GO");
+    if (fromActor === toActor) throw Object.assign(new Error("DISPATCH_ACTOR_ROUTE_INVALID"), { status:400 });
     const request = required(input.request, "Request");
+    const workContext = objectValue(input.workContext, "Work context", true);
+    const requestedResult = input.requestedResult == null ? null : required(input.requestedResult, "Requested result");
+    const authority = input.authority == null ? null : required(input.authority, "Authority");
+    const targetReference = input.target == null ? null : required(input.target, "Target");
+    const projectRef = input.projectRef == null ? null : required(input.projectRef, "Project reference");
+    if (mode === "HANDOFF" && !requestedResult) throw Object.assign(new Error("HANDOFF_REQUESTED_RESULT_REQUIRED"), { status:400 });
     const context = objectValue(input.context, "Context", true);
     const sourceHints = Array.isArray(input.sourceHints) ? input.sourceHints.map(String) : [];
     const doNotChange = Array.isArray(input.doNotChange) ? input.doNotChange.map(String) : [];
@@ -81,12 +97,16 @@ export function createCounterDispatchCore({
       if (current.request !== request) {
         throw Object.assign(new Error("DISPATCH_REQUEST_MISMATCH"), { status:409 });
       }
+      if ((current.fromActor || "GO") !== fromActor || (current.toActor || "LIGHT") !== toActor) {
+        throw Object.assign(new Error("DISPATCH_ACTOR_ROUTE_MISMATCH"), { status:409 });
+      }
       return publicState(current, { idempotent:true });
     }
     const at = stamp();
     const state = {
       counterId, workId, checkpointId, revision:1,
-      request, context, sourceHints, doNotChange,
+      request, workContext, mode, requestedResult, authority, target:targetReference, projectRef, context, sourceHints, doNotChange,
+      fromActor, toActor,
       answer:null,
       lightResult:null,
       legs:{ LIGHT:leg(), GO:leg() },
@@ -94,8 +114,8 @@ export function createCounterDispatchCore({
       createdAt:at,
       updatedAt:at,
     };
-    state.legs.LIGHT.status = "QUEUED";
-    append(state, "QUEUED", "LIGHT", at, { type:"NEW_COUNTER_TICKET" });
+    state.legs[toActor].status = "QUEUED";
+    append(state, "QUEUED", toActor, at, { type:"NEW_COUNTER_TICKET", from:fromActor, to:toActor });
     return publicState(state, { created:true });
   }
 
@@ -112,17 +132,18 @@ export function createCounterDispatchCore({
       nextRoute:input.nextRoute == null ? null : String(input.nextRoute),
     };
     const fingerprint = JSON.stringify(answer);
+    const targetActor = actor(current.fromActor, "GO");
     if (current.answer && JSON.stringify(current.answer) === fingerprint &&
-        current.legs.GO.status !== "IDLE") {
+        current.legs[targetActor].status !== "IDLE") {
       return publicState(current, { idempotent:true });
     }
     const state = clone(current);
     state.revision += 1;
     state.answer = answer;
-    state.legs.GO = leg();
-    state.legs.GO.status = "QUEUED";
+    state.legs[targetActor] = leg();
+    state.legs[targetActor].status = "QUEUED";
     state.updatedAt = stamp();
-    append(state, "QUEUED", "GO", state.updatedAt, { type:"COUNTER_ANSWER_READY", status:answer.status });
+    append(state, "QUEUED", targetActor, state.updatedAt, { type:"COUNTER_ANSWER_READY", status:answer.status });
     return publicState(state);
   }
 
@@ -150,6 +171,22 @@ export function createCounterDispatchCore({
       alreadyWaiting ? { clearedNextAttemptAt:staleNextAttemptAt } : null,
     );
     return publicState(state, { reconciled:alreadyWaiting });
+  }
+
+  function waitingPickup(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    if (!["LIGHT","GO"].includes(target)) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    const state = clone(current);
+    const targetLeg = state.legs[target];
+    if (targetLeg.status === "WAITING_PICKUP" && targetLeg.nextAttemptAt == null) return publicState(state, { idempotent:true });
+    state.revision += 1;
+    targetLeg.status = "WAITING_PICKUP";
+    targetLeg.lastError = target + "_HANDOFF_TARGET_NOT_CONFIGURED";
+    targetLeg.nextAttemptAt = null;
+    state.updatedAt = stamp();
+    append(state, "WAITING_PICKUP", target, state.updatedAt, { mode:"HANDOFF" });
+    return publicState(state);
   }
 
   function waitingAuth(input = {}, current = null) {
@@ -249,7 +286,7 @@ export function createCounterDispatchCore({
     return publicState(state);
   }
 
-  return Object.freeze({ enqueueOpen, enqueueAnswer, waitingTarget, waitingAuth, blocked, beginAttempt, delivered, failed });
+  return Object.freeze({ enqueueOpen, enqueueAnswer, waitingTarget, waitingPickup, waitingAuth, blocked, beginAttempt, delivered, failed });
 }
 
 function endpoint(env, target) {
@@ -258,14 +295,24 @@ function endpoint(env, target) {
   return { url:String(url || "").trim(), bearer:String(bearer || "").trim() };
 }
 function wakePayload(state, target) {
-  if (target === "LIGHT") {
+  const destination = actor(state.toActor, "LIGHT");
+  const origin = actor(state.fromActor, "GO");
+  if (target === destination && !state.answer) {
     return {
       type:"NEW_COUNTER_TICKET",
-      target:"LIGHT",
+      target:destination,
+      from:origin,
+      to:destination,
       counterId:state.counterId,
       workId:state.workId,
       checkpointId:state.checkpointId,
+      mode:state.mode || "SEARCH",
       request:state.request,
+      requestedResult:state.requestedResult || null,
+      authority:state.authority || null,
+      targetReference:state.target || null,
+      projectRef:state.projectRef || null,
+      workContext:clone(state.workContext || {}),
       context:clone(state.context),
       sourceHints:clone(state.sourceHints),
       doNotChange:clone(state.doNotChange),
@@ -273,7 +320,9 @@ function wakePayload(state, target) {
   }
   return {
     type:"COUNTER_ANSWER_READY",
-    target:"GO",
+    target:origin,
+    from:destination,
+    to:origin,
     counterId:state.counterId,
     workId:state.workId,
     checkpointId:state.checkpointId,
@@ -305,7 +354,43 @@ export class GoHubCounterDispatchState {
   async deliver(target, current, hubOrigin = null) {
     let state = current;
 
-    if (target === "LIGHT") {
+    if ((state.mode || "SEARCH") === "HANDOFF" && !state.answer && target === actor(state.toActor, "LIGHT")) {
+      const config = endpoint(this.env, target);
+      if (!config.url) {
+        const result = this.core.waitingPickup({ target }, state);
+        if (!result.idempotent) await this.save(result.dispatch);
+        return publicState(result.dispatch, { targetConfigured:false, handoff:true });
+      }
+      const attempt = this.core.beginAttempt({ target }, state);
+      state = attempt.dispatch;
+      if (attempt.idempotent) return publicState(state, { handoff:true });
+      await this.save(state);
+      try {
+        const response = await fetch(config.url, {
+          method:"POST",
+          headers:{ "content-type":"application/json", ...(config.bearer ? { authorization:"Bearer " + config.bearer } : {}) },
+          body:JSON.stringify(wakePayload(state, target)),
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error("WAKE_HTTP_" + response.status);
+        const delivered = this.core.delivered({ target, receipt:{ ...publicReceipt(response, body), adapter:target.toLowerCase() + "-counter-handoff-wake", mode:"HANDOFF" } }, state);
+        await this.save(delivered.dispatch);
+        return publicState(delivered.dispatch, { targetConfigured:true, handoff:true });
+      } catch (error) {
+        const result = this.core.failed({ target, error:error?.message || target + "_HANDOFF_WAKE_FAILED" }, state);
+        await this.save(result.dispatch);
+        await this.schedule(result.dispatch.legs[target].nextAttemptAt);
+        return publicState(result.dispatch, { handoff:true });
+      }
+    }
+
+    if (target === "LIGHT" && (state.mode || "SEARCH") === "MONITOR") {
+      const result = this.core.blocked({ target, error:"MONITOR_ROUTE_NOT_ACTIVE" }, state);
+      if (!result.idempotent) await this.save(result.dispatch);
+      return publicState(result.dispatch, { monitor:false });
+    }
+
+    if (target === "LIGHT" && (state.mode || "SEARCH") === "SEARCH") {
       const namespace = this.env?.GO_HUB_NOTION_LIGHT_STATE;
       const notion = namespace && typeof namespace.getByName === "function"
         ? namespace.getByName("notion-light-primary")
@@ -461,7 +546,7 @@ export class GoHubCounterDispatchState {
     if (state.lightResult) {
       return publicState(state, { idempotent:true, lightAnswer:clone(state.lightResult) });
     }
-    if (state.legs.LIGHT?.receipt?.tool !== "notion-ai-search") {
+    if ((state.mode || "SEARCH") !== "SEARCH" || state.legs.LIGHT?.receipt?.tool !== "notion-ai-search") {
       return publicState(state, { idempotent:true });
     }
 
@@ -520,29 +605,31 @@ export class GoHubCounterDispatchState {
     const current = await this.load();
     const result = this.core.enqueueOpen(input, current);
     if (result.created) await this.save(result.dispatch);
+    const targetActor = actor(result.dispatch?.toActor, "LIGHT");
     if (result.idempotent) {
-      const status = result.dispatch?.legs?.LIGHT?.status;
-      if (["WAITING_TARGET","WAITING_AUTH","BLOCKED","RETRY_WAIT"].includes(status)) {
-        return this.deliver("LIGHT", result.dispatch, input.hubOrigin);
+      const status = result.dispatch?.legs?.[targetActor]?.status;
+      if (["WAITING_TARGET","WAITING_PICKUP","WAITING_AUTH","BLOCKED","RETRY_WAIT"].includes(status)) {
+        return this.deliver(targetActor, result.dispatch, input.hubOrigin);
       }
-      if (status === "DELIVERED") {
+      if (status === "DELIVERED" && targetActor === "LIGHT" && (result.dispatch?.mode || "SEARCH") === "SEARCH") {
         return this.recoverDeliveredLightResult(result.dispatch);
       }
       return result;
     }
-    return this.deliver("LIGHT", result.dispatch, input.hubOrigin);
+    return this.deliver(targetActor, result.dispatch, input.hubOrigin);
   }
   async enqueueAnswer(input = {}) {
     const current = await this.load();
     const result = this.core.enqueueAnswer(input, current);
     if (!result.idempotent) await this.save(result.dispatch);
+    const targetActor = actor(result.dispatch?.fromActor, "GO");
     if (result.idempotent) {
-      const status = result.dispatch?.legs?.GO?.status;
-      return ["WAITING_TARGET","RETRY_WAIT"].includes(status)
-        ? this.deliver("GO", result.dispatch)
+      const status = result.dispatch?.legs?.[targetActor]?.status;
+      return ["WAITING_TARGET","WAITING_PICKUP","RETRY_WAIT"].includes(status)
+        ? this.deliver(targetActor, result.dispatch)
         : result;
     }
-    return this.deliver("GO", result.dispatch);
+    return this.deliver(targetActor, result.dispatch);
   }
   async returnInline(input = {}) {
     const current = await this.load();
@@ -551,16 +638,17 @@ export class GoHubCounterDispatchState {
     let state = queued.dispatch;
     if (!queued.idempotent) await this.save(state);
 
-    if (state.legs.GO.status === "DELIVERED") {
+    const targetActor = actor(state.fromActor, "GO");
+    if (state.legs[targetActor].status === "DELIVERED") {
       return publicState(state, { idempotent:true, inlineReturn:true });
     }
 
-    const attempt = this.core.beginAttempt({ target:"GO" }, state);
+    const attempt = this.core.beginAttempt({ target:targetActor }, state);
     state = attempt.dispatch;
     if (!attempt.idempotent) await this.save(state);
 
     const delivered = this.core.delivered({
-      target:"GO",
+      target:targetActor,
       receipt:{
         httpStatus:200,
         receiptId:"factory-mcp-inline-return",

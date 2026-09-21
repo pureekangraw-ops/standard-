@@ -38,6 +38,10 @@
         "class_name": "GoHubCounterState"
       },
       {
+        "name": "GO_HUB_COUNTER_INBOX",
+        "class_name": "GoHubCounterInboxState"
+      },
+      {
         "name": "GO_HUB_COUNTER_DISPATCH_STATE",
         "class_name": "GoHubCounterDispatchState"
       },
@@ -100,6 +104,12 @@
       "tag": "v9-go-light-notion-mcp-state",
       "new_sqlite_classes": [
         "GoHubNotionLightState"
+      ]
+    },
+    {
+      "tag": "v10-go-light-counter-inbox",
+      "new_sqlite_classes": [
+        "GoHubCounterInboxState"
       ]
     }
   ],
