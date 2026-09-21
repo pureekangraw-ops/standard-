@@ -45,6 +45,10 @@ const LIGHT_CODE_TOOL_NAMES = new Set([
   "go_hub_get_failure_evidence",
   "go_hub_centre_inspect",
   "go_hub_centre_audit_history",
+  "go_hub_counter_inbox",
+  "go_hub_counter_get",
+  "go_hub_counter_seen",
+  "go_hub_counter_answer",
 ]);
 
 function restrictRegistry(registry, allowedTools) {
@@ -165,7 +169,13 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
         counterId:state.counterId,
         workId:state.workId,
         checkpointId:state.checkpointId,
+        workContext:state.workContext || input.workContext || {},
+        mode:state.mode || input.mode || "SEARCH",
         request:state.request,
+        requestedResult:state.requestedResult || input.requestedResult || null,
+        authority:state.authority || input.authority || null,
+        target:state.target || input.target || null,
+        projectRef:state.projectRef || input.projectRef || null,
         context:state.context || {},
         sourceHints:state.sourceHints || [],
         doNotChange:state.doNotChange || [],
@@ -174,8 +184,9 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
       let dispatchCode = dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_FAILED");
 
       let finalPayload = payload;
+      const mode = String(state.mode || input.mode || "SEARCH").toUpperCase();
       const lightAnswer = dispatchPayload.lightAnswer || dispatchPayload.dispatch?.lightResult || null;
-      if (lightAnswer) {
+      if (lightAnswer && mode === "SEARCH") {
         const identity = {
           counterId:state.counterId,
           workContext:{
@@ -229,6 +240,10 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
         lightCapabilityStatus:dispatchPayload.capabilityStatus || null,
         lightUpgradeUrl:dispatchPayload.upgradeUrl || null,
       }, response.status);
+    },
+
+    async inbox(input = {}) {
+      return counter.inbox(input);
     },
 
     async get(input = {}) {
@@ -533,7 +548,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const observer = createObserverEvidenceService({ namespace: env?.OBSERVER_SESSIONS });
       const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
       const globalAudit = createGlobalAuditService({ namespace: env?.GO_HUB_GLOBAL_AUDIT });
-      const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE });
+      const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE, inboxNamespace: env?.GO_HUB_COUNTER_INBOX });
       const dispatch = createCounterDispatchService({
         namespace: env?.GO_HUB_COUNTER_DISPATCH_STATE,
         hubOrigin: url.origin,
@@ -594,6 +609,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           projectStatus: async input => json(await projectStatus.read(input)),
           boardPinRoute: input => json(boardPinRoute.read(input)),
           counterCreate: input => runMutation("counter.create", input, () => counterDispatch.create(input)),
+          counterInbox: input => counter.inbox(input),
           counterGet: input => counterDispatch.get(input),
           counterSeen: input => runMutation("counter.seen", input, () => counter.seen(input)),
           counterAnswer: input => runMutation("counter.answer", input, () => counterDispatch.answer(input)),
