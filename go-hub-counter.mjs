@@ -61,9 +61,6 @@ function rejectSecrets(value, path = "root") {
 
 function workIdentity(input = {}) {
   const workContext = objectValue(input.workContext, "workContext");
-  const fromActor = actor(input.fromActor, "GO");
-  const toActor = actor(input.toActor, fromActor === "GO" ? "LIGHT" : "GO");
-  if (fromActor === toActor) throw Object.assign(new Error("COUNTER_ACTOR_ROUTE_INVALID"), { status:400 });
   return {
     workId: required(workContext.workId, "workContext.workId"),
     checkpointId: required(workContext.checkpointId, "workContext.checkpointId"),
@@ -356,6 +353,9 @@ function inboxEnvelope(input = {}) {
   const mode = String(input.mode || "SEARCH").trim().toUpperCase();
   if (mode !== "HANDOFF") throw Object.assign(new Error("COUNTER_INBOX_HANDOFF_ONLY"), { status:400 });
   const workContext = objectValue(input.workContext, "workContext");
+  const fromActor = actor(input.fromActor, "GO");
+  const toActor = actor(input.toActor, fromActor === "GO" ? "LIGHT" : "GO");
+  if (fromActor === toActor) throw Object.assign(new Error("COUNTER_ACTOR_ROUTE_INVALID"), { status:400 });
   return {
     counterId:required(input.counterId, "Counter ID"),
     workId:required(workContext.workId, "Work ID"),
