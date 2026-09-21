@@ -188,11 +188,17 @@ test("Counter surface keeps one form and exposes two distinct bells on both shel
     assert.match(html, /name="counterRequestedResult"/);
     assert.match(html, /data-counter-light-bell/);
     assert.match(html, /data-counter-mirror-bell/);
+    assert.match(html, /data-counter-inbox-refresh/);
+    assert.match(html, /data-counter-inbox-list/);
+    assert.match(html, /สายเข้าจาก LIGHT/);
     assert.match(html, /Magnificent Architect/);
     assert.match(html, /อัพเดท มิเร่อ/);
   }
   assert.match(source, /\/hub\/api\/counter\/handoff/);
   assert.match(source, /\/hub\/api\/counter\/mirror/);
+  assert.match(source, /\/hub\/api\/counter\/inbox/);
+  assert.match(source, /\/hub\/api\/counter\/pickup/);
+  assert.match(source, /📞 รับสาย/);
   assert.match(source, /centreWork\.workId/);
   assert.match(source, /centreWork\.checkpointId/);
 });
