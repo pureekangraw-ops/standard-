@@ -275,7 +275,7 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
       const payload = await parsed(response);
       if (!response.ok) return response;
       const state = payload.counter || {};
-      const dispatchResponse = await dispatch.answer({
+      const dispatchInput = {
         counterId:state.counterId,
         workId:state.workId,
         checkpointId:state.checkpointId,
@@ -285,7 +285,15 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
         evidence:state.evidence || [],
         confidence:state.confidence,
         nextRoute:state.nextRoute,
-      });
+      };
+      const handoff = String(state.mode || "").trim().toUpperCase() === "HANDOFF";
+      const dispatchResponse = handoff && typeof dispatch.returnInline === "function"
+        ? await dispatch.returnInline({
+            ...dispatchInput,
+            transport:"COUNTER_INBOX",
+            receiptId:"go-counter-inbox",
+          })
+        : await dispatch.answer(dispatchInput);
       const dispatchPayload = await parsed(dispatchResponse);
       return json({
         ...payload,
