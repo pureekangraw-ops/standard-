@@ -79,6 +79,96 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.equal(names.includes("go_hub_centre_live_action"), false);
 });
 
+
+test("LIGHT Centre read tools perform bounded read-only calls", async () => {
+  const { createAccessToken } = await import(oauthUrl + "?light-centre-read=" + Date.now());
+  const { createFactoryMcpWorker } = await import(factoryUrl + "?light-centre-read=" + Date.now());
+  const token = await createAccessToken({
+    issuer:"https://hub.example",
+    signingKey:"master-secret",
+    resource:"https://hub.example/mcp/light",
+    subject:"light",
+    scope:"go-hub-light",
+    ttlSeconds:3600,
+  });
+  const workId = "WORK-LIGHT-MONITOR-20260921-001";
+  const checkpointId = "CP-LIGHT-MONITOR-001";
+  const centreEvents = [
+    { sequence:1, event:{ type:"TOOL_MUTATION_WRITE", workId, checkpointId } },
+    { sequence:2, event:{ type:"CENTRE_AWAY", workId, checkpointId } },
+    { sequence:3, event:{ type:"TOOL_MUTATION_OPEN_PR", workId, checkpointId } },
+    { sequence:4, event:{ type:"CENTRE_RETURN", workId, checkpointId } },
+    { sequence:5, event:{ type:"TOOL_MUTATION_CI", workId, checkpointId } },
+    { sequence:6, event:{ type:"CENTRE_VALIDATE", workId, checkpointId } },
+  ];
+  let inspectCalls = 0;
+  const centreNamespace = {
+    getByName(name) {
+      assert.equal(name, workId);
+      return { fetch: async request => {
+        const input = await request.json();
+        inspectCalls += 1;
+        assert.deepEqual(input, { action:"inspect", workId, checkpointId, returnAddress:checkpointId });
+        return new Response(JSON.stringify({
+          ok:true,
+          phase:"AWAY",
+          work:{ workId, checkpointId, targetId:"standard", status:"AWAY" },
+          realityExists:false,
+          realityEvidence:null,
+          validationEvidence:null,
+        }), { headers:{ "content-type":"application/json" } });
+      }};
+    },
+  };
+  const auditNamespace = {
+    getByName() {
+      return { fetch: async request => {
+        const input = await request.json();
+        const afterSequence = Number(input.afterSequence || 0);
+        const limit = Number(input.limit || 100);
+        const events = centreEvents.filter(record => record.sequence > afterSequence).slice(0, limit);
+        return new Response(JSON.stringify({ ok:true, afterSequence, events, lastSequence:6 }), {
+          headers:{ "content-type":"application/json" },
+        });
+      }};
+    },
+  };
+  const worker = createFactoryMcpWorker({ fetchImpl: async () => { throw new Error("network should not be used"); } });
+  const env = {
+    GITHUB_TOKEN:"github-token",
+    GOHUB_MASTER_KEY:"master-secret",
+    GOHUB_OWNER_PASSCODE:"owner-passcode",
+    GO_HUB_CENTRE_STATE:centreNamespace,
+    GO_HUB_GLOBAL_AUDIT:auditNamespace,
+  };
+  async function call(id, name, args) {
+    const response = await worker.fetch(new Request("https://hub.example/mcp/light", {
+      method:"POST",
+      headers:{ authorization:"Bearer " + token, "content-type":"application/json", origin:"https://www.notion.so" },
+      body:JSON.stringify({ jsonrpc:"2.0", id, method:"tools/call", params:{ name, arguments:args } }),
+    }), env);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.error, undefined);
+    return JSON.parse(payload.result.content[0].text);
+  }
+
+  const inspected = await call(2, "go_hub_centre_inspect", { workId, checkpointId });
+  assert.equal(inspected.phase, "AWAY");
+  assert.equal(inspected.work.workId, workId);
+  assert.equal(inspectCalls, 1);
+
+  const first = await call(3, "go_hub_centre_audit_history", { workId, afterSequence:0, limit:1 });
+  assert.deepEqual(first.events.map(record => record.sequence), [2]);
+  assert.equal(first.nextSequence, 2);
+  assert.equal(first.events.every(record => record.event.type.startsWith("CENTRE_")), true);
+
+  const second = await call(4, "go_hub_centre_audit_history", { workId, afterSequence:first.nextSequence, limit:1 });
+  assert.deepEqual(second.events.map(record => record.sequence), [4]);
+  assert.equal(second.nextSequence, 4);
+  assert.equal(second.events.every(record => record.event.type.startsWith("CENTRE_")), true);
+});
+
 test("LIGHT owner page mints scoped bearer without echoing owner passcode", async () => {
   const { createEdgeWorkerHandler } = await import(edgeUrl + "?light-owner=" + Date.now());
   const { verifyAccessToken } = await import(oauthUrl + "?light-verify=" + Date.now());
