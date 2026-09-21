@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-const dispatcherUrl = pathToFileURL(path.resolve("/data/go-hub-counter-dispatcher.mjs")).href;
+const dispatcherUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-counter-dispatcher.mjs")).href;
 
 function storage() {
   const values = new Map();
@@ -61,7 +61,6 @@ test("Bell failure leaves HANDOFF available for pickup and records an independen
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ action: "open", ...input }),
   }));
-  if (response.status !== 200) console.log("ERROR", response.status, await response.clone().text());
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.ok, true);
