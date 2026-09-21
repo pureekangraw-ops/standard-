@@ -200,3 +200,85 @@ test("SEARCH remains the only route that invokes Notion AI Search", async () => 
   assert.equal(result.dispatch.legs.LIGHT.receipt.tool, "notion-ai-search");
   assert.deepEqual(calls, ["status", "search"]);
 });
+
+
+test("HANDOFF answer is queued to origin GO inbox and readback clears the pending return", async () => {
+  const { GoHubCounterState, GoHubCounterInboxState, createCounterService } =
+    await import(counterUrl + "?return-inbox=" + Date.now());
+
+  function namespace(factory) {
+    const instances = new Map();
+    return {
+      getByName(name) {
+        if (!instances.has(name)) instances.set(name, factory(name));
+        return instances.get(name);
+      },
+    };
+  }
+
+  const counterNamespace = namespace(() => new GoHubCounterState({ storage:storage() }, {}));
+  const inboxNamespace = namespace(() => new GoHubCounterInboxState({ storage:storage() }, {}));
+  const service = createCounterService({
+    namespace:counterNamespace,
+    inboxNamespace,
+  });
+
+  const createResponse = await service.create({
+    counterId:"COUNTER-RETURN-INBOX-1",
+    mode:"HANDOFF",
+    request:"LIGHT, do the task.",
+    requestedResult:"Return MIRROR_RING_OK with evidence.",
+    authority:"OWNER",
+    target:"LIGHT",
+    projectRef:"GO HUB BOARD — LIGHT MIRROR",
+    fromActor:"GO",
+    toActor:"LIGHT",
+    context:{ purpose:"return-inbox-test" },
+    sourceHints:["GO Hub Counter"],
+    doNotChange:["Do not create a new Work"],
+    workContext,
+  });
+  assert.equal(createResponse.ok, true);
+
+  const seenResponse = await service.seen({
+    counterId:"COUNTER-RETURN-INBOX-1",
+    actor:"LIGHT",
+    workContext,
+  });
+  assert.equal(seenResponse.ok, true);
+
+  const answerResponse = await service.answer({
+    counterId:"COUNTER-RETURN-INBOX-1",
+    actor:"LIGHT",
+    status:"ANSWERED",
+    answer:"MIRROR_RING_OK",
+    sources:["counter://COUNTER-RETURN-INBOX-1"],
+    evidence:[{ kind:"LIGHT_PICKUP" }],
+    confidence:"high",
+    nextRoute:"GO readback",
+    workContext,
+  });
+  assert.equal(answerResponse.ok, true);
+
+  const goInboxResponse = await service.inbox({ actor:"GO", workContext, limit:10 });
+  const goInbox = await goInboxResponse.json();
+  assert.equal(goInbox.inbox.count, 1);
+  assert.equal(goInbox.inbox.tickets[0].counterId, "COUNTER-RETURN-INBOX-1");
+  assert.equal(goInbox.inbox.tickets[0].from, "LIGHT");
+  assert.equal(goInbox.inbox.tickets[0].to, "GO");
+  assert.equal(goInbox.inbox.tickets[0].context.kind, "COUNTER_ANSWER_READY");
+  assert.equal(goInbox.inbox.tickets[0].context.answer.answer, "MIRROR_RING_OK");
+
+  const readbackResponse = await service.readback({
+    counterId:"COUNTER-RETURN-INBOX-1",
+    actor:"GO",
+    evidence:{ observedAnswer:"MIRROR_RING_OK" },
+    close:true,
+    workContext,
+  });
+  assert.equal(readbackResponse.ok, true);
+
+  const afterResponse = await service.inbox({ actor:"GO", workContext, limit:10 });
+  const after = await afterResponse.json();
+  assert.equal(after.inbox.count, 0);
+});
