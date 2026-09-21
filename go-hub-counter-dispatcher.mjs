@@ -189,6 +189,22 @@ export function createCounterDispatchCore({
     return publicState(state);
   }
 
+  function rung(input = {}, current = null) {
+    if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
+    const target = required(input.target, "Target").toUpperCase();
+    if (!["LIGHT","GO"].includes(target)) throw Object.assign(new Error("DISPATCH_TARGET_INVALID"), { status:400 });
+    const state = clone(current);
+    const targetLeg = state.legs[target];
+    state.revision += 1;
+    targetLeg.status = "WAITING_PICKUP";
+    targetLeg.lastError = null;
+    targetLeg.nextAttemptAt = null;
+    targetLeg.receipt = input.receipt && typeof input.receipt === "object" ? clone(input.receipt) : {};
+    state.updatedAt = stamp();
+    append(state, "RUNG", target, state.updatedAt, targetLeg.receipt);
+    return publicState(state);
+  }
+
   function waitingAuth(input = {}, current = null) {
     if (!current) throw Object.assign(new Error("DISPATCH_NOT_FOUND"), { status:404 });
     const target = required(input.target, "Target").toUpperCase();
@@ -286,7 +302,7 @@ export function createCounterDispatchCore({
     return publicState(state);
   }
 
-  return Object.freeze({ enqueueOpen, enqueueAnswer, waitingTarget, waitingPickup, waitingAuth, blocked, beginAttempt, delivered, failed });
+  return Object.freeze({ enqueueOpen, enqueueAnswer, waitingTarget, waitingPickup, rung, waitingAuth, blocked, beginAttempt, delivered, failed });
 }
 
 function endpoint(env, target) {
@@ -357,6 +373,46 @@ export class GoHubCounterDispatchState {
     if ((state.mode || "SEARCH") === "HANDOFF" && !state.answer && target === actor(state.toActor, "LIGHT")) {
       const config = endpoint(this.env, target);
       if (!config.url) {
+        const namespace = target === "LIGHT" ? this.env?.GO_HUB_NOTION_LIGHT_STATE : null;
+        const bellPageId = target === "LIGHT" ? String(this.env?.LIGHT_BELL_PAGE_ID || "").trim() : "";
+        const notion = namespace && typeof namespace.getByName === "function"
+          ? namespace.getByName("notion-light-primary")
+          : null;
+        if (notion && typeof notion.fetch === "function" && bellPageId) {
+          const attempt = this.core.beginAttempt({ target }, state);
+          state = attempt.dispatch;
+          if (attempt.idempotent) return publicState(state, { handoff:true, bell:true });
+          await this.save(state);
+          try {
+            const response = await notion.fetch(new Request("https://notion-light.internal/ring", {
+              method:"POST",
+              headers:{ "content-type":"application/json" },
+              body:JSON.stringify({
+                action:"ring",
+                pageId:bellPageId,
+                counterId:state.counterId,
+                workId:state.workId,
+                checkpointId:state.checkpointId,
+              }),
+            }));
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok || body?.ok !== true) throw new Error(body?.code || "NOTION_LIGHT_BELL_FAILED");
+            const rung = this.core.rung({ target, receipt:{
+              httpStatus:Number(response.status || 0),
+              receiptId:body.receiptId == null ? null : String(body.receiptId).slice(0, 160),
+              adapter:"notion-light-counter-bell",
+              mode:"HANDOFF",
+              pageId:bellPageId,
+            } }, state);
+            await this.save(rung.dispatch);
+            return publicState(rung.dispatch, { targetConfigured:true, handoff:true, bell:true });
+          } catch (error) {
+            const result = this.core.failed({ target, error:error?.message || "LIGHT_BELL_FAILED" }, state);
+            await this.save(result.dispatch);
+            await this.schedule(result.dispatch.legs[target].nextAttemptAt);
+            return publicState(result.dispatch, { handoff:true, bell:true });
+          }
+        }
         const result = this.core.waitingPickup({ target }, state);
         if (!result.idempotent) await this.save(result.dispatch);
         return publicState(result.dispatch, { targetConfigured:false, handoff:true });

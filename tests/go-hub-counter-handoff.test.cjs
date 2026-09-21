@@ -56,6 +56,41 @@ test("HANDOFF with no callable LIGHT target stays WAITING_PICKUP and never calls
   assert.equal(stateStorage.alarms.length, 0);
 });
 
+test("HANDOFF rings the existing Notion LIGHT mirror and remains waiting for pickup", async () => {
+  const { GoHubCounterDispatchState } = await import(dispatcherUrl + "?handoff-bell=" + Date.now());
+  const calls = [];
+  const dispatch = new GoHubCounterDispatchState({ storage: storage() }, {
+    LIGHT_BELL_PAGE_ID: "88970e1da0a64ceebaa1ac1928361911",
+    GO_HUB_NOTION_LIGHT_STATE: {
+      getByName() {
+        return {
+          fetch: async request => {
+            calls.push(JSON.parse(await request.text()));
+            return new Response(JSON.stringify({ ok:true, receiptId:"comment-1" }), {
+              status:200,
+              headers:{ "content-type":"application/json" },
+            });
+          },
+        };
+      },
+    },
+  });
+  const result = await dispatch.enqueueOpen(handoffInput());
+  assert.equal(result.dispatch.legs.LIGHT.status, "WAITING_PICKUP");
+  assert.equal(result.dispatch.legs.LIGHT.lastError, null);
+  assert.equal(result.dispatch.legs.LIGHT.receipt.adapter, "notion-light-counter-bell");
+  assert.equal(result.dispatch.legs.LIGHT.receipt.receiptId, "comment-1");
+  assert.equal(result.dispatch.events.at(-1).type, "RUNG");
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], {
+    action:"ring",
+    pageId:"88970e1da0a64ceebaa1ac1928361911",
+    counterId:"COUNTER-HANDOFF-001",
+    workId:workContext.workId,
+    checkpointId:workContext.checkpointId,
+  });
+});
+
 test("HANDOFF wake receives the complete envelope and receipt names the handoff adapter", async () => {
   const { GoHubCounterDispatchState } = await import(dispatcherUrl + "?handoff-wake=" + Date.now());
   const outgoing = [];
