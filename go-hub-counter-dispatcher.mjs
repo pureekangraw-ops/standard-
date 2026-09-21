@@ -390,7 +390,7 @@ export class GoHubCounterDispatchState {
       return publicState(result.dispatch, { monitor:false });
     }
 
-    if (target === "LIGHT") {
+    if (target === "LIGHT" && (state.mode || "SEARCH") === "SEARCH") {
       const namespace = this.env?.GO_HUB_NOTION_LIGHT_STATE;
       const notion = namespace && typeof namespace.getByName === "function"
         ? namespace.getByName("notion-light-primary")
