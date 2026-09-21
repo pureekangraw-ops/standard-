@@ -419,7 +419,7 @@ export class GoHubNotionLightState {
       "Work: " + workId,
       "Checkpoint: " + checkpointId,
       "Action: Open GO Hub MCP counter inbox and pick up this HANDOFF ticket.",
-    ].join("\\n");
+    ].join("\n");
     const toolResult = await callNotionTool(this.fetchImpl, token, "notion-create-comment", {
       page_id:pageId,
       markdown,
