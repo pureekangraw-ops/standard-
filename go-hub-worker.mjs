@@ -650,6 +650,9 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
         clientId: "go-hub-chatgpt",
         clientSecret: env?.GOHUB_OWNER_PASSCODE,
         redirectUri: "https://chatgpt.com/connector_platform_oauth_redirect",
+        redirectUris: [
+          "https://app.notion.com/workflows/mcp/oauth/callback",
+        ],
       };
       if (oauthPaths.has(url.pathname)) {
         return createOAuthHandler(oauthConfig)(request);
