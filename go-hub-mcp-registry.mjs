@@ -8,6 +8,8 @@ const FACTORY = "destination://factory";
 const LINEAR = "destination://linear";
 const MAINTENANCE = "destination://maintenance";
 const DRIVE = "destination://drive";
+const GMAIL = "destination://gmail";
+const CALENDAR = "destination://calendar";
 const COUNTER = "destination://counter";
 const workContext = {
   type: "object",
@@ -69,6 +71,17 @@ const definitions = [
   def("go_hub_linear_get_issue", "Read one Linear issue and enforce configured-team scope.", "linearGetIssue", schema({ identifier: str }, ["identifier"]), ann(true)),
   def("go_hub_linear_create_issue", "Create a Linear issue in the configured team.", "linearCreateIssue", schema({ title: str, description: nullableStr, projectId: nullableStr, priority, workContext }, ["title", "workContext"]), ann(false)),
   def("go_hub_linear_update_issue", "Update an in-team Linear issue after a scoped read.", "linearUpdateIssue", schema({ identifier: str, title: str, description: nullableStr, priority, stateId: nullableStr, projectId: nullableStr, workContext }, ["identifier", "workContext"]), ann(false)),
+  def("go_hub_gmail_capabilities", "Inspect governed Gmail bridge configuration.", "gmailCapabilities", schema({}), ann(true)),
+  def("go_hub_gmail_diagnostics", "Read sanitized Gmail OAuth diagnostics.", "gmailDiagnostics", schema({}), ann(true)),
+  def("go_hub_gmail_profile", "Read Gmail profile metadata.", "gmailProfile", schema({}), ann(true)),
+  def("go_hub_gmail_search", "Search Gmail messages using Gmail query syntax.", "gmailSearch", schema({ query: { type: "string" }, maxResults: { type: "integer", minimum: 1, maximum: 100 }, pageToken: str }), ann(true)),
+  def("go_hub_gmail_get_message", "Read one Gmail message.", "gmailGetMessage", schema({ messageId: str, format: { type: "string", enum: ["minimal","full","metadata"] } }, ["messageId"]), ann(true)),
+  def("go_hub_gmail_send_message", "Send one plain-text Gmail message through governed mutation.", "gmailSendMessage", schema({ to: str, subject: str, body: str, workContext }, ["to","subject","body","workContext"]), ann(false)),
+  def("go_hub_calendar_capabilities", "Inspect governed Google Calendar bridge configuration.", "calendarCapabilities", schema({}), ann(true)),
+  def("go_hub_calendar_diagnostics", "Read sanitized Calendar OAuth diagnostics.", "calendarDiagnostics", schema({}), ann(true)),
+  def("go_hub_calendar_list", "List visible Google calendars.", "calendarList", schema({ maxResults: { type: "integer", minimum: 1, maximum: 250 }, pageToken: str }), ann(true)),
+  def("go_hub_calendar_events", "List events from one Google calendar.", "calendarEvents", schema({ calendarId: str, timeMin: str, timeMax: str, maxResults: { type: "integer", minimum: 1, maximum: 250 }, pageToken: str }), ann(true)),
+  def("go_hub_calendar_create_event", "Create one Google Calendar event through governed mutation.", "calendarCreateEvent", schema({ calendarId: str, summary: str, description: { type: "string" }, location: { type: "string" }, start: obj, end: obj, workContext }, ["summary","start","end","workContext"]), ann(false)),
   def("go_hub_drive_capabilities", "Inspect GO Hub Google Drive bridge configuration and supported operations without exposing credentials.", "driveCapabilities", schema({}), ann(true)),
   def("go_hub_drive_health", "Verify server-side Google Drive authentication and upstream API reachability without returning account data.", "driveHealth", schema({}), ann(true)),
   def("go_hub_drive_diagnostics", "Read sanitized Google Drive runtime account identity and granted OAuth scopes without exposing credentials.", "driveDiagnostics", schema({}), ann(true)),
@@ -83,6 +96,8 @@ const definitions = [
 const factoryTools = new Set(["go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_merge_pull_request", "go_hub_factory_action"]);
 const maintenanceTools = new Set(["go_hub_maintenance"]);
 const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linear_update_issue"]);
+const gmailMutationTools = new Set(["go_hub_gmail_send_message"]);
+const calendarMutationTools = new Set(["go_hub_calendar_create_event"]);
 const driveMutationTools = new Set(["go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item", "go_hub_archive_workflow_artifact"]);
 const counterTools = new Set(["go_hub_counter_create", "go_hub_counter_inbox", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_answer", "go_hub_counter_readback"]);
 
@@ -116,6 +131,8 @@ function assertLifecycle(name, args) {
   if (linearMutationTools.has(name)) assertWork(args.workContext, LINEAR);
   if (maintenanceTools.has(name)) assertWork(args.workContext, MAINTENANCE);
   if (driveMutationTools.has(name)) assertWork(args.workContext, DRIVE);
+  if (gmailMutationTools.has(name)) assertWork(args.workContext, GMAIL);
+  if (calendarMutationTools.has(name)) assertWork(args.workContext, CALENDAR);
   if (counterTools.has(name)) assertWork(args.workContext, COUNTER);
   if (name === "go_hub_factory_foreman" && args.action !== "state") assertWork(args.workContext, FACTORY);
 }

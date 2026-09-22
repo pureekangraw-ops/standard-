@@ -10,6 +10,7 @@ import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { routeReadOnlyFastLane } from "./go-hub-city-route.js";
 import { createLighthouseControlPortMcpService } from "./go-hub-lighthouse-control-port-service.mjs";
 import { createGoogleDriveService } from "./go-hub-google-drive-service.mjs";
+import { createGoogleWorkspaceService } from "./go-hub-google-workspace-service.mjs";
 import { createWorkflowArtifactService } from "./go-hub-workflow-artifact-service.mjs";
 import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
 import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
@@ -579,6 +580,13 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         clientSecret: firstEnv(env, ["GOOGLE_DRIVE_CLIENT_SECRET", "DRIVE_CLIENT_SECRET", "GDRIVE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET", "GOOGLE_OAUTH_CLIENT_SECRET", "GDRIVE_OAUTH_CLIENT_SECRET"]),
         rootFolderId: firstEnv(env, ["GOOGLE_DRIVE_ROOT_FOLDER_ID", "DRIVE_ROOT_FOLDER_ID", "GDRIVE_ROOT_FOLDER_ID", "GOOGLE_DRIVE_FOLDER_ID", "DRIVE_FOLDER_ID", "GDRIVE_FOLDER_ID", "GOOGLE_ROOT_FOLDER_ID"]),
       });
+      const googleWorkspace = createGoogleWorkspaceService({
+        fetchImpl,
+        accessToken: firstEnv(env, ["GOOGLE_WORKSPACE_ACCESS_TOKEN", "GOOGLE_ACCESS_TOKEN", "GOOGLE_OAUTH_ACCESS_TOKEN"]),
+        refreshToken: firstEnv(env, ["GOOGLE_WORKSPACE_REFRESH_TOKEN", "GOOGLE_REFRESH_TOKEN", "GOOGLE_OAUTH_REFRESH_TOKEN", "GOOGLE_DRIVE_REFRESH_TOKEN"]),
+        clientId: firstEnv(env, ["GOOGLE_WORKSPACE_CLIENT_ID", "GOOGLE_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_ID"]),
+        clientSecret: firstEnv(env, ["GOOGLE_WORKSPACE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET", "GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_DRIVE_CLIENT_SECRET"]),
+      });
       const artifactDelivery = createWorkflowArtifactService({ fetchImpl, token: env.GITHUB_TOKEN, drive });
       const runMutation = (env?.GO_HUB_CENTRE_STATE && env?.GO_HUB_GLOBAL_AUDIT)
         ? createGovernedMutationRunner({ centreLive, globalAudit })
@@ -657,6 +665,17 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           linearGetIssue: input => linear.getIssue(input),
           linearCreateIssue: input => runMutation("linear.create_issue", input, () => linear.createIssue(input)),
           linearUpdateIssue: input => runMutation("linear.update_issue", input, () => linear.updateIssue(input)),
+          gmailCapabilities: () => googleWorkspace.capabilities(),
+          gmailDiagnostics: () => googleWorkspace.diagnostics(),
+          gmailProfile: () => googleWorkspace.gmailProfile(),
+          gmailSearch: input => googleWorkspace.gmailSearch(input),
+          gmailGetMessage: input => googleWorkspace.gmailGetMessage(input),
+          gmailSendMessage: input => runMutation("gmail.send_message", input, () => googleWorkspace.gmailSendMessage(input)),
+          calendarCapabilities: () => googleWorkspace.capabilities(),
+          calendarDiagnostics: () => googleWorkspace.diagnostics(),
+          calendarList: input => googleWorkspace.calendarList(input),
+          calendarEvents: input => googleWorkspace.calendarEvents(input),
+          calendarCreateEvent: input => runMutation("calendar.create_event", input, () => googleWorkspace.calendarCreateEvent(input)),
           driveCapabilities: () => drive.capabilities(),
           driveHealth: async () => {
             const response = await drive.health();
