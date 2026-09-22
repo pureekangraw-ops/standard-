@@ -92,6 +92,7 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
   for (const secret of [
     "GOHUB_MASTER_KEY",
     "GOHUB_OWNER_PASSCODE",
+    "GOHUB_NOTION_CLIENT_SECRET",
   ]) assert.match(workflow, new RegExp(secret));
   assert.match(workflow, /chmod 600/);
 });

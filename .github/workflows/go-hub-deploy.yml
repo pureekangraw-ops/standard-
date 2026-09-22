@@ -17,6 +17,7 @@ jobs:
       GOHUB_GITHUB_TOKEN: ${{ secrets.GOHUB_GITHUB_TOKEN }}
       GOHUB_MASTER_KEY: ${{ secrets.GOHUB_MASTER_KEY }}
       GOHUB_OWNER_PASSCODE: ${{ secrets.GOHUB_OWNER_PASSCODE }}
+      GOHUB_NOTION_CLIENT_SECRET: ${{ secrets.GOHUB_NOTION_CLIENT_SECRET }}
 
     steps:
       - name: Check out repository
@@ -153,6 +154,11 @@ jobs:
             printf 'GOHUB_OWNER_PASSCODE=%s\n' "${GOHUB_OWNER_PASSCODE}" >> "${secrets_file}"
           else
             echo "GO Hub OAuth secrets are incomplete; MCP will remain fail-closed."
+          fi
+          if [ -n "${GOHUB_NOTION_CLIENT_SECRET}" ]; then
+            printf 'GOHUB_NOTION_CLIENT_SECRET=%s\n' "${GOHUB_NOTION_CLIENT_SECRET}" >> "${secrets_file}"
+          else
+            echo "Notion OAuth client secret is absent; the Notion MCP client will remain disabled."
           fi
           if [ -s "${secrets_file}" ]; then
             npx wrangler deploy --config wrangler.go-hub.jsonc --secrets-file "${secrets_file}"
