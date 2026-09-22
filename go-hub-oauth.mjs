@@ -64,10 +64,17 @@ async function sha256Hex(value) {
   return [...bytes].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function allowedRedirectUris(config) {
+  return [...new Set([
+    config.redirectUri,
+    ...(Array.isArray(config.redirectUris) ? config.redirectUris : []),
+  ].map(value => String(value || "").trim()).filter(Boolean))];
+}
+
 function configured(config) {
   return Boolean(
     config.issuer && config.signingKey && config.ownerPasscode &&
-    config.clientId && config.clientSecret && config.redirectUri,
+    config.clientId && config.clientSecret && allowedRedirectUris(config).length,
   );
 }
 
@@ -78,7 +85,8 @@ function nowSeconds(config) {
 function validateAuthorize(input, config) {
   if (input.get("response_type") !== "code") throw new Error("unsupported response type");
   if (input.get("client_id") !== config.clientId) throw new Error("invalid client");
-  if (input.get("redirect_uri") !== config.redirectUri) throw new Error("invalid redirect uri");
+  const redirectUri = String(input.get("redirect_uri") || "");
+  if (!allowedRedirectUris(config).includes(redirectUri)) throw new Error("invalid redirect uri");
   if (input.get("code_challenge_method") !== "S256") throw new Error("S256 PKCE is required");
   const challenge = String(input.get("code_challenge") || "");
   if (!/^[A-Za-z0-9_-]{43,128}$/.test(challenge)) throw new Error("invalid code challenge");
@@ -86,7 +94,7 @@ function validateAuthorize(input, config) {
   if (resource !== config.issuer + "/mcp") throw new Error("invalid resource");
   return {
     state: String(input.get("state") || ""),
-    redirectUri: config.redirectUri,
+    redirectUri,
     codeChallenge: challenge,
     resource,
   };
@@ -185,7 +193,7 @@ function authorizePage(values) {
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
     })[character])}">`
   ).join("");
-  return new Response(`<!doctype html><html><meta name="viewport" content="width=device-width"><title>GO Hub authorization</title><body><main><h1>GO Hub Factory</h1><p>Authorize BIG's ChatGPT connection.</p><form method="post">${hidden}<label>Owner passcode <input name="passcode" type="password" autocomplete="current-password" required></label><button type="submit">Authorize</button></form></main></body></html>`, {
+  return new Response(`<!doctype html><html><meta name="viewport" content="width=device-width"><title>GO Hub authorization</title><body><main><h1>GO Hub Factory</h1><p>Authorize BIG's GO Hub connection.</p><form method="post">${hidden}<label>Owner passcode <input name="passcode" type="password" autocomplete="current-password" required></label><button type="submit">Authorize</button></form></main></body></html>`, {
     headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
   });
 }
@@ -243,7 +251,7 @@ export function createOAuthHandler(config = {}) {
         const checked = validateAuthorize(values, config);
         const suppliedPasscode = String(form.get("passcode") || "");
         if (!timingSafeEqual(suppliedPasscode, config.ownerPasscode)) return json({ code: "OWNER_AUTH_FAILED" }, 403);
-        const code = await createTestAuthorizationCode({ ...config, codeChallenge: checked.codeChallenge, resource: checked.resource });
+        const code = await createTestAuthorizationCode({ ...config, redirectUri: checked.redirectUri, codeChallenge: checked.codeChallenge, resource: checked.resource });
         const redirect = new URL(checked.redirectUri);
         redirect.searchParams.set("code", code);
         if (checked.state) redirect.searchParams.set("state", checked.state);
@@ -285,13 +293,14 @@ export function createOAuthHandler(config = {}) {
           }, 200, { "cache-control": "no-store" });
         }
 
-        if (grantType !== "authorization_code" || form.get("redirect_uri") !== config.redirectUri) {
+        const redirectUri = String(form.get("redirect_uri") || "");
+        if (grantType !== "authorization_code" || !allowedRedirectUris(config).includes(redirectUri)) {
           return json({ error: "invalid_grant" }, 400);
         }
         const code = await verifyEnvelope(String(form.get("code") || ""), config.signingKey);
         const current = nowSeconds(config);
         if (code.type !== "code" || code.iss !== config.issuer || code.aud !== config.clientId ||
-            code.sub !== "big" || code.redirect_uri !== config.redirectUri || code.resource !== resource ||
+            code.sub !== "big" || code.redirect_uri !== redirectUri || code.resource !== resource ||
             !Number.isFinite(code.exp) || code.exp <= current) {
           return json({ error: "invalid_grant" }, 400);
         }
