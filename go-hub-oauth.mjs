@@ -71,10 +71,32 @@ function allowedRedirectUris(config) {
   ].map(value => String(value || "").trim()).filter(Boolean))];
 }
 
+function oauthClients(config) {
+  const configuredClients = Array.isArray(config.clients) ? config.clients : [];
+  const clients = configuredClients.length ? configuredClients : [{
+    clientId: config.clientId,
+    clientSecret: config.clientSecret,
+    redirectUris: allowedRedirectUris(config),
+    subject: config.subject || "big",
+    scope: config.scope || "go-hub",
+  }];
+  return clients.map(client => ({
+    clientId: String(client?.clientId || "").trim(),
+    clientSecret: String(client?.clientSecret || ""),
+    redirectUris: [...new Set((Array.isArray(client?.redirectUris) ? client.redirectUris : [])
+      .map(value => String(value || "").trim()).filter(Boolean))],
+    subject: String(client?.subject || "big"),
+    scope: String(client?.scope || "go-hub"),
+  })).filter(client => client.clientId && client.clientSecret && client.redirectUris.length);
+}
+
+function clientById(config, clientId) {
+  return oauthClients(config).find(client => client.clientId === String(clientId || ""));
+}
+
 function configured(config) {
   return Boolean(
-    config.issuer && config.signingKey && config.ownerPasscode &&
-    config.clientId && config.clientSecret && allowedRedirectUris(config).length,
+    config.issuer && config.signingKey && config.ownerPasscode && oauthClients(config).length,
   );
 }
 
@@ -84,15 +106,17 @@ function nowSeconds(config) {
 
 function validateAuthorize(input, config) {
   if (input.get("response_type") !== "code") throw new Error("unsupported response type");
-  if (input.get("client_id") !== config.clientId) throw new Error("invalid client");
+  const client = clientById(config, input.get("client_id"));
+  if (!client) throw new Error("invalid client");
   const redirectUri = String(input.get("redirect_uri") || "");
-  if (!allowedRedirectUris(config).includes(redirectUri)) throw new Error("invalid redirect uri");
+  if (!client.redirectUris.includes(redirectUri)) throw new Error("invalid redirect uri");
   if (input.get("code_challenge_method") !== "S256") throw new Error("S256 PKCE is required");
   const challenge = String(input.get("code_challenge") || "");
   if (!/^[A-Za-z0-9_-]{43,128}$/.test(challenge)) throw new Error("invalid code challenge");
   const resource = String(input.get("resource") || "");
   if (resource !== config.issuer + "/mcp") throw new Error("invalid resource");
   return {
+    client,
     state: String(input.get("state") || ""),
     redirectUri,
     codeChallenge: challenge,
@@ -106,11 +130,11 @@ export async function createTestAuthorizationCode(config = {}) {
     type: "code",
     iss: config.issuer,
     aud: config.clientId,
-    sub: "big",
+    sub: config.subject || "big",
     redirect_uri: config.redirectUri,
     code_challenge: config.codeChallenge,
     resource: config.resource || config.issuer + "/mcp",
-    scope: "go-hub",
+    scope: config.scope || "go-hub",
     iat: issuedAt,
     exp: config.expiresAt ?? issuedAt + 300,
   }, config.signingKey);
@@ -142,9 +166,9 @@ export async function createTestRefreshToken(config = {}) {
     type: "refresh",
     iss: config.issuer,
     aud: config.clientId,
-    sub: "big",
+    sub: config.subject || "big",
     resource: config.resource || config.issuer + "/mcp",
-    scope: "go-hub",
+    scope: config.scope || "go-hub",
     iat: issuedAt,
     exp: config.expiresAt ?? issuedAt + REFRESH_TOKEN_TTL_SECONDS,
   }, config.signingKey);
@@ -156,10 +180,11 @@ export async function verifyAccessToken(request, config = {}) {
   if (!authorization.startsWith("Bearer ")) throw new Error("missing bearer token");
   const payload = await verifyEnvelope(authorization.slice(7), config.signingKey);
   const expectedResource = config.resource || config.issuer + "/mcp";
-  const expectedSubject = config.subject || "big";
-  const expectedScope = config.scope || "go-hub";
-  if (payload.type !== "access" || payload.iss !== config.issuer ||
-      payload.aud !== expectedResource || payload.sub !== expectedSubject || payload.scope !== expectedScope) {
+  const acceptedIdentities = Array.isArray(config.clients) && config.clients.length
+    ? oauthClients(config).map(client => client.subject + "\u0000" + client.scope)
+    : [(config.subject || "big") + "\u0000" + (config.scope || "go-hub")];
+  if (payload.type !== "access" || payload.iss !== config.issuer || payload.aud !== expectedResource ||
+      !acceptedIdentities.includes(String(payload.sub) + "\u0000" + String(payload.scope))) {
     throw new Error("invalid access token");
   }
   if (!Number.isFinite(payload.exp) || payload.exp <= nowSeconds(config)) throw new Error("expired access token");
@@ -210,10 +235,10 @@ function readBasic(request) {
   }
 }
 
-function validRefreshToken(payload, config, resource, current) {
+function validRefreshToken(payload, config, client, resource, current) {
   return Boolean(
     payload && payload.type === "refresh" && payload.iss === config.issuer &&
-    payload.aud === config.clientId && payload.sub === "big" && payload.scope === "go-hub" &&
+    payload.aud === client.clientId && payload.sub === client.subject && payload.scope === client.scope &&
     payload.resource === resource && Number.isFinite(payload.exp) && payload.exp > current,
   );
 }
@@ -233,7 +258,7 @@ export function createOAuthHandler(config = {}) {
         const values = validateAuthorize(url.searchParams, config);
         return authorizePage({
           response_type: "code",
-          client_id: config.clientId,
+          client_id: values.client.clientId,
           redirect_uri: values.redirectUri,
           code_challenge: values.codeChallenge,
           code_challenge_method: "S256",
@@ -251,7 +276,15 @@ export function createOAuthHandler(config = {}) {
         const checked = validateAuthorize(values, config);
         const suppliedPasscode = String(form.get("passcode") || "");
         if (!timingSafeEqual(suppliedPasscode, config.ownerPasscode)) return json({ code: "OWNER_AUTH_FAILED" }, 403);
-        const code = await createTestAuthorizationCode({ ...config, redirectUri: checked.redirectUri, codeChallenge: checked.codeChallenge, resource: checked.resource });
+        const code = await createTestAuthorizationCode({
+          ...config,
+          clientId: checked.client.clientId,
+          subject: checked.client.subject,
+          scope: checked.client.scope,
+          redirectUri: checked.redirectUri,
+          codeChallenge: checked.codeChallenge,
+          resource: checked.resource,
+        });
         const redirect = new URL(checked.redirectUri);
         redirect.searchParams.set("code", code);
         if (checked.state) redirect.searchParams.set("state", checked.state);
@@ -261,8 +294,8 @@ export function createOAuthHandler(config = {}) {
 
       if (url.pathname === "/oauth/token" && request.method === "POST") {
         const credentials = readBasic(request);
-        if (!credentials || !timingSafeEqual(credentials[0], config.clientId) ||
-            !timingSafeEqual(credentials[1], config.clientSecret)) {
+        const client = credentials ? clientById(config, credentials[0]) : null;
+        if (!client || !timingSafeEqual(credentials[1], client.clientSecret)) {
           return json({ error: "invalid_client" }, 401);
         }
 
@@ -281,26 +314,26 @@ export function createOAuthHandler(config = {}) {
           } catch {
             return json({ error: "invalid_grant" }, 400);
           }
-          if (!validRefreshToken(refresh, config, resource, nowSeconds(config))) {
+          if (!validRefreshToken(refresh, config, client, resource, nowSeconds(config))) {
             return json({ error: "invalid_grant" }, 400);
           }
           return json({
-            access_token: await createTestAccessToken({ ...config, resource }),
+            access_token: await createTestAccessToken({ ...config, resource, subject: client.subject, scope: client.scope }),
             token_type: "Bearer",
             expires_in: ACCESS_TOKEN_TTL_SECONDS,
             refresh_token: refreshToken,
-            scope: "go-hub",
+            scope: client.scope,
           }, 200, { "cache-control": "no-store" });
         }
 
         const redirectUri = String(form.get("redirect_uri") || "");
-        if (grantType !== "authorization_code" || !allowedRedirectUris(config).includes(redirectUri)) {
+        if (grantType !== "authorization_code" || !client.redirectUris.includes(redirectUri)) {
           return json({ error: "invalid_grant" }, 400);
         }
         const code = await verifyEnvelope(String(form.get("code") || ""), config.signingKey);
         const current = nowSeconds(config);
-        if (code.type !== "code" || code.iss !== config.issuer || code.aud !== config.clientId ||
-            code.sub !== "big" || code.redirect_uri !== redirectUri || code.resource !== resource ||
+        if (code.type !== "code" || code.iss !== config.issuer || code.aud !== client.clientId ||
+            code.sub !== client.subject || code.scope !== client.scope || code.redirect_uri !== redirectUri || code.resource !== resource ||
             !Number.isFinite(code.exp) || code.exp <= current) {
           return json({ error: "invalid_grant" }, 400);
         }
@@ -309,11 +342,11 @@ export function createOAuthHandler(config = {}) {
           return json({ error: "invalid_grant" }, 400);
         }
         return json({
-          access_token: await createTestAccessToken({ ...config, resource }),
+          access_token: await createTestAccessToken({ ...config, resource, subject: client.subject, scope: client.scope }),
           token_type: "Bearer",
           expires_in: ACCESS_TOKEN_TTL_SECONDS,
-          refresh_token: await createTestRefreshToken({ ...config, resource }),
-          scope: "go-hub",
+          refresh_token: await createTestRefreshToken({ ...config, clientId: client.clientId, resource, subject: client.subject, scope: client.scope }),
+          scope: client.scope,
         }, 200, { "cache-control": "no-store" });
       }
     } catch {

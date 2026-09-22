@@ -155,3 +155,110 @@ test("OAuth accepts the pre-registered Notion Custom Agent callback without weak
   })));
   assert.equal(rejected.status, 400);
 });
+
+test("OAuth gives Notion a separate client identity and rejects crossed credentials", async () => {
+  const { createOAuthHandler, verifyAccessToken } = await import(oauthUrl + "?multi-client=" + Date.now());
+  const notionRedirect = "https://app.notion.com/workflows/mcp/oauth/callback";
+  const multiClientConfig = {
+    issuer,
+    signingKey: config.signingKey,
+    ownerPasscode: config.ownerPasscode,
+    clients: [
+      {
+        clientId: "go-hub-chatgpt",
+        clientSecret: "chatgpt-secret",
+        redirectUris: [config.redirectUri],
+        subject: "big",
+        scope: "go-hub",
+      },
+      {
+        clientId: "go-hub-notion",
+        clientSecret: "notion-secret",
+        redirectUris: [notionRedirect],
+        subject: "notion",
+        scope: "go-hub",
+      },
+    ],
+    now: config.now,
+  };
+  const verifier = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~";
+  const challengeBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  const challenge = Buffer.from(challengeBytes).toString("base64url");
+  const handler = createOAuthHandler(multiClientConfig);
+
+  const authorize = await handler(new Request(issuer + "/oauth/authorize?" + new URLSearchParams({
+    response_type: "code",
+    client_id: "go-hub-notion",
+    redirect_uri: notionRedirect,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    resource: issuer + "/mcp",
+  })));
+  assert.equal(authorize.status, 200);
+  const body = await authorize.text();
+  const codeResponse = await handler(new Request(issuer + "/oauth/authorize", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      response_type: "code",
+      client_id: "go-hub-notion",
+      redirect_uri: notionRedirect,
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      resource: issuer + "/mcp",
+      passcode: config.ownerPasscode,
+    }),
+    redirect: "manual",
+  }));
+  assert.equal(codeResponse.status, 302);
+  assert.match(body, /go-hub-notion/);
+  const code = new URL(codeResponse.headers.get("location")).searchParams.get("code");
+
+  const crossed = await handler(new Request(issuer + "/oauth/token", {
+    method: "POST",
+    headers: {
+      authorization: "Basic " + Buffer.from("go-hub-notion:chatgpt-secret").toString("base64"),
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: notionRedirect,
+      code_verifier: verifier,
+      resource: issuer + "/mcp",
+    }),
+  }));
+  assert.equal(crossed.status, 401);
+
+  const token = await handler(new Request(issuer + "/oauth/token", {
+    method: "POST",
+    headers: {
+      authorization: "Basic " + Buffer.from("go-hub-notion:notion-secret").toString("base64"),
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: notionRedirect,
+      code_verifier: verifier,
+      resource: issuer + "/mcp",
+    }),
+  }));
+  assert.equal(token.status, 200);
+  const tokenPayload = await token.json();
+  const identity = await verifyAccessToken(
+    new Request(issuer + "/mcp", { headers: { authorization: "Bearer " + tokenPayload.access_token } }),
+    { ...multiClientConfig, subject: "notion", scope: "go-hub" },
+  );
+  assert.deepEqual(identity, { subject: "notion", scope: "go-hub" });
+
+  const crossedRedirect = await handler(new Request(issuer + "/oauth/authorize?" + new URLSearchParams({
+    response_type: "code",
+    client_id: "go-hub-chatgpt",
+    redirect_uri: notionRedirect,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    resource: issuer + "/mcp",
+  })));
+  assert.equal(crossedRedirect.status, 400);
+});
