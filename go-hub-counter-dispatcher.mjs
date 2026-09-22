@@ -474,6 +474,12 @@ export class GoHubCounterDispatchState {
                 counterId:state.counterId,
                 workId:state.workId,
                 checkpointId:state.checkpointId,
+                originActor:state.fromActor,
+                targetActor:state.toActor,
+                requestedResult:state.requestedResult || "",
+                command:state.request,
+                returnAddress:state.workContext?.returnAddress || state.checkpointId,
+                evidence:"GO Hub Counter dispatch " + state.counterId,
               }),
             }));
             const body = await response.json().catch(() => ({}));
@@ -481,9 +487,11 @@ export class GoHubCounterDispatchState {
             const receipt = {
               httpStatus:Number(response.status || 0),
               receiptId:body.receiptId == null ? null : String(body.receiptId).slice(0, 160),
-              adapter:"notion-light-counter-bell",
+              adapter:body.tool === "notion-create-pages" ? "notion-light-bell-inbox" : "notion-light-counter-bell",
               mode:"HANDOFF",
-              pageId:bellPageId,
+              pageId:body.pageId || null,
+              dataSourceId:body.dataSourceId || null,
+              signal:body.signal || null,
             };
             const deliveredBell = this.core.bellDelivered({ target, receipt }, state);
             const waiting = this.core.rung({ target, receipt }, deliveredBell.dispatch);
