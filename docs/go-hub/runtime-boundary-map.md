@@ -23,8 +23,8 @@
 | `normalpocket-bootstrap.js` | loads product/catalog/reconcile/simple-flow files | NORMALPOCKET DOMAIN/UI | Keep outside Hub runtime |
 | `sw-bootstrap.js` | legacy runtime/bootstrap compatibility | LEGACY RUNTIME BOOTSTRAP | Do not use as Hub authority |
 | `app.js` | DB identity, crypto, state, legacy UI/runtime in one large file | LEGACY MONOLITH | Keep operational only while dependencies remain; do not extend as Hub core |
-| `manifest.webmanifest` | installed app identity is NormalPocket | COMPATIBILITY IDENTITY | Preserve until explicit installed-app migration |
-| service-worker legacy cache/app-shell paths | NormalPocket/Metropolis compatibility assets | LEGACY RUNTIME SHELL | Quarantine as compatibility; migrate consumers before retirement |
+| `manifest.webmanifest` | legacy NormalPocket manifest retained outside active publication | HISTORICAL / UNPUBLISHED | Do not use as GO Hub installed identity |
+| legacy service-worker cache/app-shell paths | NormalPocket/Metropolis source remains outside active GO Hub publication | HISTORICAL / UNPUBLISHED | Do not use as GO Hub runtime shell |
 | GitHub Actions | deploy/safety gates | FOUNDATION / SAFETY | Verify exact-head changes; CI is corroboration, not decision authority |
 
 ## Migration rule: replace, do not accumulate
