@@ -130,14 +130,14 @@ test("active shell must pass Optician and canonical city route before leaving Ce
 
 test("Centre Review is not blocked by fit-only Persona fields", () => {
   for (const html of [read("index.html"), read("go-hub.html")]) {
-    assert.match(html, /name="roleReference"/);
+    assert.match(html, /name="personaReference"/);
     assert.match(html, /name="workingView"/);
-    assert.doesNotMatch(html, /name="roleReference"[^>]*required/);
+    assert.doesNotMatch(html, /name="personaReference"[^>]*required/);
     assert.doesNotMatch(html, /name="workingView"[^>]*required/);
   }
 
   const source = read("go-hub-shell.js");
-  assert.match(source, /\["roleReference", "workingView"\]\.forEach/);
+  assert.match(source, /\["personaReference", "workingView"\]\.forEach/);
   assert.match(source, /field\(name\)\.required = reviewed && !fitted/);
   assert.match(source, /action:\s*"fit"/);
   assert.match(source, /CENTRE_STATES\.READY && !centreWork\.persona/);
