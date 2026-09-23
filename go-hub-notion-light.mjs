@@ -409,77 +409,31 @@ export class GoHubNotionLightState {
     const counterId = text(input.counterId);
     const workId = text(input.workId);
     const checkpointId = text(input.checkpointId);
-    if (!["LIGHT_HANDOFF","MIRROR_REFRESH"].includes(bellType)) {
-      throw Object.assign(new Error("LIGHT_BELL_TYPE_INVALID"), { status:400 });
-    }
-    if (bellType === "LIGHT_HANDOFF" && !counterId) {
-      throw Object.assign(new Error("LIGHT_BELL_COUNTER_REQUIRED"), { status:400 });
+    if (bellType !== "MIRROR_REFRESH") {
+      throw Object.assign(new Error("LIGHT_HANDOFF_BELL_RETIRED_USE_TEMPLATE_TRIGGER"), { status:410 });
     }
     if (!workId) throw Object.assign(new Error("LIGHT_BELL_WORK_REQUIRED"), { status:400 });
     if (!checkpointId) throw Object.assign(new Error("LIGHT_BELL_CHECKPOINT_REQUIRED"), { status:400 });
 
     const token = await this.accessToken();
-
-    // Mirror refresh remains a comment signal. Counter handoff uses the dedicated
-    // Bell Inbox data source so Notion's page.created trigger can wake the Agent.
-    if (bellType === "MIRROR_REFRESH") {
-      const pageId = text(input.pageId || this.env?.LIGHT_BELL_PAGE_ID);
-      if (!pageId) throw Object.assign(new Error("LIGHT_BELL_PAGE_REQUIRED"), { status:400 });
-      const markdown = [
-        "🪞 GO Hub Mirror Bell",
-        GOHUB_TASK_RUNNER_AGENT_MENTION,
-        "Trigger: NOTION_PAGE_COMMENT",
-        "อัพเดทมิเรอร์",
-        "Work: " + workId,
-        "Checkpoint: " + checkpointId,
-        "Action: Refresh GO HUB BOARD — LIGHT MIRROR from the existing Work and verified Owner Source. Do not create a new Work or Checkpoint.",
-      ].join("\n");
-      const toolResult = await callNotionTool(this.fetchImpl, token, "notion-create-comment", { page_id:pageId, markdown });
-      const payload = contentJson(toolResult) || {};
-      const resultPayload = payload?.result && typeof payload.result === "object" ? payload.result : payload;
-      return {
-        ok:true, tool:"notion-create-comment", signal:"MIRROR_REFRESH_BELL_COMMENT_CREATED",
-        bellType, pageId, counterId:counterId || null, workId, checkpointId,
-        receiptId:pickString(resultPayload, ["id","comment_id"]) || null,
-      };
-    }
-
-    const dataSourceId = text(input.dataSourceId || this.env?.LIGHT_BELL_DATA_SOURCE_ID || "2d3b7c19-f429-4d72-92d0-9022d772f8a1");
-    if (!dataSourceId) throw Object.assign(new Error("LIGHT_BELL_DATA_SOURCE_REQUIRED"), { status:400 });
-    const command = text(input.command) || "Open GO Hub MCP Counter inbox, pick up this exact Counter first, process it under the existing Work/Checkpoint, and answer through the same Counter.";
-    const properties = {
-      "Name":"Bell " + counterId,
-      "Status":"NEW",
-      "Target Agent":"GOHUB Task Runner",
-      "Origin Actor":text(input.originActor || "GO"),
-      "Target Actor":text(input.targetActor || "LIGHT"),
-      "Work ID":workId,
-      "Checkpoint ID":checkpointId,
-      "Counter ID":counterId,
-      "Requested Result":text(input.requestedResult),
-      "Command":command,
-      "Source / Return Address":text(input.returnAddress || checkpointId),
-      "Evidence":text(input.evidence),
-      "Error / Blocker":"",
-    };
-    const toolResult = await callNotionTool(this.fetchImpl, token, "notion-create-pages", {
-      parent:{ type:"data_source_id", data_source_id:dataSourceId },
-      pages:[{ properties }],
-    });
+    const pageId = text(input.pageId || this.env?.LIGHT_BELL_PAGE_ID);
+    if (!pageId) throw Object.assign(new Error("LIGHT_BELL_PAGE_REQUIRED"), { status:400 });
+    const markdown = [
+      "🪞 GO Hub Mirror Bell",
+      GOHUB_TASK_RUNNER_AGENT_MENTION,
+      "Trigger: NOTION_PAGE_COMMENT",
+      "อัพเดทมิเร่อ",
+      "Work: " + workId,
+      "Checkpoint: " + checkpointId,
+      "Action: Refresh GO HUB BOARD — LIGHT MIRROR from the existing Work and verified Owner Source. Do not create a new Work or Checkpoint.",
+    ].join("\n");
+    const toolResult = await callNotionTool(this.fetchImpl, token, "notion-create-comment", { page_id:pageId, markdown });
     const payload = contentJson(toolResult) || {};
     const resultPayload = payload?.result && typeof payload.result === "object" ? payload.result : payload;
-    const rows = firstArray(resultPayload);
-    const created = rows[0] || resultPayload;
     return {
-      ok:true,
-      tool:"notion-create-pages",
-      signal:"LIGHT_BELL_INBOX_RECORD_CREATED",
-      bellType,
-      dataSourceId,
-      counterId,
-      workId,
-      checkpointId,
-      receiptId:pickString(created, ["id","page_id"]) || null,
+      ok:true, tool:"notion-create-comment", signal:"MIRROR_REFRESH_BELL_COMMENT_CREATED",
+      bellType, pageId, counterId:counterId || null, workId, checkpointId,
+      receiptId:pickString(resultPayload, ["id","comment_id"]) || null,
     };
   }
 
