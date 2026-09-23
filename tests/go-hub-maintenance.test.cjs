@@ -38,26 +38,22 @@ test("Maintenance refuses Factory planning actions and routes planning back to F
   assert.equal((await response.json()).code, "MAINTENANCE_ACTION_UNAVAILABLE");
 });
 
-test("MCP Maintenance requires the Maintenance destination contract", async () => {
+test("MCP Maintenance requires the Maintenance destination contract and exposes inspect only", async () => {
   const { createMcpRegistry } = await import(registryUrl);
   const lifecycle = {
-    maintenance: input => new Response(JSON.stringify({ ok: true, input }), { status: 200, headers: { "content-type": "application/json" } }),
+    maintenance: async input => new Response(JSON.stringify({ ok: true, input }), { status: 200, headers: { "content-type": "application/json" } }),
   };
   const registry = createMcpRegistry({ lifecycle });
-  assert.ok(registry.listTools().some(tool => tool.name === "go_hub_maintenance"));
-
-  const good = await registry.callTool("go_hub_maintenance", {
-    target: "factory",
-    action: "inspect",
-    input: {},
-    workContext,
-  });
-  assert.equal(good.structuredContent.ok, true);\n\n  await assert.rejects(() => registry.callTool("go_hub_maintenance", {\n    target: "factory", action: "plan_closeout", input: {}, workContext,\n  }), /invalid action/);
+  const tool = registry.listTools().find(item => item.name === "go_hub_maintenance");
+  assert.ok(tool);
+  assert.deepEqual(tool.inputSchema.properties.action.enum, ["inspect"]);
 
   await assert.rejects(() => registry.callTool("go_hub_maintenance", {
-    target: "factory",
-    action: "inspect",
-    input: {},
+    target: "factory", action: "plan_closeout", input: {}, workContext,
+  }), /invalid action/);
+
+  await assert.rejects(() => registry.callTool("go_hub_maintenance", {
+    target: "factory", action: "inspect", input: {},
     workContext: { ...workContext, destination: "destination://factory" },
   }), /destination:\/\/maintenance/);
 });
