@@ -113,8 +113,9 @@ function validateAuthorize(input, config) {
   if (input.get("code_challenge_method") !== "S256") throw new Error("S256 PKCE is required");
   const challenge = String(input.get("code_challenge") || "");
   if (!/^[A-Za-z0-9_-]{43,128}$/.test(challenge)) throw new Error("invalid code challenge");
-  const resource = String(input.get("resource") || "");
-  if (resource !== config.issuer + "/mcp") throw new Error("invalid resource");
+  const expectedResource = config.issuer + "/mcp";
+  const resource = String(input.get("resource") || "").trim() || expectedResource;
+  if (resource !== expectedResource) throw new Error("invalid resource");
   return {
     client,
     state: String(input.get("state") || ""),
@@ -300,9 +301,9 @@ export function createOAuthHandler(config = {}) {
         }
 
         const form = await request.formData();
-        const resource = String(form.get("resource") || "");
-        const grantType = String(form.get("grant_type") || "");
         const expectedResource = config.issuer + "/mcp";
+        const resource = String(form.get("resource") || "").trim() || expectedResource;
+        const grantType = String(form.get("grant_type") || "");
         if (resource !== expectedResource) return json({ error: "invalid_grant" }, 400);
 
         if (grantType === "refresh_token") {
