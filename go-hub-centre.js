@@ -49,7 +49,7 @@ export function createCheckpoint(input = {}) {
     requestedResult: null,
     authority: null,
     targetId: null,
-    role: null,
+    persona: null,
     handoff: null,
     returnedPayload: null,
   });
@@ -80,29 +80,29 @@ export function resumeIntake(work, input = {}) {
   });
 }
 
-export function fitRole(work, input = {}) {
+export function fitPersona(work, input = {}) {
   assertState(work, CENTRE_STATES.READY);
   const next = structuredClone(work);
-  next.role = {
-    roleId: required(input.roleId, "Role ID"),
-    roleReference: required(input.roleReference, "Role Reference"),
+  next.persona = {
+    personaId: required(input.personaId, "Persona ID"),
+    personaReference: required(input.personaReference, "Persona Reference"),
     workingView: required(input.workingView, "Working View"),
   };
   return snapshot(next);
 }
 
 function activeFit(work) {
-  if (!work?.role) return null;
+  if (!work?.persona) return null;
   return {
-    roleReference: work.role.roleReference,
-    workingView: work.role.workingView,
+    personaReference: work.persona.personaReference,
+    workingView: work.persona.workingView,
   };
 }
 
 export function createHandoff(work, input = {}) {
   assertState(work, CENTRE_STATES.READY);
   const fit = activeFit(work);
-  if (!fit) throw new Error("fitted Role is required before handoff");
+  if (!fit) throw new Error("fitted Persona is required before handoff");
   const destination = required(input.destination, "Destination");
   const targetId = optional(input.targetId ?? work.targetId);
   const envelope = {
@@ -111,7 +111,7 @@ export function createHandoff(work, input = {}) {
     task: work.task,
     requestedResult: work.requestedResult,
     targetId,
-    roleReference: fit.roleReference,
+    personaReference: fit.personaReference,
     workingView: fit.workingView,
     destination,
     returnAddress: work.checkpointId,
@@ -144,7 +144,7 @@ export function resumeReturnedWork(work, { reuseFit = false } = {}) {
   const next = structuredClone(work);
   next.status = CENTRE_STATES.READY;
   next.handoff = null;
-  if (!reuseFit) next.role = null;
+  if (!reuseFit) next.persona = null;
   return snapshot(next);
 }
 
@@ -169,7 +169,7 @@ export function createCentrePassage() {
       if (work?.status === CENTRE_STATES.WAIT) return resumeIntake(work, input);
       return intakeTask(work, input);
     },
-    fit(work, input = {}) { return fitRole(work, input); },
+    fit(work, input = {}) { return fitPersona(work, input); },
     leave(work, input = {}) { return createHandoff(work, input); },
     return(work, returned = {}) { return receiveReturn(work, returned); },
     resume(work, input = {}) { return resumeReturnedWork(work, input); },
