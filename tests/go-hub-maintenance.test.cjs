@@ -27,7 +27,9 @@ test("Maintenance inspect exposes plan-only Factory capability", async () => {
   assert.equal(body.status, "MAINTENANCE_READY");
   assert.equal(body.authority, "PLAN_ONLY");
   assert.equal(body.mutates, false);
-  assert.deepEqual(body.actions, ["inspect", "plan_closeout"]);
+  assert.deepEqual(body.actions, ["inspect", "scan_hub", "plan_closeout", "plan_legacy_reconciliation"]);
+  assert.ok(body.baseline.some(item => item.system === "centre"));
+  assert.ok(body.baseline.some(item => item.system === "factory"));
 });
 
 test("Maintenance delegates closeout planning to verified Housekeeper truth", async () => {
