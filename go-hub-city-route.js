@@ -3,7 +3,7 @@ import { resolveWorkInterruption } from "./go-hub-work-lifecycle.js";
 
 const HEIMDALL = Object.freeze({
   id: "heimdall",
-  responsibilities: Object.freeze(["SAFETY", "PERMISSION", "STOP"]),
+  responsibilities: Object.freeze(["BOUNDARY", "SAFETY", "PERMISSION", "STOP", "EVIDENCE_GATE"]),
 });
 
 const READ_ONLY_FAST_LANE_OPERATIONS = Object.freeze(["SEARCH", "LIST", "READ", "INSPECT", "METADATA"]);
