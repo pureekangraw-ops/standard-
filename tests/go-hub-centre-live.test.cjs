@@ -34,8 +34,8 @@ async function prepared(instance, suffix) {
   const id = await reviewed(instance, suffix);
   assert.equal((await call(instance, {
     action: "fit", ...id,
-    roleId: "ROLE-" + suffix,
-    roleReference: "role://" + suffix,
+    personaId: "PERSONA-" + suffix,
+    personaReference: "persona://" + suffix,
     workingView: "smoke",
   })).status, 200);
   assert.equal((await call(instance, {
@@ -80,7 +80,7 @@ test("Centre live rejects legacy Lens fit fields", async () => {
   const result = await call(instance, {
     action: "fit", ...id,
     lensId: "L-LEGACY",
-    lensReference: "lens://legacy",
+    lensReference: "persona://legacy",
     fittedView: "legacy",
   });
   assert.equal(result.status, 400);
@@ -142,8 +142,8 @@ test("new state instance resumes the same durable identity", async () => {
   assert.equal(resumed.body.checkpointId, id.checkpointId);
   assert.equal(resumed.body.returnAddress, id.returnAddress);
   assert.equal(resumed.body.work.status, "AWAY");
-  assert.equal(resumed.body.work.role.roleReference, "role://RESTART");
-  assert.equal(resumed.body.work.role.workingView, "smoke");
+  assert.equal(resumed.body.work.persona.personaReference, "persona://RESTART");
+  assert.equal(resumed.body.work.persona.workingView, "smoke");
 });
 
 
@@ -163,8 +163,8 @@ test("live Work Target survives durable inspect and Factory leave", async () => 
 
   assert.equal((await call(instance, {
     action: "fit", ...id,
-    roleId: "ROLE-LH",
-    roleReference: "role://lighthouse",
+    personaId: "PERSONA-LH",
+    personaReference: "persona://lighthouse",
     workingView: "target-aware",
   })).status, 200);
 
