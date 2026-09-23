@@ -422,7 +422,7 @@ export class GoHubNotionLightState {
       "🪞 GO Hub Mirror Bell",
       GOHUB_TASK_RUNNER_AGENT_MENTION,
       "Trigger: NOTION_PAGE_COMMENT",
-      "อัพเดทมิเร่อ",
+      "อัพเดทมิเรอร์",
       "Work: " + workId,
       "Checkpoint: " + checkpointId,
       "Action: Refresh GO HUB BOARD — LIGHT MIRROR from the existing Work and verified Owner Source. Do not create a new Work or Checkpoint.",
