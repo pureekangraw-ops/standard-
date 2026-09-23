@@ -707,9 +707,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         registry: lightMcp ? restrictRegistry(registry, LIGHT_CODE_TOOL_NAMES) : registry,
         issuer: url.origin,
         authenticate: current => verifyAccessToken(current, accessConfig),
-        allowedOrigins: lightMcp
-          ? ["https://www.notion.so", "https://notion.so", "https://app.notion.com"]
-          : [],
+        allowedOrigins: ["https://www.notion.so", "https://notion.so", "https://app.notion.com"],
       })(request);
     },
   });
