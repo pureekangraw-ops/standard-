@@ -68,8 +68,8 @@ test("GO Hub runtime assets cannot stay stale across a shell contract deploy", (
 
   const shell = read("go-hub-shell.js");
   const rootHtml = read("index.html");
-  assert.match(rootHtml, /name="roleReference"/);
+  assert.match(rootHtml, /name="personaReference"/);
   assert.match(rootHtml, /name="workingView"/);
-  assert.match(shell, /field\("roleReference"\)/);
+  assert.match(shell, /field\("personaReference"\)/);
   assert.match(shell, /field\("workingView"\)/);
 });
