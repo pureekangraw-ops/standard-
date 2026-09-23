@@ -42,6 +42,7 @@ const definitions = [
   def("go_hub_get_failure_evidence", "Read failed jobs and concise logs.", "getFailureEvidence", schema({ repository: str, runId: int }, ["repository", "runId"]), ann(true)),
   def("go_hub_rerun_failed_jobs", "Rerun failed workflow jobs.", "rerunFailed", schema({ repository: str, runId: int, workContext }, ["repository", "runId", "workContext"]), ann(false)),
   def("go_hub_factory_action", "Execute one governed Factory task action through durable task authority.", "factoryAction", schema({ taskId: str, action: { type: "string", enum: ["inspect", "create_branch", "write", "delete", "compare", "open_pr", "check_ci", "diagnose_failure"] }, input: obj, expectedRevision: revision, workContext }, ["taskId", "action", "input", "workContext"]), ann(false)),
+  def("go_hub_factory_auto", "Advance a Factory task automatically through consecutive governed states until completion or a real blocker.", "factoryAuto", schema({ taskId: str, inputs: obj, workContext }, ["taskId", "workContext"]), ann(false)),
   def("go_hub_factory_ready_gate", "Seal an exact-head Ready Gate from a governed Work Package, Piece, Blueprint, Piece QC, and evidence.", "factoryReadyGate", schema({ workPackage: obj, piece: obj, blueprint: obj, pieceQc: obj, evidence: { type: "array", items: obj }, knownLimitations: { type: "array", items: str }, workContext }, ["workPackage","piece","blueprint","pieceQc","evidence","workContext"]), ann(false)),
   def("go_hub_factory_foreman", "Request, cancel, park, verify, release, or inspect Hephaestus work.", "factoryForeman", schema({ action: { type: "string", enum: ["request", "cancel", "park", "verify", "release", "state"] }, repository: str, slot: { type: "string", enum: ["assembly", "merge"] }, goId: str, jobId: str, mainSha: str, mergedAt: str, readyGate: obj, piece: obj, assembly: obj, assemblyQc: obj, pullRequest: obj, ci: obj, risk: obj, cancellation: obj, postMergeVerification: obj, workContext }, ["action", "repository"]), ann(false)),
   def("go_hub_maintenance", "Inspect Maintenance health/classification or request a compatibility closeout plan delegated to Factory authority.", "maintenance", schema({ target: { type: "string", enum: ["factory"] }, action: { type: "string", enum: ["inspect", "plan_closeout"] }, input: obj, workContext }, ["target", "action", "input", "workContext"]), ann(true)),
@@ -94,7 +95,7 @@ const definitions = [
   def("go_hub_drive_rename_item", "Rename an existing Google Drive item and require readback before success.", "driveRenameItem", schema({ fileId: str, name: str, workContext }, ["fileId", "name", "workContext"]), ann(false)),
 ];
 
-const factoryTools = new Set(["go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_merge_pull_request", "go_hub_factory_action", "go_hub_factory_ready_gate"]);
+const factoryTools = new Set(["go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_merge_pull_request", "go_hub_factory_action", "go_hub_factory_auto", "go_hub_factory_ready_gate"]);
 const maintenanceTools = new Set(["go_hub_maintenance"]);
 const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linear_update_issue"]);
 const gmailMutationTools = new Set(["go_hub_gmail_send_message"]);
