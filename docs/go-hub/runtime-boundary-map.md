@@ -1,37 +1,47 @@
 # GO Hub Runtime Boundary Map
 
-**Branch:** `go-hub-foundation`
-**Purpose:** Record what is reusable substrate versus compatibility/domain baggage before any destructive move.
+**Status:** CURRENT COMPATIBILITY MAP  
+**Updated:** 2026-09-23  
+**Purpose:** Identify the canonical owner of each runtime concern, isolate compatibility baggage, and prevent parallel authorities during migration.
 
 ## Classification
 
 | Area | Current evidence | Classification | GO Hub action |
 |---|---|---|---|
 | `go-hub-foundation.js` | injected `applyCommand` + `commitState`, no legacy imports | FOUNDATION | Keep neutral |
-| `controller.js` | controller pattern but directly imports `domain.js` + `vault.js` | COMPATIBILITY CANDIDATE | Supersede with neutral controller, retain while legacy app needs it |
+| `go-hub-authority-map.js` | explicit concern → decision-authority ownership | CURRENT AUTHORITY MAP | Use as canonical authority reference |
+| `go-hub-heimdall.js` | Hub Evidence Gate + bounded Audit Sentinel production | CURRENT AUTHORITY | Keep evidence decision logic here; consumers must not duplicate it |
+| `go-hub-centre*.{js,mjs}` | Work identity/state/distribution/return | CURRENT AUTHORITY | Keep lifecycle ownership here |
+| Factory modules | planning/production/assembly/internal QC | CURRENT AUTHORITY | Keep production decisions here |
+| `go-hub-counter.mjs` + Notion bridge | knowledge/evidence exchange and production | CURRENT PRODUCER | Do not make Counter a second evidence-sufficiency authority |
+| `go-hub-maintenance.js` | health/legacy condition classification | CURRENT CLASSIFIER | Diagnose/classify only; do not own lifecycle/evidence decisions |
+| `controller.js` | controller pattern but directly imports `domain.js` + `vault.js` | COMPATIBILITY CANDIDATE | Keep only while proven compatibility dependencies remain; do not extend as a second Hub controller |
 | `domain.js` | STORE/LEDGER/CALENDAR commands | NORMALPOCKET DOMAIN | Keep outside Hub core |
-| `core.js` | generic helpers mixed with STORE/LEDGER/CALENDAR state/schema | MIXED | Split reusable helpers later; do not make it Hub core as-is |
-| `vault.js` | reusable crypto/store mechanics mixed with `ygph-standard-secure`, `stock-pocket-vault`, NormalPocket state validation | MIXED / COMPATIBILITY | Split generic persistence mechanics later; preserve legacy envelope here |
+| `core.js` | generic helpers mixed with STORE/LEDGER/CALENDAR state/schema | MIXED | Extract helpers only when callers can be migrated atomically; do not copy helpers into a parallel core |
+| `vault.js` | persistence mechanics mixed with legacy identities | MIXED / COMPATIBILITY | Preserve compatibility behavior until cutover; do not create a second persistence authority |
 | `normalpocket-compat.js` | maps legacy domain + persistence to Hub ports | COMPATIBILITY | Explicit legacy boundary |
 | `normalpocket-bootstrap.js` | loads product/catalog/reconcile/simple-flow files | NORMALPOCKET DOMAIN/UI | Keep outside Hub runtime |
-| `sw-bootstrap.js` | loads Metropolis presentation layers then NormalPocket bootstrap | LEGACY RUNTIME BOOTSTRAP | Do not use as Hub bootstrap |
-| `app.js` | owns DB identity, crypto, state, legacy UI/runtime in one large file | LEGACY MONOLITH | Keep operational but do not extend as Hub core |
-| `manifest.webmanifest` | installed app identity is NormalPocket, id `/index.html` | COMPATIBILITY IDENTITY | Preserve until explicit installed-app migration |
-| `sw.js` cache prefix | `ygph-standard-app-`, meta `ygph-standard-meta` | COMPATIBILITY IDENTITY | Preserve until cache migration is designed |
-| `sw.js` app shell | includes NormalPocket + Metropolis assets | LEGACY RUNTIME SHELL | Hub must receive its own shell later |
-| GitHub Actions | PR runs `npm run deploy:gate` | FOUNDATION / SAFETY | Keep; extend to Hub files |
+| `sw-bootstrap.js` | legacy runtime/bootstrap compatibility | LEGACY RUNTIME BOOTSTRAP | Do not use as Hub authority |
+| `app.js` | DB identity, crypto, state, legacy UI/runtime in one large file | LEGACY MONOLITH | Keep operational only while dependencies remain; do not extend as Hub core |
+| `manifest.webmanifest` | installed app identity is NormalPocket | COMPATIBILITY IDENTITY | Preserve until explicit installed-app migration |
+| service-worker legacy cache/app-shell paths | NormalPocket/Metropolis compatibility assets | LEGACY RUNTIME SHELL | Quarantine as compatibility; migrate consumers before retirement |
+| GitHub Actions | deploy/safety gates | FOUNDATION / SAFETY | Verify exact-head changes; CI is corroboration, not decision authority |
 
-## Exact contamination points currently blocking a Hub-neutral root runtime
+## Migration rule: replace, do not accumulate
 
-1. `sw-bootstrap.js` hard-codes Metropolis R5 layers and `normalpocket-bootstrap.js`.
-2. `sw.js` pre-caches NormalPocket and historical Metropolis assets as the single app shell.
-3. `manifest.webmanifest` exposes NormalPocket as the installed PWA identity.
-4. `app.js` duplicates data/storage/domain/UI responsibilities and hard-codes `ygph-standard-secure`.
-5. `core.js` defines the NormalPocket STORE/LEDGER/CALENDAR state shape.
-6. `vault.js` validates that business state and preserves NormalPocket/Stock Pocket vault identity.
-7. `package.json` and CI are named around NormalPocket/STANDARD and syntax-check only the legacy runtime by default.
+A migration is complete only when the current owner is unique.
 
-## Stable legacy identities to preserve during migration
+1. Choose the canonical owner for the concern.
+2. Move callers to that owner.
+3. Verify no active import, runtime route, test contract, deploy contract, backup/import contract, installed-client dependency, or external target still requires the old path.
+4. Retire or quarantine the obsolete path.
+5. Keep history in Git/archives; do **not** keep two live implementations merely for provenance.
+
+Never solve migration by copying old logic into a new module while leaving both paths authoritative. Temporary compatibility facades are allowed only when they delegate to one owner and carry no independent decision authority.
+
+## Stable compatibility identities
+
+The following may remain temporarily because they are compatibility contracts, not Hub architecture:
 
 - PWA name/short name: `NormalPocket`
 - PWA id: `/index.html`
@@ -41,27 +51,20 @@
 - legacy vault envelope: `stock-pocket-vault`
 - service-worker app cache prefix: `ygph-standard-app-`
 - service-worker meta cache: `ygph-standard-meta`
-- Worker/deploy target: `normalpocket` (documented outside runtime source)
+- Worker/deploy target: `normalpocket`
 
-These identities are compatibility contracts, not Hub architecture.
+Compatibility preservation does not authorize new GO Hub behavior to be added to these legacy surfaces.
 
-## Safe extraction order
+## Stop conditions before destructive retirement
 
-1. Neutral controller + legacy facade (implemented first).
-2. Neutral runtime registry/bootstrap, still inactive.
-3. Generic utility extraction from `core.js` without changing existing imports.
-4. Generic persistence port/mechanics extraction from `vault.js` without changing legacy DB/vault identity.
-5. New Hub UI/runtime shell.
-6. Only after dependency proof: move or retire legacy files.
-7. Installed-app/Worker/cache/storage migration is a separate phase and owner gate.
-
-## Stop conditions before destructive moves
-
-Do not delete or rename legacy files until all of the following are proven:
+Do not delete or rename a legacy file/path until all relevant checks pass:
 
 - no active import/script reference
-- no service-worker APP_SHELL reference
-- no regression test dependency
+- no service-worker app-shell reference
+- no regression-test dependency that represents a still-supported contract
 - no backup/import contract dependency
 - no installed-client migration dependency
 - no external Worker/deploy target dependency
+- no open canonical Work/PR still using the old path
+
+If proof is incomplete, mark the path compatibility-only and stop extending it.
