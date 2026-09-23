@@ -90,20 +90,14 @@ test("Counter repeat reads/actions are idempotent and do not create duplicate ev
   assert.deepEqual(repeatedSeen.counter.events.map(event => event.type), ["OPEN", "SEEN"]);
 });
 
-test("Counter may return an answer without owning Hub evidence acceptance", async () => {
+test("Counter validates local answer evidence without owning Hub passage acceptance", async () => {
   const { createCounterCore } = await import(moduleUrl + "?authority=" + Date.now());
   const core = createCounterCore({ now: clock() });
   let state = core.create({ counterId:"COUNTER-0002", request:"Find record", context:{}, workContext }).counter;
   state = core.seen({ counterId:"COUNTER-0002", workContext }, state).counter;
-  const candidate = core.answer({ counterId:"COUNTER-0002", status:"ANSWERED", answer:"Candidate answer", sources:[], evidence:[], workContext }, state).counter;
+  assert.throws(() => core.answer({ counterId:"COUNTER-0002", status:"ANSWERED", answer:"Candidate answer", sources:[], evidence:[], workContext }, state), /SOURCE_AND_EVIDENCE/);
+  const candidate = core.answer({ counterId:"COUNTER-0002", status:"ANSWERED", answer:"Candidate answer", sources:["notion://result"], evidence:[{kind:"source",reference:"notion://result"}], workContext }, state).counter;
   assert.equal(candidate.currentState, "ANSWERED");
-  assert.deepEqual(candidate.sources, []);
-  assert.deepEqual(candidate.evidence, []);
-
-  let unknownState = core.create({ counterId:"COUNTER-0002B", request:"Find missing record", context:{}, workContext }).counter;
-  unknownState = core.seen({ counterId:"COUNTER-0002B", workContext }, unknownState).counter;
-  const unknown = core.answer({ counterId:"COUNTER-0002B", status:"UNKNOWN", answer:"No verified source was found.", sources:[], evidence:[], confidence:"unknown", nextRoute:"destination://mimir", workContext }, unknownState).counter;
-  assert.equal(unknown.currentState, "UNKNOWN");
 });
 
 test("Durable Object writes state and reads the exact same ticket back", async () => {
