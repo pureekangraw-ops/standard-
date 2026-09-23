@@ -38,3 +38,19 @@ test("Factory execution adapter maps authority actions without changing authorit
   assert.equal(resolveFactoryExecutionAction("diagnose-failure"),"diagnose_failure");
   assert.equal(resolveFactoryExecutionAction("local-verify"),"local_verify");
 });
+
+
+test("Factory auto runner fails closed when recovery executor is not governed yet",async()=>{
+  const {createFactoryAutoRunner}=await import(url+"?recovery="+Date.now());
+  let called=false;
+  const runner=createFactoryAutoRunner({loadTask:async()=>({task:{state:"VERIFIED",factoryStage:"RECOVERY_REQUIRED",nextAction:"complete"},revision:7}),executeAction:async()=>{called=true;return{status:"OK"};}});
+  const result=await runner.run({taskId:"W5"});
+  assert.equal(result.status,"WAIT"); assert.equal(result.decision.reason,"RECOVERY_EXECUTOR_REQUIRED"); assert.equal(called,false);
+});
+
+test("Factory auto runner contains executor exceptions as WAIT",async()=>{
+  const {createFactoryAutoRunner}=await import(url+"?exception="+Date.now());
+  const runner=createFactoryAutoRunner({loadTask:async()=>({task:{state:"PR_OPEN",nextAction:"check-ci",factoryStage:null},revision:1}),executeAction:async()=>{throw new Error("boom");}});
+  const result=await runner.run({taskId:"W6"});
+  assert.equal(result.status,"WAIT"); assert.equal(result.reason,"EXECUTION_EXCEPTION"); assert.equal(result.failedAction,"check-ci");
+});
