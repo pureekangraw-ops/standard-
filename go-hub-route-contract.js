@@ -1,4 +1,5 @@
 const DESTINATIONS = Object.freeze({
+  centre: Object.freeze({ id: "centre", role: "shared-system-space", route: "destination://centre" }),
   factory: Object.freeze({ id: "factory", role: "building-entry", route: "destination://factory" }),
   drive: Object.freeze({ id: "drive", role: "storage-entry", route: "destination://drive" }),
   linear: Object.freeze({ id: "linear", role: "work-tracking-entry", route: "destination://linear" }),
@@ -6,6 +7,9 @@ const DESTINATIONS = Object.freeze({
   maintenance: Object.freeze({ id: "maintenance", role: "maintenance-entry", route: "destination://maintenance" }),
   notion: Object.freeze({ id: "notion", role: "notion-gate-entry", route: "destination://notion" }),
   counter: Object.freeze({ id: "counter", role: "agent-handoff-entry", route: "destination://counter" }),
+  github: Object.freeze({ id: "github", role: "code-reality-entry", route: "destination://github" }),
+  gmail: Object.freeze({ id: "gmail", role: "mail-entry", route: "destination://gmail" }),
+  calendar: Object.freeze({ id: "calendar", role: "calendar-entry", route: "destination://calendar" }),
 });
 
 const WORK_CONTEXT_FIELDS = Object.freeze([
@@ -42,3 +46,19 @@ export function assertCityWorkContext(value, expectedDestination) {
   normalized.destination = actual.route;
   return Object.freeze(normalized);
 }
+
+
+export const THOUGHT_DESTINATION_TOPOLOGY = Object.freeze({
+  centre: Object.freeze({
+    role: "SHARED_SYSTEM_SPACE",
+    contains: Object.freeze(["board", "heimdall", "notion", "counter", "work-drop", "archive-drop"]),
+    returnAlwaysAvailable: true,
+  }),
+  normalDestinations: Object.freeze(["factory", "github", "drive", "gmail", "calendar", "browser", "linear", "notion", "counter"]),
+  maintenance: Object.freeze({
+    room: "maintenance",
+    servicePath: "ALL_GO_HUB_OWNED_AREAS",
+    requiresWork: true,
+    requiresMaintenancePass: true,
+  }),
+});
