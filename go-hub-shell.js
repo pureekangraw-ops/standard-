@@ -173,7 +173,7 @@ function fitFactoryRoute() {
       successCondition: centreWork.requestedResult,
     },
     reality: { targetId: centreWork.targetId || null },
-    role: { reference: centreWork.role?.roleReference },
+    role: { reference: centreWork.persona?.personaReference },
     destination: canonicalFactory,
   });
   if (fit.gate !== "PASS") {
@@ -285,20 +285,20 @@ function renderCentre() {
   field("requestedResult").value = centreWork.requestedResult || "";
   field("authority").value = centreWork.authority || "BIG";
   field("targetId").value = centreWork.targetId || "";
-  field("roleReference").value = centreWork.role?.roleReference || "";
-  field("workingView").value = centreWork.role?.workingView || "";
+  field("personaReference").value = centreWork.persona?.personaReference || "";
+  field("workingView").value = centreWork.persona?.workingView || "";
 
   const target = getWorkTarget(centreWork.targetId);
   if (centreTarget) centreTarget.textContent = target?.label || "—";
 
   const reviewed = centreWork.status !== CENTRE_STATES.ARRIVED
     && centreWork.status !== CENTRE_STATES.WAIT;
-  const fitted = Boolean(centreWork.role);
+  const fitted = Boolean(centreWork.persona);
 
   ["task", "requestedResult", "authority", "targetId"].forEach(name => {
     field(name).disabled = reviewed;
   });
-  ["roleReference", "workingView"].forEach(name => {
+  ["personaReference", "workingView"].forEach(name => {
     field(name).disabled = !reviewed || fitted;
     field(name).required = reviewed && !fitted && centreWork.status === CENTRE_STATES.READY;
   });
@@ -531,12 +531,12 @@ centreForm?.addEventListener("submit", async event => {
         authority: field("authority").value,
         targetId: target.id,
       });
-    } else if (centreWork.status === CENTRE_STATES.READY && !centreWork.role) {
+    } else if (centreWork.status === CENTRE_STATES.READY && !centreWork.persona) {
       centreWork = await centreLive.command({
         action: "fit",
         ...identity,
-        roleId: field("roleReference").value,
-        roleReference: field("roleReference").value,
+        personaId: field("personaReference").value,
+        personaReference: field("personaReference").value,
         workingView: field("workingView").value,
       });
     } else if (centreWork.status === CENTRE_STATES.READY) {
