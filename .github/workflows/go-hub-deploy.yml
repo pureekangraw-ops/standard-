@@ -166,6 +166,60 @@ jobs:
             npx wrangler deploy --config wrangler.go-hub.jsonc
           fi
 
+      - name: Verify deployed Browser Observer Durable Object binding through MCP
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { createTestAccessToken } from "./go-hub-oauth.mjs";
+
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const cloudflareToken = process.env.CLOUDFLARE_API_TOKEN;
+          const signingKey = process.env.GOHUB_MASTER_KEY;
+          if (!accountId || !cloudflareToken || !signingKey) {
+            console.error("::error::Observer runtime smoke prerequisites are missing.");
+            process.exit(1);
+          }
+
+          const subdomainResponse = await fetch(
+            "https://api.cloudflare.com/client/v4/accounts/" + accountId + "/workers/subdomain",
+            { headers: { authorization: "Bearer " + cloudflareToken } },
+          );
+          const subdomainPayload = await subdomainResponse.json().catch(() => null);
+          const subdomain = String(subdomainPayload?.result?.subdomain || "").trim();
+          if (!subdomainResponse.ok || !subdomain) {
+            console.error("::error::Unable to resolve Cloudflare workers.dev subdomain for Observer smoke.");
+            process.exit(1);
+          }
+
+          const origin = "https://go-hub." + subdomain + ".workers.dev";
+          const accessToken = await createTestAccessToken({ issuer: origin, signingKey });
+          const response = await fetch(origin + "/mcp", {
+            method: "POST",
+            headers: {
+              authorization: "Bearer " + accessToken,
+              "content-type": "application/json",
+              accept: "application/json, text/event-stream",
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: { name: "go_hub_observer_latest", arguments: {} },
+            }),
+          });
+          const payload = await response.json().catch(() => null);
+          const toolResult = payload?.result;
+          const proof = toolResult?.structuredContent;
+          const code = proof?.code || payload?.error?.message || null;
+          const reachable = response.ok && !payload?.error && !toolResult?.isError &&
+            (proof?.ok === true || code === "SESSION_INACTIVE" || code === "SESSION_EXPIRED");
+          if (!reachable) {
+            console.error("::error::Browser Observer Durable Object runtime is unreachable: " + (code || "OBSERVER_RUNTIME_SMOKE_FAILED"));
+            process.exit(1);
+          }
+          console.log("Browser Observer Durable Object runtime is reachable (" + (code || "ACTIVE_SESSION") + ").");
+          NODE
+
       - name: Verify deployed Google Drive runtime through MCP
         shell: bash
         run: |
