@@ -404,53 +404,24 @@ export class GoHubNotionLightState {
     };
   }
 
-  async ring(input = {}) {
-    const bellType = text(input.bellType || "LIGHT_HANDOFF").toUpperCase();
+  async trigger(input = {}) {
+    const triggerType = "LIGHT_HANDOFF";
     const counterId = text(input.counterId);
     const workId = text(input.workId);
     const checkpointId = text(input.checkpointId);
-    if (!["LIGHT_HANDOFF","MIRROR_REFRESH"].includes(bellType)) {
-      throw Object.assign(new Error("LIGHT_BELL_TYPE_INVALID"), { status:400 });
-    }
-    if (bellType === "LIGHT_HANDOFF" && !counterId) {
-      throw Object.assign(new Error("LIGHT_BELL_COUNTER_REQUIRED"), { status:400 });
-    }
-    if (!workId) throw Object.assign(new Error("LIGHT_BELL_WORK_REQUIRED"), { status:400 });
-    if (!checkpointId) throw Object.assign(new Error("LIGHT_BELL_CHECKPOINT_REQUIRED"), { status:400 });
+    if (!counterId) throw Object.assign(new Error("AGENT_TRIGGER_COUNTER_REQUIRED"), { status:400 });
+    if (!workId) throw Object.assign(new Error("AGENT_TRIGGER_WORK_REQUIRED"), { status:400 });
+    if (!checkpointId) throw Object.assign(new Error("AGENT_TRIGGER_CHECKPOINT_REQUIRED"), { status:400 });
 
     const token = await this.accessToken();
 
-    // Mirror refresh remains a comment signal. Counter handoff uses the dedicated
-    // Bell Inbox data source so Notion's page.created trigger can wake the Agent.
-    if (bellType === "MIRROR_REFRESH") {
-      const pageId = text(input.pageId || this.env?.LIGHT_BELL_PAGE_ID);
-      if (!pageId) throw Object.assign(new Error("LIGHT_BELL_PAGE_REQUIRED"), { status:400 });
-      const markdown = [
-        "🪞 GO Hub Mirror Bell",
-        MAGNIFICENT_ARCHITECT_AGENT_MENTION,
-        "Trigger: NOTION_PAGE_COMMENT",
-        "อัพเดทมิเรอร์",
-        "Work: " + workId,
-        "Checkpoint: " + checkpointId,
-        "Action: Refresh GO HUB BOARD — LIGHT MIRROR from the existing Work and verified Owner Source. Do not create a new Work or Checkpoint.",
-      ].join("\n");
-      const toolResult = await callNotionTool(this.fetchImpl, token, "notion-create-comment", { page_id:pageId, markdown });
-      const payload = contentJson(toolResult) || {};
-      const resultPayload = payload?.result && typeof payload.result === "object" ? payload.result : payload;
-      return {
-        ok:true, tool:"notion-create-comment", signal:"MIRROR_REFRESH_BELL_COMMENT_CREATED",
-        bellType, pageId, counterId:counterId || null, workId, checkpointId,
-        receiptId:pickString(resultPayload, ["id","comment_id"]) || null,
-      };
-    }
-
-    const dataSourceId = text(input.dataSourceId || this.env?.LIGHT_BELL_DATA_SOURCE_ID || "2d3b7c19-f429-4d72-92d0-9022d772f8a1");
-    if (!dataSourceId) throw Object.assign(new Error("LIGHT_BELL_DATA_SOURCE_REQUIRED"), { status:400 });
+    const dataSourceId = text(input.dataSourceId || this.env?.LIGHT_AGENT_TRIGGER_DATA_SOURCE_ID || this.env?.LIGHT_BELL_DATA_SOURCE_ID || "2d3b7c19-f429-4d72-92d0-9022d772f8a1");
+    if (!dataSourceId) throw Object.assign(new Error("AGENT_TRIGGER_DATA_SOURCE_REQUIRED"), { status:400 });
     const command = text(input.command) || "Open GO Hub MCP Counter inbox, pick up this exact Counter first, process it under the existing Work/Checkpoint, and answer through the same Counter.";
     const properties = {
-      "Name":"Bell " + counterId,
+      "Name":"Trigger " + counterId,
       "Status":"NEW",
-      "Target Agent":"Magnificent Architect",
+      "Target Agent":"LIGHT",
       "Origin Actor":text(input.originActor || "GO"),
       "Target Actor":text(input.targetActor || "LIGHT"),
       "Work ID":workId,
@@ -473,8 +444,8 @@ export class GoHubNotionLightState {
     return {
       ok:true,
       tool:"notion-create-pages",
-      signal:"LIGHT_BELL_INBOX_RECORD_CREATED",
-      bellType,
+      signal:"LIGHT_AGENT_TRIGGER_RECORD_CREATED",
+      triggerType,
       dataSourceId,
       counterId,
       workId,
@@ -492,7 +463,7 @@ export class GoHubNotionLightState {
         : action === "prepare" ? await this.prepare(input)
         : action === "callback" ? await this.callback(input)
         : action === "search" ? await this.search(input)
-        : action === "ring" ? await this.ring(input)
+        : action === "trigger" ? await this.trigger(input)
         : (() => { throw Object.assign(new Error("NOTION_LIGHT_ACTION_UNSUPPORTED"), { status:400 }); })();
       return json(result, result?.ok === false ? 409 : 200);
     } catch (error) {
@@ -521,7 +492,7 @@ export function createNotionLightService({ namespace } = {}) {
     prepare:input => call("prepare", input),
     callback:input => call("callback", input),
     search:input => call("search", input),
-    ring:input => call("ring", input),
+    trigger:input => call("trigger", input),
   });
 }
 
