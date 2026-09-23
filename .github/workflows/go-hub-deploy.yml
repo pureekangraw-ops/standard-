@@ -166,6 +166,79 @@ jobs:
             npx wrangler deploy --config wrangler.go-hub.jsonc
           fi
 
+      - name: Verify deployed LIGHT MCP runtime
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { createAccessToken } from "./go-hub-oauth.mjs";
+
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const cloudflareToken = process.env.CLOUDFLARE_API_TOKEN;
+          const signingKey = process.env.GOHUB_MASTER_KEY;
+          if (!accountId || !cloudflareToken || !signingKey) {
+            console.error("::error::LIGHT MCP runtime smoke prerequisites are missing.");
+            process.exit(1);
+          }
+
+          const subdomainResponse = await fetch(
+            "https://api.cloudflare.com/client/v4/accounts/" + accountId + "/workers/subdomain",
+            { headers: { authorization: "Bearer " + cloudflareToken } },
+          );
+          const subdomainPayload = await subdomainResponse.json().catch(() => null);
+          const subdomain = String(subdomainPayload?.result?.subdomain || "").trim();
+          if (!subdomainResponse.ok || !subdomain) {
+            console.error("::error::Unable to resolve Cloudflare workers.dev subdomain for LIGHT MCP smoke.");
+            process.exit(1);
+          }
+
+          const origin = "https://go-hub." + subdomain + ".workers.dev";
+          const token = await createAccessToken({
+            issuer: origin,
+            signingKey,
+            resource: origin + "/mcp/light",
+            subject: "light",
+            scope: "go-hub-light",
+            ttlSeconds: 600,
+          });
+          const toolsResponse = await fetch(origin + "/mcp/light", {
+            method: "POST",
+            headers: {
+              authorization: "Bearer " + token,
+              "content-type": "application/json",
+              accept: "application/json, text/event-stream",
+              origin: "https://app.notion.com",
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/list",
+              params: {},
+            }),
+          });
+          const toolsPayload = await toolsResponse.json().catch(() => null);
+          const names = (toolsPayload?.result?.tools || []).map(tool => tool?.name).filter(Boolean);
+          const required = ["go_hub_read_file", "go_hub_create_branch", "go_hub_put_file", "go_hub_compare_refs", "go_hub_open_pull_request"];
+          const forbidden = ["go_hub_delete_file", "go_hub_merge_pull_request", "go_hub_centre_live_action"];
+          const missing = required.filter(name => !names.includes(name));
+          const exposed = forbidden.filter(name => names.includes(name));
+          if (!toolsResponse.ok || toolsPayload?.error || missing.length || exposed.length) {
+            console.error("::error::LIGHT MCP live tool surface mismatch.");
+            if (missing.length) console.error("::error::Missing: " + missing.join(", "));
+            if (exposed.length) console.error("::error::Forbidden exposed: " + exposed.join(", "));
+            process.exit(1);
+          }
+
+          const ownerPage = await fetch(origin + "/hub/light-mcp", { redirect:"manual" });
+          const ownerHtml = await ownerPage.text();
+          if (!ownerPage.ok || !/GO Hub × LIGHT/.test(ownerHtml) || !/Mint a scoped bearer token for LIGHT/.test(ownerHtml)) {
+            console.error("::error::LIGHT MCP owner page live readback failed.");
+            process.exit(1);
+          }
+
+          console.log("GO Hub LIGHT MCP runtime smoke passed.");
+          NODE
+
+
       - name: Verify deployed Browser Observer Durable Object binding through MCP
         shell: bash
         run: |
@@ -273,74 +346,3 @@ jobs:
           NODE
 
 
-      - name: Verify deployed LIGHT MCP runtime
-        shell: bash
-        run: |
-          node --input-type=module <<'NODE'
-          import { createAccessToken } from "./go-hub-oauth.mjs";
-
-          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-          const cloudflareToken = process.env.CLOUDFLARE_API_TOKEN;
-          const signingKey = process.env.GOHUB_MASTER_KEY;
-          if (!accountId || !cloudflareToken || !signingKey) {
-            console.error("::error::LIGHT MCP runtime smoke prerequisites are missing.");
-            process.exit(1);
-          }
-
-          const subdomainResponse = await fetch(
-            "https://api.cloudflare.com/client/v4/accounts/" + accountId + "/workers/subdomain",
-            { headers: { authorization: "Bearer " + cloudflareToken } },
-          );
-          const subdomainPayload = await subdomainResponse.json().catch(() => null);
-          const subdomain = String(subdomainPayload?.result?.subdomain || "").trim();
-          if (!subdomainResponse.ok || !subdomain) {
-            console.error("::error::Unable to resolve Cloudflare workers.dev subdomain for LIGHT MCP smoke.");
-            process.exit(1);
-          }
-
-          const origin = "https://go-hub." + subdomain + ".workers.dev";
-          const token = await createAccessToken({
-            issuer: origin,
-            signingKey,
-            resource: origin + "/mcp/light",
-            subject: "light",
-            scope: "go-hub-light",
-            ttlSeconds: 600,
-          });
-          const toolsResponse = await fetch(origin + "/mcp/light", {
-            method: "POST",
-            headers: {
-              authorization: "Bearer " + token,
-              "content-type": "application/json",
-              accept: "application/json, text/event-stream",
-              origin: "https://www.notion.so",
-            },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              id: 1,
-              method: "tools/list",
-              params: {},
-            }),
-          });
-          const toolsPayload = await toolsResponse.json().catch(() => null);
-          const names = (toolsPayload?.result?.tools || []).map(tool => tool?.name).filter(Boolean);
-          const required = ["go_hub_read_file", "go_hub_create_branch", "go_hub_put_file", "go_hub_compare_refs", "go_hub_open_pull_request"];
-          const forbidden = ["go_hub_delete_file", "go_hub_merge_pull_request", "go_hub_centre_live_action"];
-          const missing = required.filter(name => !names.includes(name));
-          const exposed = forbidden.filter(name => names.includes(name));
-          if (!toolsResponse.ok || toolsPayload?.error || missing.length || exposed.length) {
-            console.error("::error::LIGHT MCP live tool surface mismatch.");
-            if (missing.length) console.error("::error::Missing: " + missing.join(", "));
-            if (exposed.length) console.error("::error::Forbidden exposed: " + exposed.join(", "));
-            process.exit(1);
-          }
-
-          const ownerPage = await fetch(origin + "/hub/light-mcp", { redirect:"manual" });
-          const ownerHtml = await ownerPage.text();
-          if (!ownerPage.ok || !/GO Hub × LIGHT/.test(ownerHtml) || !/Mint a scoped bearer token for LIGHT/.test(ownerHtml)) {
-            console.error("::error::LIGHT MCP owner page live readback failed.");
-            process.exit(1);
-          }
-
-          console.log("GO Hub LIGHT MCP runtime smoke passed.");
-          NODE
