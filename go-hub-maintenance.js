@@ -38,3 +38,40 @@ export function createMaintenanceV4({readValue=async()=>({available:false,reason
  }});
 }
 export { normalizeMap, compare };
+
+
+// Transitional adapter for callers that have not yet moved to Work-bound Maintenance V4.
+// It preserves the old read-only Factory health/closeout surface while the V4 route is cut over.
+export function createMaintenanceService(options = {}) {
+  const v4 = createMaintenanceV4(options);
+  return Object.freeze({
+    maintenance(input = {}) {
+      if (input.work) return v4.run(input);
+      const target = text(input.target);
+      const action = text(input.action).toLowerCase();
+      if (target !== "factory") return json({ code: "MAINTENANCE_TARGET_UNAVAILABLE" }, 400);
+      if (action === "inspect") return json({
+        status: "MAINTENANCE_READY",
+        authority: "HEALTH_CLASSIFICATION_ROUTE_ONLY",
+        mutates: false,
+        actions: ["inspect", "plan_closeout"],
+        nextRoute: "destination://factory",
+      });
+      if (action === "plan_closeout") {
+        try {
+          return json({
+            status: "MAINTENANCE_PLAN_READY",
+            authority: "HEALTH_CLASSIFICATION_ROUTE_ONLY",
+            delegatedAuthority: "factory",
+            nextRoute: "destination://factory",
+            plan: planCloseout(input.input || {}),
+            mutates: false,
+          });
+        } catch (error) {
+          return json({ code: "MAINTENANCE_PLAN_REFUSED", message: error?.message || "plan refused" }, 409);
+        }
+      }
+      return json({ code: "MAINTENANCE_ACTION_UNAVAILABLE" }, 400);
+    },
+  });
+}
