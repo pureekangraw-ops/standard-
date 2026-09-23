@@ -35,6 +35,24 @@ test("first command locks Pin identity policy: continue/edit reuse, archived reo
   assert.equal(created.pinId, null);
 });
 
+test("LIGHT dispatch routes to the existing Counter without creating a new Pin", async () => {
+  const { lockPinIntent, resolvePinRoute } = await import(pinRouteUrl + "?agent-trigger=" + Date.now());
+  const route = resolvePinRoute({
+    intent: lockPinIntent("ปลุกไลท์ให้รับ Counter เดิม"),
+    pin: { pinId:"PIN-LIGHT-1", status:"DOING" },
+  });
+  assert.equal(route.mode,"AGENT_TRIGGER");
+  assert.equal(route.action,"USE_EXISTING_FOR_AGENT_TRIGGER");
+  assert.equal(route.pinId,"PIN-LIGHT-1");
+  assert.equal(route.createAllowed,false);
+  assert.equal(route.route,"destination://counter");
+  assert.equal(route.operation,"go_hub_agent_trigger");
+
+  const missing = resolvePinRoute({ intent:lockPinIntent("ส่งให้ไลท์"), pin:null });
+  assert.equal(missing.action,"LOOKUP_REQUIRED");
+  assert.equal(missing.createAllowed,false);
+});
+
 test("continue/edit never silently creates a replacement Pin when existing identity is unresolved", async () => {
   const { lockPinIntent, resolvePinRoute } = await import(pinRouteUrl);
 
