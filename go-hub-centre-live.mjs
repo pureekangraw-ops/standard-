@@ -1,6 +1,7 @@
 import { CENTRE_STATES, createCentrePassage } from "./go-hub-centre.js";
 import { routeInterruptionReturn } from "./go-hub-city-route.js";
 import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
+import { createWorkRecord as createV4WorkRecord, claimWork as claimV4Work, openWorkPass as openV4WorkPass, updateWorkDestinations as updateV4WorkDestinations, returnWork as returnV4Work } from "./go-hub-centre-v4.js";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -284,6 +285,13 @@ export class GoHubCentreState {
     let state = await this.load();
     if (state?.auditPendingEvent) state = await this.flushPendingAudit(state);
 
+    if (action === "v4_create") {
+      if (state) throw Object.assign(new Error("CENTRE_WORK_ALREADY_EXISTS"), { status: 409 });
+      const work = createV4WorkRecord(input.work || input);
+      state = await this.save({ v4: true, work, phase: "V4_OPEN", ownership: { revision: 0, enforced: false }, effectLedger: { revision: 0, entries: [] }, executionCheckpoint: { revision: 0, latest: null } });
+      return json({ ok: true, v4: true, work });
+    }
+
     if (action === "start") {
       const workId = required(input.workId, "Work ID");
       const checkpointId = required(input.checkpointId, "Checkpoint ID");
@@ -322,6 +330,17 @@ export class GoHubCentreState {
     }
 
     if (!state) throw Object.assign(new Error("CENTRE_WORK_NOT_FOUND"), { status: 404 });
+    if (state.v4 === true) {
+      if (action === "v4_inspect") return json({ ok: true, v4: true, work: clone(state.work) });
+      if (action === "v4_claim") state.work = claimV4Work(state.work, { actor: input.actor });
+      else if (action === "v4_open_pass") state.work = openV4WorkPass(state.work, { kind: input.kind, destinations: input.destinations });
+      else if (action === "v4_update_destinations") state.work = updateV4WorkDestinations(state.work, { destinations: input.destinations });
+      else if (action === "v4_return") state.work = returnV4Work(state.work, { actor: input.actor, status: input.status, result: input.result, evidence: input.evidence });
+      else throw Object.assign(new Error("unsupported Centre V4 action"), { status: 400 });
+      state.phase = "V4_" + action.slice(3).toUpperCase();
+      await this.save(state);
+      return json({ ok: true, v4: true, work: clone(state.work) });
+    }
     assertIdentity(state, input);
 
     if (action === "inspect") return stateView(state, { resumed: true });

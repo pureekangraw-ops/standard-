@@ -1,0 +1,2 @@
+const test=require("node:test");const assert=require("node:assert/strict");const fs=require("node:fs");
+test("Centre live source exposes persisted V4 lifecycle without removing legacy runtime",()=>{const s=fs.readFileSync("go-hub-centre-live.mjs","utf8");for(const a of ["v4_create","v4_inspect","v4_claim","v4_open_pass","v4_update_destinations","v4_return"])assert.ok(s.includes(a));for(const a of ['action === "start"','action === "claim"','action === "record_effect"','action === "save_checkpoint"'])assert.ok(s.includes(a));});
