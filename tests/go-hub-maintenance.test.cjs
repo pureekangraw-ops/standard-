@@ -52,7 +52,7 @@ test("MCP Maintenance requires the Maintenance destination contract", async () =
     input: {},
     workContext,
   });
-  assert.equal(good.structuredContent.ok, true);
+  assert.equal(good.structuredContent.ok, true);\n\n  await assert.rejects(() => registry.callTool("go_hub_maintenance", {\n    target: "factory", action: "plan_closeout", input: {}, workContext,\n  }), /invalid action/);
 
   await assert.rejects(() => registry.callTool("go_hub_maintenance", {
     target: "factory",
