@@ -9,7 +9,7 @@ const DESTINATIONS = Object.freeze({
 
 const WORK_CONTEXT_FIELDS = Object.freeze([
   "workId", "checkpointId", "returnAddress", "destination",
-  "task", "requestedResult", "lensReference",
+  "task", "requestedResult", "personaReference",
 ]);
 
 export const CITY_DESTINATIONS = DESTINATIONS;
