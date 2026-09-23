@@ -101,3 +101,5 @@ test("legacy enterWorkLoop remains compatible while canonical gateway is explici
     destinationId: "factory",
   });
 });
+
+test("outbound boundary can consume Heimdall Evidence Gate without moving QC authority",async()=>{const {routeOutbound}=await load();assert.deepEqual(routeOutbound({heimdall:{decision:"PASS"},evidenceGate:{workId:"W",checkpointId:"C",checks:[]}}),{destination:"heimdall",reason:"EVIDENCE_CHECKS_REQUIRED",evidenceDecision:"WAIT"});assert.equal(routeOutbound({heimdall:{decision:"PASS"},evidenceGate:{workId:"W",checkpointId:"C",checks:[{id:"factory-qc",status:"PASS",evidenceRef:"ev://qc"}]}}).destination,"bifrost");});
