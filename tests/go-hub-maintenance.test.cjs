@@ -27,45 +27,10 @@ test("Maintenance inspect exposes classification/repair-route capability without
   assert.equal(body.status, "MAINTENANCE_READY");
   assert.equal(body.authority, "HEALTH_CLASSIFICATION_ROUTE_ONLY");
   assert.equal(body.mutates, false);
-  assert.deepEqual(body.actions, ["inspect", "plan_closeout"]);
+  assert.deepEqual(body.actions, ["inspect"]);\n  assert.equal(body.nextRoute, "destination://factory");
 });
 
-test("Maintenance delegates closeout planning to verified Housekeeper truth", async () => {
-  const { createMaintenanceService } = await import(maintenanceUrl);
-  const service = createMaintenanceService();
-  const response = service.maintenance({
-    target: "factory",
-    action: "plan_closeout",
-    input: {
-      task: { id: "t1", factoryStage: "PRODUCT_VERIFIED", buildArtifact: { id: "apk", digest: "sha256:ok" } },
-      scan: { status: "VERIFIED_CHAIN", artifactId: "apk", artifactDigest: "sha256:ok" },
-      transientKeys: ["draft"],
-      obsoleteKeys: ["old-cache"],
-    },
-  });
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.status, "MAINTENANCE_PLAN_READY");
-  assert.equal(body.plan.status, "CLOSEOUT_READY");
-  assert.equal(body.mutates, false);
-});
-
-test("Maintenance refuses stale closeout evidence instead of mutating state", async () => {
-  const { createMaintenanceService } = await import(maintenanceUrl);
-  const service = createMaintenanceService();
-  const response = service.maintenance({
-    target: "factory",
-    action: "plan_closeout",
-    input: {
-      task: { id: "t1", factoryStage: "PRODUCT_VERIFIED", buildArtifact: { id: "apk", digest: "sha256:new" } },
-      scan: { status: "VERIFIED_CHAIN", artifactId: "apk", artifactDigest: "sha256:old" },
-    },
-  });
-  assert.equal(response.status, 409);
-  assert.equal((await response.json()).code, "MAINTENANCE_PLAN_REFUSED");
-});
-
-test("MCP Maintenance requires the Maintenance destination contract", async () => {
+test("Maintenance refuses Factory planning actions and routes planning back to Factory", async () => {\n  const { createMaintenanceService } = await import(maintenanceUrl);\n  const response = createMaintenanceService().maintenance({ target: "factory", action: "plan_closeout", input: {} });\n  assert.equal(response.status, 400);\n  assert.equal((await response.json()).code, "MAINTENANCE_ACTION_UNAVAILABLE");\n});\n\ntest("MCP Maintenance requires the Maintenance destination contract", async () => {
   const { createMcpRegistry } = await import(registryUrl);
   const lifecycle = {
     maintenance: input => new Response(JSON.stringify({ ok: true, input }), { headers: { "content-type": "application/json" } }),
