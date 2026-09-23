@@ -37,8 +37,8 @@ async function outboundMimirAccess(search) {
     },
   );
   const fitted = centre.fit(reviewed, {
-    roleId: "ROLE-SEARCH",
-    roleReference: "role://search",
+    personaId: "PERSONA-SEARCH",
+    personaReference: "persona://search",
     workingView: "Find relevant source without inventing missing fields",
   });
   const away = centre.leave(fitted, {
@@ -115,7 +115,7 @@ test("Notion-shaped catalog stock selects a usable fit before a blocked five-sta
   const catalogResult = await searchCatalog({
     task: "Use Python to calculate",
     requestedResult: "Analyze data",
-    lensReference: "lens://tool-fit",
+    lensReference: "persona://tool-fit",
   });
 
   assert.equal(catalogResult.status, "PASS");

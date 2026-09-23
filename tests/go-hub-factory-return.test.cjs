@@ -24,8 +24,8 @@ async function createFactoryAccess() {
       },
     ),
     {
-      roleId: "ROLE-CITY",
-      roleReference: "role://city-roundtrip",
+      personaId: "PERSONA-CITY",
+      personaReference: "persona://city-roundtrip",
       workingView: "Preserve work identity and return real evidence",
     },
   );
@@ -76,8 +76,7 @@ test("Factory work context binds the Code task to the exact Centre identity", as
     destination: "destination://factory",
     task: "Ship GO City roundtrip",
     requestedResult: "Return exact Factory reality evidence",
-    roleReference: "role://city-roundtrip",
-    lensReference: "role://city-roundtrip",
+    personaReference: "persona://city-roundtrip",
     repository: "pureekangraw-ops/standard-",
     factoryTaskId: "active-code-task",
   });

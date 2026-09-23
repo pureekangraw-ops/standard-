@@ -522,8 +522,8 @@ export class GoHubCentreState {
         throw Object.assign(new Error("LEGACY_LENS_CONTRACT_REJECTED"), { status: 400 });
       }
       state.work = this.centre.fit(state.work, {
-        roleId: input.roleId,
-        roleReference: input.roleReference,
+        personaId: input.personaId,
+        personaReference: input.personaReference,
         workingView: input.workingView,
       });
       state.phase = "FIT";

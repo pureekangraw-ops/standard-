@@ -12,28 +12,28 @@ function fingerprint(context, reality) {
   return stable({ context: context || {}, reality: reality || {} });
 }
 
-export function fitWork({ context = {}, reality = {}, role = {}, destination = {} } = {}) {
+export function fitWork({ context = {}, reality = {}, persona = {}, destination = {} } = {}) {
   const missing = REQUIRED_CONTEXT.filter(key => !String(context?.[key] ?? "").trim());
   if (missing.length) {
     return Object.freeze({
       gate: "WAIT",
       missing: Object.freeze(missing),
-      roleReference: null,
+      personaReference: null,
       route: null,
       fingerprint: fingerprint(context, reality),
     });
   }
 
-  const roleReference = String(role.reference || "").trim();
+  const personaReference = String(persona.reference || "").trim();
   const route = String(destination.route || "").trim();
-  if (!roleReference || !route) {
+  if (!personaReference || !route) {
     return Object.freeze({
       gate: "WAIT",
       missing: Object.freeze([
-        ...(!roleReference ? ["role"] : []),
+        ...(!personaReference ? ["persona"] : []),
         ...(!route ? ["route"] : []),
       ]),
-      roleReference: roleReference || null,
+      personaReference: personaReference || null,
       route: route || null,
       fingerprint: fingerprint(context, reality),
     });
@@ -42,14 +42,14 @@ export function fitWork({ context = {}, reality = {}, role = {}, destination = {
   return Object.freeze({
     gate: "PASS",
     missing: Object.freeze([]),
-    roleReference,
+    personaReference,
     route,
     destinationId: String(destination.id || "").trim() || null,
     fingerprint: fingerprint(context, reality),
   });
 }
 
-export function fitFromInformation({ context = {}, reality = {}, role = {}, information = {} } = {}) {
+export function fitFromInformation({ context = {}, reality = {}, persona = {}, information = {} } = {}) {
   const status = String(information.status || "").toUpperCase();
   const route = String(information.route || "").trim();
   if (status !== "PASS" || !route) {
@@ -69,7 +69,7 @@ export function fitFromInformation({ context = {}, reality = {}, role = {}, info
   const fitted = fitWork({
     context,
     reality,
-    role,
+    persona,
     destination: { id: destinationId, route },
   });
   return Object.freeze({
