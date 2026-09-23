@@ -41,7 +41,7 @@ test("Maintenance refuses Factory planning actions and routes planning back to F
 test("MCP Maintenance requires the Maintenance destination contract", async () => {
   const { createMcpRegistry } = await import(registryUrl);
   const lifecycle = {
-    maintenance: input => new Response(JSON.stringify({ ok: true, input }), { headers: { "content-type": "application/json" } }),
+    maintenance: input => new Response(JSON.stringify({ ok: true, input }), { status: 200, headers: { "content-type": "application/json" } }),
   };
   const registry = createMcpRegistry({ lifecycle });
   assert.ok(registry.listTools().some(tool => tool.name === "go_hub_maintenance"));
