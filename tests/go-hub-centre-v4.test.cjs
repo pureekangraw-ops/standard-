@@ -1,0 +1,49 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+async function mod(){ return import("../go-hub-centre-v4.js"); }
+
+test("Work must be claimed before Heimdall opens a Pass", async () => {
+  const { createWorkRecord, openWorkPass } = await mod();
+  const work=createWorkRecord({workId:"W1",name:"Centre V4",command:"build centre",expectedResult:"centre ready",requestedDestinations:["factory"]});
+  assert.throws(()=>openWorkPass(work,{kind:"WORK"}),/ON PROCESS/);
+});
+
+test("one active Work has one holder and Work Pass destinations", async () => {
+  const { createWorkRecord,claimWork,openWorkPass }=await mod();
+  let work=createWorkRecord({workId:"W1",name:"Centre V4",command:"build centre",expectedResult:"centre ready",requestedDestinations:["factory","drive"]});
+  work=claimWork(work,{actor:"GO",at:"2026-09-24T01:00:00Z"});
+  work=openWorkPass(work,{kind:"WORK",at:"2026-09-24T01:01:00Z"});
+  assert.equal(work.status,"ON PROCESS");
+  assert.equal(work.holder,"GO");
+  assert.deepEqual(work.pass.allowedDestinations,["factory","drive"]);
+  assert.equal(work.pass.openedBy,"heimdall");
+});
+
+test("Maintenance Pass exposes all GO Hub owned areas but remains Work-bound", async () => {
+  const { createWorkRecord,claimWork,openWorkPass }=await mod();
+  let work=createWorkRecord({workId:"WM",name:"Maintenance",command:"repair route",expectedResult:"route verified",requestedDestinations:["maintenance"]});
+  work=claimWork(work,{actor:"GO"});
+  work=openWorkPass(work,{kind:"MAINTENANCE"});
+  assert.deepEqual(work.pass.allowedDestinations,["ALL_GO_HUB_OWNED_AREAS"]);
+});
+
+test("Return can only be written by holder and closes Pass", async () => {
+  const { createWorkRecord,claimWork,openWorkPass,returnWork }=await mod();
+  let work=createWorkRecord({workId:"W2",name:"Factory",command:"produce",expectedResult:"artifact",requestedDestinations:["factory"]});
+  work=claimWork(work,{actor:"LIGHT"});
+  work=openWorkPass(work,{kind:"WORK"});
+  assert.throws(()=>returnWork(work,{actor:"GO",result:"done"}),/current holder/);
+  work=returnWork(work,{actor:"LIGHT",result:"done",evidence:["owner-source-ref"],at:"2026-09-24T02:00:00Z"});
+  assert.equal(work.status,"COMPLETE");
+  assert.equal(work.pass.state,"CLOSED");
+  assert.equal(work.holder,null);
+});
+
+test("Board is a read model of Work reality", async () => {
+  const { createWorkRecord,boardView }=await mod();
+  const work=createWorkRecord({workId:"W3",name:"Board",command:"show",expectedResult:"visible",requestedDestinations:["factory"]});
+  const board=boardView([work]);
+  assert.equal(board[0].workId,"W3");
+  assert.equal(board[0].status,"OPEN");
+  assert.equal(board[0].holder,null);
+});
