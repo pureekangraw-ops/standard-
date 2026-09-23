@@ -17,7 +17,7 @@ test("GO City exposes Bifrost transport, Optician entry, and Heimdall exit guard
   assert.equal(city.entry.id, "optician");
   assert.deepEqual(city.entry.responsibilities, ["INTAKE", "LENS", "ROUTE"]);
   assert.equal(city.guardian.id, "heimdall");
-  assert.deepEqual(city.guardian.responsibilities, ["SAFETY", "PERMISSION", "STOP"]);
+  assert.deepEqual(city.guardian.responsibilities, ["BOUNDARY", "SAFETY", "PERMISSION", "STOP", "EVIDENCE_GATE"]);
   assert.equal(city.exit.id, "heimdall");
   assert.equal(city.loop.id, "go-work-loop");
   assert.equal(city.information.id, "counter");
