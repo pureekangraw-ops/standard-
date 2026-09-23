@@ -1,6 +1,7 @@
 import { createHephaestusState, createMergeAdmissionTruth, evaluateFactoryAdmission, requestFactorySlot } from "./go-hub-hephaestus.js";
 import { admitQueuedFactorySlot, releaseFactorySlot, retireQueuedFactoryWork } from "./go-hub-hephaestus-queue.js";
 import { completeMergeAndReturn, parkMergedWork, completeWaitingRoomVerification } from "./go-hub-hephaestus-return.js";
+import { reconcileLegacyWaitingRoom } from "./go-hub-maintenance-reconciliation.js";
 
 const STATE_KEY = "state";
 const FOREMAN_NAME = "factory";
@@ -217,6 +218,12 @@ export class HephaestusForeman {
     return result;
   }
 
+  async reconcileLegacy(input = {}) {
+    const result = reconcileLegacyWaitingRoom(await this.loadState(), input.evidence || {});
+    await this.saveState(result.state);
+    return result;
+  }
+
   async releaseSlot(input = {}) {
     const repository = required(input.repository, "repository");
     const slot = validSlot(input.slot);
@@ -253,6 +260,7 @@ export class HephaestusForeman {
       if (request.method === "POST" && url.pathname === "/cancel") return json(await this.cancelWork(body));
       if (request.method === "POST" && url.pathname === "/park") return json(await this.parkMerged(body));
       if (request.method === "POST" && url.pathname === "/verify") return json(await this.verifyWaitingRoom(body));
+      if (request.method === "POST" && url.pathname === "/reconcile-legacy") return json(await this.reconcileLegacy(body));
       if (request.method === "POST" && url.pathname === "/release") return json(await this.releaseSlot(body));
       if (request.method === "POST" && url.pathname === "/assert-merge") return json({ active: await this.assertActiveMerge(body) });
       if (request.method === "GET" && url.pathname === "/state") return json(await this.getState());
@@ -285,6 +293,7 @@ export function createFactoryControllerService({ namespace } = {}) {
       if (input.action === "cancel") return call(namespace, "/cancel", input);
       if (input.action === "park") return call(namespace, "/park", input);
       if (input.action === "verify") return call(namespace, "/verify", input);
+      if (input.action === "reconcile_legacy") return call(namespace, "/reconcile-legacy", input);
       if (input.action === "release") return call(namespace, "/release", input);
       if (input.action === "state") return call(namespace, "/state", null, "GET");
       return Promise.resolve(json({ code: "unsupported Factory foreman action" }, 400));
