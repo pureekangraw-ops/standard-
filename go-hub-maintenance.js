@@ -25,7 +25,7 @@ export function createMaintenanceService({ closeoutPlanner = planCloseout } = {}
         return json({
           status: "MAINTENANCE_READY",
           target: "factory",
-          authority: "PLAN_ONLY",
+          authority: "HEALTH_CLASSIFICATION_ROUTE_ONLY",
           actions: ACTIONS,
           mutates: false,
         });
@@ -38,7 +38,7 @@ export function createMaintenanceService({ closeoutPlanner = planCloseout } = {}
             status: "MAINTENANCE_PLAN_READY",
             target: "factory",
             action,
-            authority: "PLAN_ONLY",
+            authority: "HEALTH_CLASSIFICATION_ROUTE_ONLY",
             mutates: false,
             plan,
           });
