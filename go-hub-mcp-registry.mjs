@@ -60,6 +60,7 @@ const definitions = [
   def("go_hub_project_status", "Read normalized Project Status from current GitHub truth and optional Factory task truth.", "projectStatus", schema({ targetId: str, factoryTaskId: str }, ["targetId"]), ann(true)),
   def("go_hub_board_read", "Read authoritative GO Hub Board truth without mutation.", "boardRead", schema({}), ann(true)),
   def("go_hub_board_pin_route", "Resolve first-command Pin identity routing without mutating the Board.", "boardPinRoute", schema({ firstCommand: str, pin: obj }, ["firstCommand"]), ann(true)),
+  def("go_hub_agent_trigger", "Create the runtime-origin Notion Agent database trigger record for an existing Counter/Work/Checkpoint.", "agentTrigger", schema({ counterId: str, requestedResult: str, command: str, evidence: str, workContext }, ["counterId","workContext"]), ann(false)),
   def("go_hub_counter_create", "Create one governed GO↔LIGHT Counter ticket. Authenticated MCP identity determines the sender; LIGHT creation is HANDOFF-only.", "counterCreate", schema({ counterId: str, mode: { type: "string", enum: ["SEARCH", "HANDOFF", "MONITOR"] }, request: str, requestedResult: str, authority: str, target: str, projectRef: str, context: obj, sourceHints: { type: "array", items: str }, doNotChange: { type: "array", items: str }, workContext }, ["counterId", "request", "workContext"]), ann(false)),
   def("go_hub_counter_inbox", "List bounded pending HANDOFF Counter tickets addressed to the authenticated actor for the same WorkContext.", "counterInbox", schema({ limit: { type: "integer", minimum: 1, maximum: 50 }, workContext }, ["workContext"]), ann(true)),
   def("go_hub_counter_get", "Read the current GO↔LIGHT Counter ticket and append-only event history.", "counterGet", schema({ counterId: str, workContext }, ["counterId", "workContext"]), ann(true)),
@@ -101,7 +102,7 @@ const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linea
 const gmailMutationTools = new Set(["go_hub_gmail_send_message"]);
 const calendarMutationTools = new Set(["go_hub_calendar_create_event"]);
 const driveMutationTools = new Set(["go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item", "go_hub_archive_workflow_artifact"]);
-const counterTools = new Set(["go_hub_counter_create", "go_hub_counter_inbox", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_answer", "go_hub_counter_readback"]);
+const counterTools = new Set(["go_hub_agent_trigger", "go_hub_counter_create", "go_hub_counter_inbox", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_answer", "go_hub_counter_readback"]);
 
 function assertArgs(definition, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("invalid MCP tool arguments");
