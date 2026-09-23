@@ -56,7 +56,7 @@ test("HANDOFF with no callable LIGHT target stays WAITING_PICKUP and never calls
   assert.equal(stateStorage.alarms.length, 0);
 });
 
-test("HANDOFF rings the existing Notion LIGHT mirror and remains waiting for pickup", async () => {
+test("HANDOFF creates a Notion LIGHT Bell Inbox record and remains waiting for pickup", async () => {
   const { GoHubCounterDispatchState } = await import(dispatcherUrl + "?handoff-bell=" + Date.now());
   const calls = [];
   const dispatch = new GoHubCounterDispatchState({ storage: storage() }, {
@@ -66,7 +66,7 @@ test("HANDOFF rings the existing Notion LIGHT mirror and remains waiting for pic
         return {
           fetch: async request => {
             calls.push(JSON.parse(await request.text()));
-            return new Response(JSON.stringify({ ok:true, receiptId:"comment-1" }), {
+            return new Response(JSON.stringify({ ok:true, tool:"notion-create-pages", signal:"LIGHT_BELL_INBOX_RECORD_CREATED", dataSourceId:"2d3b7c19-f429-4d72-92d0-9022d772f8a1", receiptId:"bell-page-1" }), {
               status:200,
               headers:{ "content-type":"application/json" },
             });
@@ -78,8 +78,8 @@ test("HANDOFF rings the existing Notion LIGHT mirror and remains waiting for pic
   const result = await dispatch.enqueueOpen(handoffInput());
   assert.equal(result.dispatch.legs.LIGHT.status, "WAITING_PICKUP");
   assert.equal(result.dispatch.legs.LIGHT.lastError, null);
-  assert.equal(result.dispatch.legs.LIGHT.receipt.adapter, "notion-light-counter-bell");
-  assert.equal(result.dispatch.legs.LIGHT.receipt.receiptId, "comment-1");
+  assert.equal(result.dispatch.legs.LIGHT.receipt.adapter, "notion-light-bell-inbox");
+  assert.equal(result.dispatch.legs.LIGHT.receipt.receiptId, "bell-page-1");
   assert.equal(result.dispatch.events.at(-1).type, "RUNG");
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
@@ -89,6 +89,12 @@ test("HANDOFF rings the existing Notion LIGHT mirror and remains waiting for pic
     counterId:"COUNTER-HANDOFF-001",
     workId:workContext.workId,
     checkpointId:workContext.checkpointId,
+    originActor:"GO",
+    targetActor:"LIGHT",
+    requestedResult:handoffInput().requestedResult,
+    command:handoffInput().request,
+    returnAddress:workContext.checkpointId,
+    evidence:"GO Hub Counter dispatch COUNTER-HANDOFF-001",
   });
 });
 
