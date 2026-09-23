@@ -1,6 +1,13 @@
 const OBSERVER_SCHEMA_VERSION = "go-browser-observer-v1";
 const GUMROAD_HOSTS = Object.freeze(["gumroad.com", "*.gumroad.com"]);
 const CANDIDATE_SELECTOR = 'input, textarea, select, [contenteditable="true"]';
+const LANDMARK_SELECTOR = 'main, nav, header, footer, aside, section, [role="main"], [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"], h1, h2, h3';
+const INTERACTIVE_SELECTOR = 'button, a[href], [role="button"], [role="link"], [role="tab"], [role="menuitem"]';
+const TEXT_SELECTOR = 'h1, h2, h3, p, li, td, th, [role="status"], [role="alert"]';
+const MAX_VISIBLE_TEXT_SNIPPETS = 80;
+const MAX_VISIBLE_LANDMARKS = 40;
+const MAX_INTERACTIVE_ELEMENTS = 100;
+const MAX_SAFE_TEXT_CHARS = 500;
 const SCREENSHOT_CONSENT_TTL_MS = 30_000;
 const MAX_SCREENSHOT_DATA_URL_CHARS = 1_500_000;
 const SENSITIVE_PAGE_PATTERN = /password|passcode|\botp\b|one[- ]?time|verification code|card number|credit card|debit card|\bcvv\b|\bcvc\b|bank account|authorization|bearer\s+[a-z0-9._-]+|access token|refresh token|api key|recovery code|sk-[a-z0-9_-]+/i;
@@ -43,6 +50,37 @@ function classifySemantic(label, element) { const normalized = cleanText(label).
 function fieldKind(element) { const tag = String(element?.tagName || "").toUpperCase(); const type = inputType(element); if (type === "checkbox" || type === "radio") return type; if (tag === "SELECT") return "choice"; if (element?.getAttribute?.("contenteditable") === "true") return "contenteditable"; if (tag === "TEXTAREA") return "textarea"; if (type === "number" || type === "range") return "number"; return "text"; }
 function safeValue(element, semantic) { if (semantic === "unknown") return "UNKNOWN_REDACTED"; const type = inputType(element); if (type === "checkbox" || type === "radio") return Boolean(element?.checked); if (element?.getAttribute?.("contenteditable") === "true") return String(element?.textContent || ""); return element?.value == null ? "" : String(element.value); }
 function captureFields(document) { const output = []; let sensitiveBlocked = 0; let unknownRedacted = 0; let hiddenOmitted = 0; const signatures = []; for (const element of Array.from(document.querySelectorAll(CANDIDATE_SELECTOR))) { if (!isVisible(element)) { hiddenOmitted += 1; continue; } const label = accessibleLabel(document, element); const sensitivity = classifySensitivity(element, label); if (sensitivity === "sensitive") { sensitiveBlocked += 1; continue; } const semantic = classifySemantic(label, element); const kind = fieldKind(element); signatures.push({ label, semantic, field_kind: kind }); if (semantic === "unknown") unknownRedacted += 1; output.push(Object.freeze({ label, field_kind: kind, semantic, safe_value_or_state: safeValue(element, semantic), confidence: semantic === "unknown" ? "low" : "high", sensitivity: semantic === "unknown" ? "unknown" : "safe", status: semantic === "unknown" ? OBSERVER_STATUS.FIELD_UNKNOWN_REDACTED : "SAFE_READ" })); } return { fields: Object.freeze(output), signatures, redactionReport: Object.freeze({ sensitive_blocked: sensitiveBlocked, unknown_redacted: unknownRedacted, hidden_omitted: hiddenOmitted }) }; }
+function safeVisibleText(value) { const text = cleanText(value); if (!text || SENSITIVE_PAGE_PATTERN.test(text)) return ""; return text.slice(0, MAX_SAFE_TEXT_CHARS); }
+function elementText(element) { return safeVisibleText(element?.innerText || element?.textContent || element?.getAttribute?.("aria-label") || ""); }
+function capturePageSemantics(document) {
+  const visibleTextSnippets = [];
+  for (const element of Array.from(document.querySelectorAll(TEXT_SELECTOR))) {
+    if (!isVisible(element)) continue;
+    const text = elementText(element);
+    if (text && !visibleTextSnippets.includes(text)) visibleTextSnippets.push(text);
+    if (visibleTextSnippets.length >= MAX_VISIBLE_TEXT_SNIPPETS) break;
+  }
+  const visibleLandmarks = [];
+  for (const element of Array.from(document.querySelectorAll(LANDMARK_SELECTOR))) {
+    if (!isVisible(element)) continue;
+    const tag = String(element?.tagName || "").toLowerCase();
+    const role = cleanText(element?.getAttribute?.("role")).toLowerCase() || (tag.match(/^h[1-6]$/) ? "heading" : tag);
+    const label = safeVisibleText(element?.getAttribute?.("aria-label") || element?.getAttribute?.("title") || element?.innerText || element?.textContent || "");
+    visibleLandmarks.push(Object.freeze({ role, label }));
+    if (visibleLandmarks.length >= MAX_VISIBLE_LANDMARKS) break;
+  }
+  const interactiveElements = [];
+  for (const element of Array.from(document.querySelectorAll(INTERACTIVE_SELECTOR))) {
+    if (!isVisible(element)) continue;
+    const tag = String(element?.tagName || "").toLowerCase();
+    const role = cleanText(element?.getAttribute?.("role")).toLowerCase() || (tag === "a" ? "link" : tag === "button" ? "button" : "interactive");
+    const label = safeVisibleText(element?.getAttribute?.("aria-label") || element?.innerText || element?.textContent || "");
+    if (!label) continue;
+    interactiveElements.push(Object.freeze({ label, field_kind: role, semantic: "action" }));
+    if (interactiveElements.length >= MAX_INTERACTIVE_ELEMENTS) break;
+  }
+  return Object.freeze({ visibleTextSnippets:Object.freeze(visibleTextSnippets), visibleLandmarks:Object.freeze(visibleLandmarks), interactiveElements:Object.freeze(interactiveElements) });
+}
 function capturedAt(now) { const value = Number(now); return new Date(Number.isFinite(value) ? value : Date.now()).toISOString(); }
 
 export function collectObserverSnapshot({ document, location, title = "", viewport = {}, session, now = Date.now() } = {}) {
@@ -50,8 +88,8 @@ export function collectObserverSnapshot({ document, location, title = "", viewpo
   const url = location instanceof URL ? location : new URL(String(location?.href || location || ""));
   if ((url.protocol !== "https:" && url.protocol !== "http:") || !isGumroadHost(url.hostname) || url.origin !== session.origin) return { ok: false, code: OBSERVER_STATUS.HOST_BLOCKED };
   if (!document || typeof document.querySelectorAll !== "function") return { ok: false, code: OBSERVER_STATUS.SCHEMA_REJECTED };
-  const sanitizedPath = sanitizePath(url); const captured = captureFields(document); const fingerprintSource = JSON.stringify({ origin: url.origin, path: sanitizedPath, title: cleanText(title), signatures: captured.signatures }); const pageFingerprint = `obsfp:${stableHash(fingerprintSource)}`;
-  return { ok: true, packet: Object.freeze({ schema_version: OBSERVER_SCHEMA_VERSION, session_id: session.sessionId, captured_at: capturedAt(now), origin: url.origin, sanitized_path: sanitizedPath, page_title: cleanText(title), viewport: Object.freeze({ width: Number(viewport.width) || 0, height: Number(viewport.height) || 0 }), page_fingerprint: pageFingerprint, visible_landmarks: Object.freeze([]), visible_text_snippets: Object.freeze([]), interactive_elements: Object.freeze(captured.fields.map(field => Object.freeze({ label: field.label, field_kind: field.field_kind, semantic: field.semantic }))), fields: captured.fields, redaction_report: captured.redactionReport, optional_screenshot_ref: null }) };
+  const sanitizedPath = sanitizePath(url); const captured = captureFields(document); const semantics = capturePageSemantics(document); const fingerprintSource = JSON.stringify({ origin: url.origin, path: sanitizedPath, title: cleanText(title), signatures: captured.signatures }); const pageFingerprint = `obsfp:${stableHash(fingerprintSource)}`;
+  return { ok: true, packet: Object.freeze({ schema_version: OBSERVER_SCHEMA_VERSION, session_id: session.sessionId, captured_at: capturedAt(now), origin: url.origin, sanitized_path: sanitizedPath, page_title: cleanText(title), viewport: Object.freeze({ width: Number(viewport.width) || 0, height: Number(viewport.height) || 0 }), page_fingerprint: pageFingerprint, visible_landmarks: semantics.visibleLandmarks, visible_text_snippets: semantics.visibleTextSnippets, interactive_elements: Object.freeze([...semantics.interactiveElements, ...captured.fields.map(field => Object.freeze({ label: field.label, field_kind: field.field_kind, semantic: field.semantic }))].slice(0, MAX_INTERACTIVE_ELEMENTS)), fields: captured.fields, redaction_report: captured.redactionReport, optional_screenshot_ref: null }) };
 }
 
 export function assessScreenshotSafety({ document, snapshot } = {}) {
