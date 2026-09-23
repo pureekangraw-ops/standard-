@@ -128,7 +128,7 @@ test("active shell must pass Optician and canonical city route before leaving Ce
 });
 
 
-test("Centre Review is not blocked by fit-only Role fields", () => {
+test("Centre Review is not blocked by fit-only Persona fields", () => {
   for (const html of [read("index.html"), read("go-hub.html")]) {
     assert.match(html, /name="roleReference"/);
     assert.match(html, /name="workingView"/);
@@ -140,7 +140,7 @@ test("Centre Review is not blocked by fit-only Role fields", () => {
   assert.match(source, /\["roleReference", "workingView"\]\.forEach/);
   assert.match(source, /field\(name\)\.required = reviewed && !fitted/);
   assert.match(source, /action:\s*"fit"/);
-  assert.match(source, /CENTRE_STATES\.READY && !centreWork\.role/);
+  assert.match(source, /CENTRE_STATES\.READY && !centreWork\.persona/);
 });
 
 
