@@ -38,7 +38,6 @@ const APP_SHELL = [
   "./go-hub-product-qc.js",
   "./go-hub-verification-scanner.js",
   "./go-hub-housekeeper.js",
-  "./go-hub-maintenance.js",
   "./go-hub-learning-recorder.js",
   "./go-hub-workbench-model.js",
   "./go-hub-github-workspace.js",
