@@ -4,6 +4,7 @@ const DEFAULT_MAX_STEPS = 32;
 const DEFAULT_RETRY_BUDGET = 2;
 const TERMINAL_ACTIONS = new Set(["complete"]);
 const OWNER_REQUIRED_ACTIONS = new Set(["resolve-blocker", "resolve-conflict"]);
+const UNSUPPORTED_AUTO_ACTIONS = new Set(["fix-piece", "fix-assembly", "fix-product", "repair-first-broken-truth"]);
 const ACTION_ADAPTERS = Object.freeze({
   "inspect-reality": "inspect",
   "write": "write",
@@ -24,6 +25,7 @@ export function classifyFactoryAutoAction(snapshot = {}) {
   if (!action) return Object.freeze({ ...authority, mode: "WAIT", reason: "NO_NEXT_ACTION" });
   if (TERMINAL_ACTIONS.has(action)) return Object.freeze({ ...authority, mode: "COMPLETE", reason: "TERMINAL" });
   if (OWNER_REQUIRED_ACTIONS.has(action)) return Object.freeze({ ...authority, mode: "WAIT", reason: "OWNER_OR_RECONCILIATION_REQUIRED" });
+  if (UNSUPPORTED_AUTO_ACTIONS.has(action)) return Object.freeze({ ...authority, mode: "WAIT", reason: "RECOVERY_EXECUTOR_REQUIRED" });
   return Object.freeze({ ...authority, mode: "AUTO", reason: "ACTIONABLE" });
 }
 
@@ -60,12 +62,17 @@ export function createFactoryAutoRunner({
           const action = decision.nextAction;
           const executionAction = resolveFactoryExecutionAction(action);
           const key = `${snapshot.state || snapshot.factoryStage || "UNKNOWN"}:${action}`;
-          const result = await executeAction({
+          let result;
+          try {
+            result = await executeAction({
             taskId: id,
             action: executionAction,
             input: await inputForAction(action, snapshot),
             expectedRevision: loaded?.revision,
-          });
+            });
+          } catch (error) {
+            return { status: "WAIT", taskId: id, reason: "EXECUTION_EXCEPTION", failedAction: action, error: error instanceof Error ? error.message : String(error), receipts };
+          }
           receipts.push({ action, executionAction, status: result?.status || "UNKNOWN", receiptId: result?.receipt?.id || null });
 
           if (["OK", "STALE_TASK"].includes(result?.status)) {
