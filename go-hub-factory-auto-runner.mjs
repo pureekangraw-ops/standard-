@@ -4,6 +4,17 @@ const DEFAULT_MAX_STEPS = 32;
 const DEFAULT_RETRY_BUDGET = 2;
 const TERMINAL_ACTIONS = new Set(["complete"]);
 const OWNER_REQUIRED_ACTIONS = new Set(["resolve-blocker", "resolve-conflict"]);
+const ACTION_ADAPTERS = Object.freeze({
+  "inspect-reality": "inspect",
+  "write": "write",
+  "check-ci": "check_ci",
+  "diagnose-failure": "diagnose_failure",
+});
+
+export function resolveFactoryExecutionAction(action) {
+  const value = text(action);
+  return ACTION_ADAPTERS[value] || value.replaceAll("-", "_");
+}
 
 function text(value) { return String(value ?? "").trim(); }
 
@@ -47,14 +58,15 @@ export function createFactoryAutoRunner({
           if (decision.mode === "WAIT") return { status: "WAIT", taskId: id, decision, receipts };
 
           const action = decision.nextAction;
+          const executionAction = resolveFactoryExecutionAction(action);
           const key = `${snapshot.state || snapshot.factoryStage || "UNKNOWN"}:${action}`;
           const result = await executeAction({
             taskId: id,
-            action,
+            action: executionAction,
             input: await inputForAction(action, snapshot),
             expectedRevision: loaded?.revision,
           });
-          receipts.push({ action, status: result?.status || "UNKNOWN", receiptId: result?.receipt?.id || null });
+          receipts.push({ action, executionAction, status: result?.status || "UNKNOWN", receiptId: result?.receipt?.id || null });
 
           if (["OK", "STALE_TASK"].includes(result?.status)) {
             retries.delete(key);
