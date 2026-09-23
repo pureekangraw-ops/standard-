@@ -4,7 +4,8 @@ const DESTINATIONS = Object.freeze({
   linear: Object.freeze({ id: "linear", role: "work-tracking-entry", route: "destination://linear" }),
   browser: Object.freeze({ id: "browser", role: "reality-entry", route: "destination://browser" }),
   maintenance: Object.freeze({ id: "maintenance", role: "maintenance-entry", route: "destination://maintenance" }),
-  counter: Object.freeze({ id: "counter", role: "shared-counter-entry", route: "destination://counter" }),
+  notion: Object.freeze({ id: "notion", role: "notion-gate-entry", route: "destination://notion" }),
+  counter: Object.freeze({ id: "counter", role: "agent-handoff-entry", route: "destination://counter" }),
 });
 
 const WORK_CONTEXT_FIELDS = Object.freeze([
