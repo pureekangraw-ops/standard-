@@ -80,3 +80,25 @@ test("live edge routes Centre API into durable Centre binding", async () => {
   assert.equal(received.action, "inspect");
   assert.equal(delegateCalls, 0);
 });
+
+
+test("Factory MCP accepts Notion origin on the full /mcp surface", async () => {
+  const factoryUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-factory-mcp-worker.mjs")).href;
+  const { createFactoryMcpWorker } = await import(factoryUrl + "?notion-origin=" + Date.now());
+  const worker = createFactoryMcpWorker({ fetchImpl: async () => { throw new Error("no upstream expected"); } });
+  const response = await worker.fetch(new Request("https://hub.example/mcp", {
+    method: "POST",
+    headers: {
+      origin: "https://app.notion.com",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+  }), {
+    GITHUB_TOKEN: "github-token",
+    GOHUB_MASTER_KEY: "master-secret",
+    GOHUB_OWNER_PASSCODE: "owner-passcode",
+  });
+
+  assert.equal(response.status, 401);
+  assert.equal((await response.json()).code, "UNAUTHORIZED");
+});
