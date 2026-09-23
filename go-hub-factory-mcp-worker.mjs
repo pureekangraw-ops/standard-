@@ -80,7 +80,9 @@ const LIGHT_CODE_TOOL_NAMES = new Set([
 function restrictRegistry(registry, allowedTools) {
   return Object.freeze({
     listTools() {
-      return registry.listTools().filter(tool => allowedTools.has(tool.name));
+      return registry.listTools()
+        .filter(tool => allowedTools.has(tool.name))
+        .map(({ securitySchemes, ...tool }) => tool);
     },
     callTool(name, args = {}) {
       if (!allowedTools.has(name)) throw new Error("LIGHT_TOOL_NOT_ALLOWED");
