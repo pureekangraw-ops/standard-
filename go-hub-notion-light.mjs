@@ -1,5 +1,5 @@
 const NOTION_MCP_URL = "https://mcp.notion.com/mcp";
-const MAGNIFICENT_ARCHITECT_AGENT_MENTION = '<mention url="agent://1277043d-9861-8158-a732-000347bf2bab/3e27043d-9861-8026-8e4b-009237cacaec">Magnificent Architect</mention>';
+const GOHUB_TASK_RUNNER_AGENT_MENTION = '<mention url="agent://1277043d-9861-8158-a732-000347bf2bab/3e27043d-9861-8026-8e4b-009237cacaec">GOHUB Task Runner</mention>';
 const OAUTH_PENDING_TTL_MS = 10 * 60 * 1000;
 const TOKEN_SKEW_MS = 60 * 1000;
 const MCP_PROTOCOL_VERSION = "2025-11-25";
@@ -427,7 +427,7 @@ export class GoHubNotionLightState {
       if (!pageId) throw Object.assign(new Error("LIGHT_BELL_PAGE_REQUIRED"), { status:400 });
       const markdown = [
         "🪞 GO Hub Mirror Bell",
-        MAGNIFICENT_ARCHITECT_AGENT_MENTION,
+        GOHUB_TASK_RUNNER_AGENT_MENTION,
         "Trigger: NOTION_PAGE_COMMENT",
         "อัพเดทมิเรอร์",
         "Work: " + workId,
@@ -450,7 +450,7 @@ export class GoHubNotionLightState {
     const properties = {
       "Name":"Bell " + counterId,
       "Status":"NEW",
-      "Target Agent":"Magnificent Architect",
+      "Target Agent":"GOHUB Task Runner",
       "Origin Actor":text(input.originActor || "GO"),
       "Target Actor":text(input.targetActor || "LIGHT"),
       "Work ID":workId,
