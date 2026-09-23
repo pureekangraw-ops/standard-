@@ -91,41 +91,19 @@ test("Counter repeat reads/actions are idempotent and do not create duplicate ev
 });
 
 test("Counter may return an answer without owning Hub evidence acceptance", async () => {
-  const { createCounterCore } = await import(moduleUrl + "?unknown=" + Date.now());
+  const { createCounterCore } = await import(moduleUrl + "?authority=" + Date.now());
   const core = createCounterCore({ now: clock() });
-  let state = core.create({
-    counterId: "COUNTER-0002",
-    request: "Find missing record",
-    context: {},
-    workContext,
-  }).counter;
-  state = core.seen({ counterId: "COUNTER-0002", workContext }, state).counter;
-
-  const candidate = core.answer({
-    counterId: "COUNTER-0002",
-    status: "ANSWERED",
-    answer: "Found it",
-    sources: [],
-    evidence: [],
-    workContext,
-  }, state).counter;
+  let state = core.create({ counterId:"COUNTER-0002", request:"Find record", context:{}, workContext }).counter;
+  state = core.seen({ counterId:"COUNTER-0002", workContext }, state).counter;
+  const candidate = core.answer({ counterId:"COUNTER-0002", status:"ANSWERED", answer:"Candidate answer", sources:[], evidence:[], workContext }, state).counter;
   assert.equal(candidate.currentState, "ANSWERED");
-  assert.equal(candidate.sources.length, 0);
-  assert.equal(candidate.evidence.length, 0);
+  assert.deepEqual(candidate.sources, []);
+  assert.deepEqual(candidate.evidence, []);
 
-  const unknown = core.answer({
-    counterId: "COUNTER-0002",
-    status: "UNKNOWN",
-    answer: "No verified source was found.",
-    sources: [],
-    evidence: [],
-    confidence: "unknown",
-    nextRoute: "destination://mimir",
-    workContext,
-  }, core.create({ counterId: "COUNTER-0002B", request: "Find missing record", context: {}, workContext }).counter).counter;
+  let unknownState = core.create({ counterId:"COUNTER-0002B", request:"Find missing record", context:{}, workContext }).counter;
+  unknownState = core.seen({ counterId:"COUNTER-0002B", workContext }, unknownState).counter;
+  const unknown = core.answer({ counterId:"COUNTER-0002B", status:"UNKNOWN", answer:"No verified source was found.", sources:[], evidence:[], confidence:"unknown", nextRoute:"destination://mimir", workContext }, unknownState).counter;
   assert.equal(unknown.currentState, "UNKNOWN");
-  assert.equal(unknown.sources.length, 0);
-  assert.equal(unknown.evidence.length, 0);
 });
 
 test("Durable Object writes state and reads the exact same ticket back", async () => {
