@@ -375,6 +375,39 @@ export function createFactoryController({ lifecycle, state, now = () => new Date
         return save({ revision: current.revision, task: next, receipt, action, before });
       }
 
+      const recorders = {
+        capture_baseline: ["recordProductionStep", input => ({ step: "BASELINE", evidence: input.evidence || input })],
+        trace_system: ["recordProductionStep", input => ({ step: "TRACE", evidence: input.evidence || input })],
+        plan_change: ["recordProductionStep", input => ({ step: "PLAN", evidence: input.evidence || input })],
+        local_verify: ["recordProductionStep", input => ({ step: "LOCAL_VERIFY", evidence: input.evidence || input })],
+        piece_qc: ["recordPieceQc", input => input],
+        ready_gate: ["recordGateHandoff", input => input.readyGate || input],
+        assemble: ["recordAssembly", input => input],
+        assembly_qc: ["recordAssemblyQc", input => input],
+        merge_gate: ["recordMergeGate", input => input],
+        build: ["recordBuildArtifact", input => input],
+        signing_gate: ["recordSigningGate", input => input],
+        sign_apk: ["recordSignedArtifact", input => input],
+        product_qc: ["recordProductQc", input => input],
+        publish: ["recordPublication", input => input],
+        observe: ["recordObservation", input => input],
+        verify_chain: ["recordVerificationScan", input => input],
+        closeout: ["recordCloseout", input => input],
+        learn: ["recordLesson", input => input],
+      };
+      if (recorders[action]) {
+        const [method, adapt] = recorders[action];
+        const next = task[method](adapt(input));
+        const receipt = createRealityReceipt({
+          id: createId(), action, status: "success", repository: before.repository,
+          observedAt: now(), source: "factory",
+          identity: { baseBranch: before.baseBranch, baseSha: before.baseSha, workBranch: before.workBranch, headSha: next.snapshot().headSha || before.headSha },
+          result: { factoryStage: next.snapshot().factoryStage, nextAction: next.snapshot().nextAction },
+          evidence: { governedStateTransition: true },
+        });
+        return save({ revision: current.revision, task: next, receipt, action, before });
+      }
+
       if (action === "diagnose_failure") {
         const runId = Number(input.runId);
         const failedRun = (before.ci?.runs || []).find(run => Number(run.id) === runId && run.conclusion === "failure");
