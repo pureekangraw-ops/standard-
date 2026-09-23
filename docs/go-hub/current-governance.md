@@ -9,7 +9,7 @@
 1. **Work ID is the durable identity of work.** A chat room or UI session may receive, continue, return, or resume the same Work ID without becoming part of the Work identity.
 2. **Room ID is not required governance.** Centre, Factory, and repository-operation contracts must not require a room identifier in order to continue existing work.
 3. **Checkpoint ID is the return point for a Work passage.** Return Address must match the Checkpoint ID; it is not a replacement for Work ID.
-4. **GO is the primary identity; Persona is temporary working context.** Live runtime code must use the current Persona contract. Historical Role/Lens wording is non-authoritative migration evidence only.
+4. **GO is the primary identity; Persona is temporary working context.** Live runtime code must use the current Persona contract. Historical superseded fitting terminology is non-authoritative migration evidence only.
 5. **One concern has one decision authority.** Heimdall owns Hub Evidence Gate decisions; Centre owns Work identity/state/distribution/return; Factory owns planning/production/assembly/internal QC; Counter+Notion own knowledge exchange and evidence production; Audit owns immutable history; Maintenance owns health classification only.
 6. **Consumers consume authority decisions; they do not recreate them.** Counter, City routing, Maintenance, Dashboard, and other surfaces must not independently decide evidence sufficiency, lifecycle authority, or another concern already owned elsewhere.
 7. **Repository mutation follows the governed GO Hub route.** Work carries its original Work ID / Checkpoint ID / Return Address and reaches the canonical destination before source changes.
