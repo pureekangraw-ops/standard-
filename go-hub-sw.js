@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "go-hub-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v10-lighthouse-target-route`;
+const CACHE_NAME = `${CACHE_PREFIX}v11-heimdall-authority-boundary`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -22,6 +22,8 @@ const APP_SHELL = [
   "./go-hub-station-monitors.js",
   "./go-hub-centre.js",
   "./go-hub-centre-client.js",
+  "./go-hub-authority-map.js",
+  "./go-hub-heimdall.js",
   "./go-hub-city-route.js",
   "./go-hub-optician.js",
   "./go-hub-factory-return.js",

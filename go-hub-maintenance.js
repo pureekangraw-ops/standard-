@@ -9,9 +9,7 @@ function json(payload, status = 200) {
 
 const ACTIONS = Object.freeze(["inspect", "plan_closeout"]);
 
-export function createMaintenanceService({ closeoutPlanner = planCloseout } = {}) {
-  if (typeof closeoutPlanner !== "function") throw new Error("Maintenance requires a closeout planner");
-
+export function createMaintenanceService() {
   return Object.freeze({
     maintenance(input = {}) {
       const target = String(input.target || "").trim().toLowerCase();
@@ -25,30 +23,25 @@ export function createMaintenanceService({ closeoutPlanner = planCloseout } = {}
         return json({
           status: "MAINTENANCE_READY",
           target: "factory",
-          authority: "PLAN_ONLY",
+          authority: "HEALTH_CLASSIFICATION_ROUTE_ONLY",
           actions: ACTIONS,
           mutates: false,
+          nextRoute: "destination://factory",
         });
       }
 
       if (action === "plan_closeout") {
         try {
-          const plan = closeoutPlanner(input.input || {});
           return json({
             status: "MAINTENANCE_PLAN_READY",
-            target: "factory",
-            action,
-            authority: "PLAN_ONLY",
+            authority: "HEALTH_CLASSIFICATION_ROUTE_ONLY",
+            delegatedAuthority: "factory",
+            nextRoute: "destination://factory",
+            plan: planCloseout(input.input || {}),
             mutates: false,
-            plan,
           });
-        } catch (cause) {
-          return json({
-            code: "MAINTENANCE_PLAN_REFUSED",
-            target: "factory",
-            action,
-            message: cause?.message || "closeout plan refused",
-          }, 409);
+        } catch (error) {
+          return json({ code: "MAINTENANCE_PLAN_REFUSED", message: error?.message || "plan refused" }, 409);
         }
       }
 

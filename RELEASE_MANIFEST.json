@@ -11,15 +11,15 @@
     "provider-neutral Code capability",
     "GitHub-backed Code workspace through trusted same-origin gateway",
     "durable CENTRE checkpoint before destination access",
-    "canonical Optician and City Route gate before Factory handoff",
     "single CENTRE entry and return passage for GO",
-    "explicit repository-neutral Work Target routing into LIGHTHOUSE through Factory"
+    "explicit repository-neutral Work Target routing into LIGHTHOUSE through Factory",
+    "Heimdall boundary and evidence gate with Optician intake/lens routing"
   ],
   "serviceWorker": {
     "file": "go-hub-sw.js",
     "mode": "go-hub-exclusive",
     "cachePrefix": "go-hub-app-",
-    "cacheGeneration": "v10-lighthouse-target-route",
+    "cacheGeneration": "v11-heimdall-authority-boundary",
     "autoActivate": true
   },
   "validation": {
@@ -33,10 +33,10 @@
       "utf8",
       "no executable ride references",
       "CENTRE checkpoint identity and destination gate",
-      "Optician and canonical City Route before Factory handoff"
+      "Heimdall boundary evidence authority and Optician routing separation"
     ]
   },
-  "note": "GO Hub owns the active root. GO must review at CENTRE, pass the canonical Optician/City Route gate before Code/Factory capability access, then return through the same checkpoint. Heimdall remains the outbound safety/exit gate. Repository credentials remain server-side.",
+  "note": "GO Hub owns the active root. Heimdall owns Hub boundary passage and evidence acceptance; Optician owns intake/lens/route; CENTRE owns Work identity/state/distribution/return; Factory owns production and internal QC. Repository credentials remain server-side.",
   "productionFiles": [
     {
       "path": "index.html"
@@ -151,6 +151,12 @@
     },
     {
       "path": "go-hub-work-targets.js"
+    },
+    {
+      "path": "go-hub-authority-map.js"
+    },
+    {
+      "path": "go-hub-heimdall.js"
     }
   ]
 }

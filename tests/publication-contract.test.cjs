@@ -36,7 +36,7 @@ test("active publication metadata follows the GO Hub hard cutover", () => {
   assert.equal(manifest.serviceWorker.file, "go-hub-sw.js");
   assert.equal(manifest.serviceWorker.mode, "go-hub-exclusive");
   assert.equal(manifest.serviceWorker.cachePrefix, "go-hub-app-");
-  assert.equal(manifest.serviceWorker.cacheGeneration, "v10-lighthouse-target-route");
+  assert.equal(manifest.serviceWorker.cacheGeneration, "v11-heimdall-authority-boundary");
   assert.equal(manifest.serviceWorker.autoActivate, true);
 });
 
@@ -63,7 +63,6 @@ test("legacy Worker alias may remain infrastructure-only and does not own GO Hub
   assert.match(guide, /Worker[^\n]*`normalpocket`/);
   assert.equal(manifest.product, "GO Hub");
 });
-
 
 function localModuleDependencies(file) {
   const source = read(file);

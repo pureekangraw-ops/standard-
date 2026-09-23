@@ -28,6 +28,8 @@ const activeHubFiles = [
   "go-hub-station-monitors.js",
   "go-hub-centre.js",
   "go-hub-centre-client.js",
+  "go-hub-authority-map.js",
+  "go-hub-heimdall.js",
   "go-hub-city-route.js",
   "go-hub-optician.js",
   "go-hub-factory-return.js",

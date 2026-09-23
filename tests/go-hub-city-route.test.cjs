@@ -17,17 +17,18 @@ test("GO City exposes Bifrost transport, Optician entry, and Heimdall exit guard
   assert.equal(city.entry.id, "optician");
   assert.deepEqual(city.entry.responsibilities, ["INTAKE", "LENS", "ROUTE"]);
   assert.equal(city.guardian.id, "heimdall");
-  assert.deepEqual(city.guardian.responsibilities, ["SAFETY", "PERMISSION", "STOP"]);
+  assert.deepEqual(city.guardian.responsibilities, ["BOUNDARY", "SAFETY", "PERMISSION", "STOP", "EVIDENCE_GATE"]);
   assert.equal(city.exit.id, "heimdall");
   assert.equal(city.loop.id, "go-work-loop");
   assert.equal(city.information.id, "counter");
   assert.equal(city.destinations.factory.role, "building-entry");
 });
 
-test("inbound passage requires Optician fit and does not invent an Heimdall entry gate", async () => {
+test("inbound passage crosses Heimdall boundary before Optician fit", async () => {
   const { routeInbound } = await load();
 
   assert.deepEqual(routeInbound({
+    heimdall: { decision: "PASS" },
     fit: { gate: "WAIT" },
   }), {
     destination: "optician",
@@ -35,10 +36,12 @@ test("inbound passage requires Optician fit and does not invent an Heimdall entr
   });
 
   assert.deepEqual(routeInbound({
+    heimdall: { decision: "PASS" },
     fit: { gate: "PASS", route: "destination://factory", destinationId: "factory" },
   }), {
     destination: "go-work-loop",
     via: "optician",
+    boundary: "heimdall",
     workRoute: "destination://factory",
     destinationId: "factory",
   });
@@ -101,3 +104,7 @@ test("legacy enterWorkLoop remains compatible while canonical gateway is explici
     destinationId: "factory",
   });
 });
+
+test("outbound boundary can consume Heimdall Evidence Gate without moving QC authority",async()=>{const {routeOutbound}=await load();assert.deepEqual(routeOutbound({heimdall:{decision:"PASS"},evidenceGate:{workId:"W",checkpointId:"C",checks:[]}}),{destination:"heimdall",reason:"EVIDENCE_CHECKS_REQUIRED",evidenceDecision:"WAIT"});assert.equal(routeOutbound({heimdall:{decision:"PASS"},evidenceGate:{workId:"W",checkpointId:"C",checks:[{id:"factory-qc",status:"PASS",evidenceRef:"ev://qc"}]}}).destination,"bifrost");});
+
+test("inbound passage cannot bypass Heimdall",async()=>{const {routeInbound}=await load();assert.deepEqual(routeInbound({heimdall:{decision:"WAIT",reason:"PERMISSION_REVIEW"},fit:{gate:"PASS",route:"destination://factory",destinationId:"factory"}}),{destination:"heimdall",reason:"PERMISSION_REVIEW"});});

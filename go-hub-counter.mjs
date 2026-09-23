@@ -222,6 +222,7 @@ export function createCounterCore({ now = () => new Date().toISOString() } = {})
     if (!CONTINUABLE_ANSWER_STATES.has(current.currentState)) {
       throw Object.assign(new Error("COUNTER_INVALID_TRANSITION:" + current.currentState + "->" + status), { status: 409 });
     }
+    // Counter validates the integrity of its own answer. Hub passage evidence acceptance belongs to Heimdall.
     if (status === "ANSWERED" && (sources.length === 0 || evidence.length === 0)) {
       throw Object.assign(new Error("COUNTER_ANSWER_REQUIRES_SOURCE_AND_EVIDENCE"), { status: 400 });
     }

@@ -1,9 +1,10 @@
+import { decideEvidenceGate } from "./go-hub-heimdall.js";
 import { CITY_DESTINATIONS, getCityDestination } from "./go-hub-route-contract.js";
 import { resolveWorkInterruption } from "./go-hub-work-lifecycle.js";
 
 const HEIMDALL = Object.freeze({
   id: "heimdall",
-  responsibilities: Object.freeze(["SAFETY", "PERMISSION", "STOP"]),
+  responsibilities: Object.freeze(["BOUNDARY", "SAFETY", "PERMISSION", "STOP", "EVIDENCE_GATE"]),
 });
 
 const READ_ONLY_FAST_LANE_OPERATIONS = Object.freeze(["SEARCH", "LIST", "READ", "INSPECT", "METADATA"]);
@@ -124,7 +125,11 @@ export function enterWorkLoop(fit = {}) {
   });
 }
 
-export function routeInbound({ fit = {} } = {}) {
+export function routeInbound({ heimdall = {}, fit = {} } = {}) {
+  const passage = heimdallDecision(heimdall);
+  if (passage.decision !== "PASS") {
+    return Object.freeze({ destination: "heimdall", reason: passage.reason });
+  }
   if (fit.gate !== "PASS") {
     return Object.freeze({ destination: "optician", reason: "FIT_NOT_READY" });
   }
@@ -138,12 +143,17 @@ export function routeInbound({ fit = {} } = {}) {
   return Object.freeze({
     destination: "go-work-loop",
     via: "optician",
+    boundary: "heimdall",
     workRoute: target.route,
     destinationId: target.id,
   });
 }
 
-export function routeOutbound({ heimdall = {}, needsOptician = false } = {}) {
+export function routeOutbound({ heimdall = {}, evidenceGate = null, needsOptician = false } = {}) {
+  if (evidenceGate) {
+    const gate = decideEvidenceGate(evidenceGate);
+    if (gate.decision !== "PASS") return Object.freeze({ destination: "heimdall", reason: gate.reason, evidenceDecision: gate.decision });
+  }
   const passage = heimdallDecision(heimdall);
   if (passage.decision !== "PASS") {
     return Object.freeze({ destination: "heimdall", reason: passage.reason });
