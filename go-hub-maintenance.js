@@ -1,3 +1,5 @@
+import { planCloseout } from "./go-hub-housekeeper.js";
+
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -5,7 +7,7 @@ function json(payload, status = 200) {
   });
 }
 
-const ACTIONS = Object.freeze(["inspect"]);
+const ACTIONS = Object.freeze(["inspect", "plan_closeout"]);
 
 export function createMaintenanceService() {
   return Object.freeze({
@@ -26,6 +28,21 @@ export function createMaintenanceService() {
           mutates: false,
           nextRoute: "destination://factory",
         });
+      }
+
+      if (action === "plan_closeout") {
+        try {
+          return json({
+            status: "MAINTENANCE_PLAN_READY",
+            authority: "HEALTH_CLASSIFICATION_ROUTE_ONLY",
+            delegatedAuthority: "factory",
+            nextRoute: "destination://factory",
+            plan: planCloseout(input.input || {}),
+            mutates: false,
+          });
+        } catch (error) {
+          return json({ code: "MAINTENANCE_PLAN_REFUSED", message: error?.message || "plan refused" }, 409);
+        }
       }
 
       return json({ code: "MAINTENANCE_ACTION_UNAVAILABLE", target: "factory", action }, 400);
