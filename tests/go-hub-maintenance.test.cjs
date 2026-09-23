@@ -27,10 +27,18 @@ test("Maintenance inspect exposes classification/repair-route capability without
   assert.equal(body.status, "MAINTENANCE_READY");
   assert.equal(body.authority, "HEALTH_CLASSIFICATION_ROUTE_ONLY");
   assert.equal(body.mutates, false);
-  assert.deepEqual(body.actions, ["inspect"]);\n  assert.equal(body.nextRoute, "destination://factory");
+  assert.deepEqual(body.actions, ["inspect"]);
+  assert.equal(body.nextRoute, "destination://factory");
 });
 
-test("Maintenance refuses Factory planning actions and routes planning back to Factory", async () => {\n  const { createMaintenanceService } = await import(maintenanceUrl);\n  const response = createMaintenanceService().maintenance({ target: "factory", action: "plan_closeout", input: {} });\n  assert.equal(response.status, 400);\n  assert.equal((await response.json()).code, "MAINTENANCE_ACTION_UNAVAILABLE");\n});\n\ntest("MCP Maintenance requires the Maintenance destination contract", async () => {
+test("Maintenance refuses Factory planning actions and routes planning back to Factory", async () => {
+  const { createMaintenanceService } = await import(maintenanceUrl);
+  const response = createMaintenanceService().maintenance({ target: "factory", action: "plan_closeout", input: {} });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).code, "MAINTENANCE_ACTION_UNAVAILABLE");
+});
+
+test("MCP Maintenance requires the Maintenance destination contract", async () => {
   const { createMcpRegistry } = await import(registryUrl);
   const lifecycle = {
     maintenance: input => new Response(JSON.stringify({ ok: true, input }), { headers: { "content-type": "application/json" } }),
