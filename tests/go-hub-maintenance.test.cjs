@@ -18,14 +18,14 @@ const workContext = {
   lensReference: "maintenance-v1",
 };
 
-test("Maintenance inspect exposes plan-only Factory capability", async () => {
+test("Maintenance inspect exposes classification/repair-route capability without Factory planning authority", async () => {
   const { createMaintenanceService } = await import(maintenanceUrl);
   const service = createMaintenanceService();
   const response = service.maintenance({ target: "factory", action: "inspect", input: {} });
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.status, "MAINTENANCE_READY");
-  assert.equal(body.authority, "PLAN_ONLY");
+  assert.equal(body.authority, "HEALTH_CLASSIFICATION_ROUTE_ONLY");
   assert.equal(body.mutates, false);
   assert.deepEqual(body.actions, ["inspect", "plan_closeout"]);
 });
