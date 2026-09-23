@@ -106,20 +106,28 @@ test("OAuth fails closed for wrong PKCE, expired tokens, and missing configurati
 });
 
 
-test("OAuth binds authorization and tokens to the requested MCP resource", async () => {
+test("OAuth defaults an omitted resource to the single protected MCP resource", async () => {
   const { createOAuthHandler, createTestAuthorizationCode } = await import(oauthUrl + "?resource=" + Date.now());
   const verifier = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~";
   const challengeBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
   const challenge = Buffer.from(challengeBytes).toString("base64url");
   const handler = createOAuthHandler(config);
+  const authorize = await handler(new Request(issuer + "/oauth/authorize?" + new URLSearchParams({
+    response_type: "code",
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+  })));
+  assert.equal(authorize.status, 200);
   const code = await createTestAuthorizationCode({ ...config, codeChallenge: challenge, resource: issuer + "/mcp" });
   const basic = Buffer.from(config.clientId + ":" + config.clientSecret).toString("base64");
-  const missingResource = await handler(new Request(issuer + "/oauth/token", {
+  const token = await handler(new Request(issuer + "/oauth/token", {
     method: "POST",
     headers: { authorization: "Basic " + basic, "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: config.redirectUri, code_verifier: verifier }),
   }));
-  assert.equal(missingResource.status, 400);
+  assert.equal(token.status, 200);
 });
 
 
