@@ -184,45 +184,13 @@ test("Notion LIGHT uses notion-fetch self then notion-ai-search when AI Search i
   }
 });
 
-test("Notion LIGHT HANDOFF ring creates a NEW Bell Inbox record instead of commenting the Mirror", async () => {
-  const originalFetch = globalThis.fetch;
-  const storage = memoryStorage({
-    client:{ clientId:"client-1", clientSecret:null, redirectUri:"https://hub.example/callback" },
-    auth:{ accessToken:"access-1", refreshToken:"refresh-1", expiresAt:Date.now()+3600000, tokenEndpoint:"https://auth.notion.example/token" },
-  });
-  const toolCalls = [];
-  globalThis.fetch = async (_url, init = {}) => {
-    const body = JSON.parse(init.body);
-    if (body.method === "initialize") return jsonResponse({ jsonrpc:"2.0", id:1, result:{ protocolVersion:"2025-11-25", capabilities:{}, serverInfo:{ name:"notion", version:"1" } } },200,{"mcp-session-id":"session-1"});
-    if (body.method === "notifications/initialized") return new Response("",{status:202});
-    if (body.method === "tools/call") {
-      toolCalls.push(body.params.name);
-      assert.equal(body.params.name,"notion-create-pages");
-      assert.deepEqual(body.params.arguments.parent,{type:"data_source_id",data_source_id:"2d3b7c19-f429-4d72-92d0-9022d772f8a1"});
-      const p=body.params.arguments.pages[0].properties;
-      assert.equal(p.Status,"NEW");
-      assert.equal(p["Target Agent"],"GOHUB Task Runner");
-      assert.equal(p["Counter ID"],"COUNTER-BELL-001");
-      assert.equal(p["Work ID"],"WORK-BELL-001");
-      assert.equal(p["Checkpoint ID"],"CP-BELL-001");
-      assert.equal(p["Requested Result"],"GOHUB_TASK_RUNNER_BELL_INBOX_E2E_OK");
-      assert.match(p.Command,/pick up/i);
-      return jsonResponse({jsonrpc:"2.0",id:2,result:{content:[{type:"text",text:JSON.stringify({results:[{id:"bell-page-1"}]})}]}});
-    }
-    throw new Error("unexpected MCP request "+init.body);
-  };
-  try {
-    const {GoHubNotionLightState}=await import(moduleUrl+"?ring="+Date.now());
-    const light=new GoHubNotionLightState({storage},{LIGHT_BELL_PAGE_ID:"88970e1da0a64ceebaa1ac1928361911"});
-    const result=await light.ring({
-      counterId:"COUNTER-BELL-001",workId:"WORK-BELL-001",checkpointId:"CP-BELL-001",
-      requestedResult:"GOHUB_TASK_RUNNER_BELL_INBOX_E2E_OK",command:"Pick up this exact Counter and answer it."
-    });
-    assert.equal(result.ok,true);
-    assert.equal(result.signal,"LIGHT_BELL_INBOX_RECORD_CREATED");
-    assert.equal(result.receiptId,"bell-page-1");
-    assert.deepEqual(toolCalls,["notion-create-pages"]);
-  } finally { globalThis.fetch=originalFetch; }
+test("Notion LIGHT HANDOFF bell is retired in favor of the Template page trigger", async () => {
+  const {GoHubNotionLightState}=await import(moduleUrl+"?retired-handoff="+Date.now());
+  const light=new GoHubNotionLightState({storage:memoryStorage({})},{});
+  await assert.rejects(
+    () => light.ring({counterId:"COUNTER-BELL-001",workId:"WORK-GO-LIGHT-TRIGGER-WIRING-20260921-001",checkpointId:"CP-GO-LIGHT-TRIGGER-WIRING-001"}),
+    error => error?.message === "LIGHT_HANDOFF_BELL_RETIRED_USE_TEMPLATE_TRIGGER" && error?.status === 410
+  );
 });
 
 test("Notion LIGHT Mirror bell uses the Bell page comment trigger without creating a Counter ticket", async () => {
