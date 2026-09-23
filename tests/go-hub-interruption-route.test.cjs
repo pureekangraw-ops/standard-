@@ -82,7 +82,7 @@ test("City interruption return reuses the original Centre Work ID and Checkpoint
   const passage=centre.createCentrePassage();
   let work=passage.enter({checkpointId:identity.checkpointId,workId:identity.workId});
   work=passage.review(work,{task:"Do work",requestedResult:"Verified reality",authority:"BIG"});
-  work=passage.fit(work,{roleId:"L-I1",roleReference:"lens://i1",workingView:"route"});
+  work=passage.fit(work,{personaId:"L-I1",personaReference:"persona://i1",workingView:"route"});
   work=passage.leave(work,{destination:"destination://factory"}).work;
 
   const access=centre.admitDestination(work,{
