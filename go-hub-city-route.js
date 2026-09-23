@@ -1,3 +1,4 @@
+import { decideEvidenceGate } from "./go-hub-heimdall.js";
 import { CITY_DESTINATIONS, getCityDestination } from "./go-hub-route-contract.js";
 import { resolveWorkInterruption } from "./go-hub-work-lifecycle.js";
 
@@ -143,7 +144,11 @@ export function routeInbound({ fit = {} } = {}) {
   });
 }
 
-export function routeOutbound({ heimdall = {}, needsOptician = false } = {}) {
+export function routeOutbound({ heimdall = {}, evidenceGate = null, needsOptician = false } = {}) {
+  if (evidenceGate) {
+    const gate = decideEvidenceGate(evidenceGate);
+    if (gate.decision !== "PASS") return Object.freeze({ destination: "heimdall", reason: gate.reason, evidenceDecision: gate.decision });
+  }
   const passage = heimdallDecision(heimdall);
   if (passage.decision !== "PASS") {
     return Object.freeze({ destination: "heimdall", reason: passage.reason });
