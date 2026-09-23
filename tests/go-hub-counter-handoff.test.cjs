@@ -93,7 +93,7 @@ test("HANDOFF creates a Notion LIGHT Bell Inbox record and remains waiting for p
     targetActor:"LIGHT",
     requestedResult:handoffInput().requestedResult,
     command:handoffInput().request,
-    returnAddress:workContext.returnAddress,
+    returnAddress:workContext.checkpointId,
     evidence:"GO Hub Counter dispatch COUNTER-HANDOFF-001",
   });
 });
