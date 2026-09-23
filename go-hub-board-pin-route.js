@@ -1,4 +1,4 @@
-export const PIN_INTENT_MODES = Object.freeze(["REUSE", "CREATE", "REVIEW"]);
+export const PIN_INTENT_MODES = Object.freeze(["REUSE", "CREATE", "REVIEW", "AGENT_TRIGGER"]);
 
 const REUSE_PREFIXES = Object.freeze([
   "ต่องาน",
@@ -10,6 +10,15 @@ const REUSE_PREFIXES = Object.freeze([
   "resume",
   "edit",
   "update",
+]);
+
+const AGENT_TRIGGER_PREFIXES = Object.freeze([
+  "ปลุกไลท์",
+  "ส่งให้ไลท์",
+  "ให้ไลท์รับ",
+  "trigger light",
+  "wake light",
+  "dispatch light",
 ]);
 
 const CREATE_PREFIXES = Object.freeze([
@@ -33,6 +42,7 @@ function classify(value) {
   const raw = commandText(value);
   const normalized = raw.toLocaleLowerCase("en");
   if (!normalized) return "REVIEW";
+  if (AGENT_TRIGGER_PREFIXES.some(prefix => normalized.startsWith(prefix))) return "AGENT_TRIGGER";
   if (CREATE_PREFIXES.some(prefix => normalized.startsWith(prefix))) return "CREATE";
   if (REUSE_PREFIXES.some(prefix => normalized.startsWith(prefix))) return "REUSE";
   return "REVIEW";
@@ -79,6 +89,20 @@ export function assertSamePinIntent(lockedIntent, nextCommand) {
 
 export function resolvePinRoute({ intent, pin = null } = {}) {
   const locked = assertIntent(intent);
+
+  if (locked.mode === "AGENT_TRIGGER") {
+    const existing = pinIdentity(pin);
+    return freeze({
+      policy:locked.policy,
+      mode:locked.mode,
+      action:existing ? "USE_EXISTING_FOR_AGENT_TRIGGER" : "LOOKUP_REQUIRED",
+      pinId:existing?.pinId || null,
+      nextStatus:null,
+      createAllowed:false,
+      route:"destination://counter",
+      operation:"go_hub_agent_trigger",
+    });
+  }
 
   if (locked.mode === "CREATE") {
     return freeze({
