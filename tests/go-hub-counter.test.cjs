@@ -90,7 +90,7 @@ test("Counter repeat reads/actions are idempotent and do not create duplicate ev
   assert.deepEqual(repeatedSeen.counter.events.map(event => event.type), ["OPEN", "SEEN"]);
 });
 
-test("ANSWERED requires source and evidence while UNKNOWN is a valid bounded result", async () => {
+test("Counter may return an answer without owning Hub evidence acceptance", async () => {
   const { createCounterCore } = await import(moduleUrl + "?unknown=" + Date.now());
   const core = createCounterCore({ now: clock() });
   let state = core.create({
@@ -101,14 +101,17 @@ test("ANSWERED requires source and evidence while UNKNOWN is a valid bounded res
   }).counter;
   state = core.seen({ counterId: "COUNTER-0002", workContext }, state).counter;
 
-  assert.throws(() => core.answer({
+  const candidate = core.answer({
     counterId: "COUNTER-0002",
     status: "ANSWERED",
     answer: "Found it",
     sources: [],
     evidence: [],
     workContext,
-  }, state), /SOURCE_AND_EVIDENCE/);
+  }, state).counter;
+  assert.equal(candidate.currentState, "ANSWERED");
+  assert.equal(candidate.sources.length, 0);
+  assert.equal(candidate.evidence.length, 0);
 
   const unknown = core.answer({
     counterId: "COUNTER-0002",
@@ -119,7 +122,7 @@ test("ANSWERED requires source and evidence while UNKNOWN is a valid bounded res
     confidence: "unknown",
     nextRoute: "destination://mimir",
     workContext,
-  }, state).counter;
+  }, core.create({ counterId: "COUNTER-0002B", request: "Find missing record", context: {}, workContext }).counter).counter;
   assert.equal(unknown.currentState, "UNKNOWN");
   assert.equal(unknown.sources.length, 0);
   assert.equal(unknown.evidence.length, 0);
