@@ -18,6 +18,7 @@ import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
 import { createCounterService } from "./go-hub-counter.mjs";
 import { createCounterDispatchService } from "./go-hub-counter-dispatcher.mjs";
 import { sealReadyGate } from "./go-hub-ready-gate.js";
+import { createNotionLightService } from "./go-hub-notion-light.mjs";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -603,6 +604,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         hubOrigin: url.origin,
       });
       const counterDispatch = createCounterDispatchLifecycle({ counter, dispatch });
+      const notionAgent = createNotionLightService({ namespace: env?.GO_HUB_NOTION_LIGHT_STATE });
       const lighthouseControlPort = createLighthouseControlPortMcpService({ namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS });
       const projectStatus = createProjectStatusReadService({ lifecycle, factoryBinding:env?.GO_HUB_FACTORY_STATE });
       const boardPinRoute = createBoardPinRouteReadService();
@@ -666,6 +668,18 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           projectStatus: async input => json(await projectStatus.read(input)),
           boardRead: () => lighthouseControlPort.boardRead(),
           boardPinRoute: input => json(boardPinRoute.read(input)),
+          agentTrigger: input => {
+            if (lightMcp) return json({ code:"LIGHT_AGENT_TRIGGER_FORBIDDEN" }, 403);
+            const routed = {
+              ...input,
+              workId: input.workContext?.workId,
+              checkpointId: input.workContext?.checkpointId,
+              returnAddress: input.workContext?.returnAddress,
+              originActor: "GO",
+              targetActor: "LIGHT",
+            };
+            return runMutation("notion.agent_trigger.go_to_light", input, () => notionAgent.trigger(routed));
+          },
           counterCreate: input => {
             const fromActor = lightMcp ? "LIGHT" : "GO";
             const toActor = lightMcp ? "GO" : "LIGHT";
