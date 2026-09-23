@@ -17,6 +17,7 @@ import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
 import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
 import { createCounterService } from "./go-hub-counter.mjs";
 import { createCounterDispatchService } from "./go-hub-counter-dispatcher.mjs";
+import { sealReadyGate } from "./go-hub-ready-gate.js";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -433,6 +434,14 @@ export function createFactoryGuardedLifecycle({ lifecycle, factory } = {}) {
     ...lifecycle,
     factoryForeman(input = {}) {
       return factory.foreman(input);
+    },
+    factoryReadyGate(input = {}) {
+      try {
+        const readyGate = sealReadyGate(input);
+        return json({ ok: true, readyGate });
+      } catch (error) {
+        return json({ code: "READY_GATE_REJECTED", message: error?.message || "Ready Gate rejected" }, 409);
+      }
     },
     async cancelStaleFactoryWork(input = {}) {
       const observed = await lifecycle.getPullRequest({
