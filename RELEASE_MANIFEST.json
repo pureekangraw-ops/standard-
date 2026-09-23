@@ -19,7 +19,7 @@
     "file": "go-hub-sw.js",
     "mode": "go-hub-exclusive",
     "cachePrefix": "go-hub-app-",
-    "cacheGeneration": "v10-lighthouse-target-route",
+    "cacheGeneration": "v11-heimdall-authority-boundary",
     "autoActivate": true
   },
   "validation": {
