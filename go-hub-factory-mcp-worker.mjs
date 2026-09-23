@@ -4,7 +4,7 @@ import { createMcpHandler } from "./go-hub-mcp.mjs";
 import { createLinearService } from "./go-hub-linear-service.mjs";
 import { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createFactoryControllerService } from "./go-hub-factory-controller.mjs";
-import { createFactoryActionService } from "./go-hub-factory-service.mjs";
+import { createFactoryActionService, createFactoryAutoService } from "./go-hub-factory-service.mjs";
 import { createMaintenanceService } from "./go-hub-maintenance.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { routeReadOnlyFastLane } from "./go-hub-city-route.js";
@@ -584,6 +584,9 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const factoryAction = env?.GO_HUB_FACTORY_STATE
         ? createFactoryActionService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE })
         : async () => json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
+      const factoryAuto = env?.GO_HUB_FACTORY_STATE
+        ? createFactoryAutoService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE })
+        : async () => json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
       const maintenance = createMaintenanceService();
       const linear = createLinearService({
         fetchImpl,
@@ -635,6 +638,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
             ? lifecycle.factoryForeman(input)
             : runMutation("factory.foreman." + String(input.action || "unknown"), input, () => lifecycle.factoryForeman(input)),
           factoryAction: input => runMutation("factory.action." + String(input.action || "unknown"), input, () => factoryAction(input)),
+          factoryAuto: input => runMutation("factory.auto", input, () => factoryAuto(input)),
           maintenance: input => maintenance.maintenance(input),
           observerLatest: () => observer.latest(),
           observerScreenshot: input => observer.screenshot(input),
