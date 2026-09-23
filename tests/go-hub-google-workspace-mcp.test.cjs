@@ -29,7 +29,9 @@ test("gmail send and calendar create use expected Google endpoints",async()=>{
   throw new Error("unexpected "+url);
  };
  const svc=createGoogleWorkspaceService({fetchImpl,accessToken:"access-secret"});
- assert.equal((await (await svc.gmailSendMessage({to:"a@example.com",subject:"Hi",body:"Body"})).json()).message.id,"m1");
+ assert.equal((await (await svc.gmailSendMessage({to:"a@example.com",subject:"Hi",body:"Body",attachments:[{filename:"proof.png",mimeType:"image/png",dataBase64:"aGVsbG8="}]})).json()).message.id,"m1");
+ const gmailCall=calls.find(call=>String(call.url).includes("/messages/send")); const gmailBody=JSON.parse(gmailCall.init.body);
+ assert.ok(gmailBody.raw);
  assert.equal((await (await svc.calendarCreateEvent({summary:"Run",start:{dateTime:"2026-09-23T09:00:00+07:00"},end:{dateTime:"2026-09-23T10:00:00+07:00"}})).json()).event.id,"e1");
  assert.equal(calls.length,2); for(const call of calls) assert.equal(call.init.headers.authorization,"Bearer access-secret");
 });
