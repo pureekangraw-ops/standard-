@@ -5,6 +5,7 @@ import { createFactoryActionService } from "./go-hub-factory-service.mjs";
 import { createAccessToken } from "./go-hub-oauth.mjs";
 import { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
+import { createBroadcastService } from "./go-hub-broadcast-state.mjs";
 import { createNotionLightService } from "./go-hub-notion-light.mjs";
 import { createCounterService } from "./go-hub-counter.mjs";
 import { createCounterDispatchService } from "./go-hub-counter-dispatcher.mjs";
@@ -42,6 +43,20 @@ function json(payload, status = 200, headers = {}) {
     status,
     headers: { "content-type": "application/json; charset=utf-8", ...headers },
   });
+}
+
+async function edgeBroadcastSpeaker(env, area, observed = null) {
+  if (!env?.GO_HUB_BROADCAST_STATE) return { ok:true, current:null };
+  const heard = await createBroadcastService({ namespace:env.GO_HUB_BROADCAST_STATE }).speaker({ area, observed });
+  if (!heard?.ok) return { ok:false, response:json(heard, 409) };
+  return { ok:true, current:heard.current || null };
+}
+
+async function withBroadcastReadback(response, current) {
+  if (!current) return response;
+  const payload = await response.clone().json().catch(() => null);
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return response;
+  return json({ ...payload, broadcastReadback:current }, response.status, Object.fromEntries(response.headers.entries()));
 }
 
 function browserPolicy(policy) {
@@ -402,7 +417,11 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
         if (request.method !== "POST") return json({ code: "METHOD_NOT_ALLOWED" }, 405);
         const body = await request.json().catch(() => null);
         if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code: "INVALID_JSON" }, 400);
-        const response = await createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE }).action(body);
+        const speaker = await edgeBroadcastSpeaker(env, "centre-http", body.broadcast || null);
+        if (!speaker.ok) return speaker.response;
+        const routedBody = { ...body };
+        delete routedBody.broadcast;
+        const response = await createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE }).action(routedBody);
         if (response.ok) {
           const view = await response.clone().json().catch(() => null);
           if (view?.ok) {
@@ -413,7 +432,7 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
             } catch {}
           }
         }
-        return response;
+        return withBroadcastReadback(response, speaker.current);
       }
       if (request.method === "POST" && url.pathname === FACTORY_ACTION_PATH) {
         return json({

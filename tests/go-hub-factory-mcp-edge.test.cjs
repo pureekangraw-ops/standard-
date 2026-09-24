@@ -100,3 +100,69 @@ test("legacy direct Factory action route is quarantined instead of invoking old 
     nextTool:"go_hub_factory_v4",
   });
 });
+
+test("direct Centre HTTP route locks to GO Hub broadcast and rejects stale callers", async () => {
+  const { createEdgeWorkerHandler } = await import(edgeUrl + "?centre-broadcast=" + Date.now());
+  let centreCalls = 0;
+  const centreNamespace = {
+    getByName() {
+      return { fetch: async request => {
+        centreCalls += 1;
+        const input = await request.json();
+        return new Response(JSON.stringify({ ok:true, phase:"V4_INSPECT", workId:input.workId }), {
+          headers:{ "content-type":"application/json" },
+        });
+      }};
+    },
+  };
+  const broadcastNamespace = {
+    getByName(name) {
+      assert.equal(name, "go-hub-broadcast-v1");
+      return { fetch: async request => {
+        const input = await request.json();
+        assert.equal(input.action, "current");
+        return new Response(JSON.stringify({
+          ok:true,
+          broadcast:{ program:"GO_HUB_SYSTEM", version:"V5", hash:"h5", sourceRef:"owner://v5" },
+        }), { headers:{ "content-type":"application/json" } });
+      }};
+    },
+  };
+  const handler = createEdgeWorkerHandler({
+    delegate:{ async fetch(){ return new Response("delegate"); } },
+    factoryMcp:{ async fetch(){ return new Response("mcp"); } },
+  });
+  const stale = await handler.fetch(new Request("https://hub.example/hub/api/centre/action", {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body:JSON.stringify({
+      action:"v4_inspect",
+      workId:"WORK-BROADCAST",
+      broadcast:{ program:"GO_HUB_SYSTEM", version:"V4", hash:"old" },
+    }),
+  }), {
+    GO_HUB_CENTRE_STATE:centreNamespace,
+    GO_HUB_BROADCAST_STATE:broadcastNamespace,
+  });
+  assert.equal(stale.status,409);
+  assert.equal((await stale.json()).code,"BROADCAST_MISMATCH");
+  assert.equal(centreCalls,0);
+
+  const current = await handler.fetch(new Request("https://hub.example/hub/api/centre/action", {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body:JSON.stringify({
+      action:"v4_inspect",
+      workId:"WORK-BROADCAST",
+      broadcast:{ program:"GO_HUB_SYSTEM", version:"V5", hash:"h5" },
+    }),
+  }), {
+    GO_HUB_CENTRE_STATE:centreNamespace,
+    GO_HUB_BROADCAST_STATE:broadcastNamespace,
+  });
+  assert.equal(current.status,200);
+  const body=await current.json();
+  assert.equal(body.broadcastReadback.version,"V5");
+  assert.equal(body.broadcastReadback.hash,"h5");
+  assert.equal(centreCalls,1);
+});
