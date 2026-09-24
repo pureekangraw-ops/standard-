@@ -73,6 +73,8 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.ok(names.includes("go_hub_create_branch"));
   assert.ok(names.includes("go_hub_open_pull_request"));
   assert.ok(names.includes("go_hub_centre_inspect"));
+  assert.ok(names.includes("go_hub_v4_project_board"));
+  assert.ok(names.includes("go_hub_light_centre_v4_action"));
   assert.ok(names.includes("go_hub_centre_audit_history"));
   assert.ok(names.includes("go_hub_board_read"));
   assert.ok(names.includes("go_hub_counter_create"));
