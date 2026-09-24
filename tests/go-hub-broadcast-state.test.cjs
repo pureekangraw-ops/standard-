@@ -41,3 +41,15 @@ test("speaker locks to broadcast and sends stray versions to Maintenance Runner"
   assert.equal(stale.expected.version,"V4");
   assert.equal(stale.observed.version,"V3");
 });
+
+test("speaker has no fallback when the GO Hub station is unavailable",async()=>{
+  const {createBroadcastService}=await import(url+"?no-source="+Date.now());
+  const service=createBroadcastService({});
+  const current=await service.current();
+  assert.equal(current.status,503);
+  assert.equal((await current.json()).code,"BROADCAST_STATE_NOT_CONFIGURED");
+  const heard=await service.speaker({area:"factory",observed:{program:"GO_HUB_SYSTEM",version:"V4",hash:"old"}});
+  assert.equal(heard.ok,false);
+  assert.equal(heard.code,"NO_BROADCAST");
+  assert.equal(heard.next,"MAINTENANCE_RUNNER");
+});
