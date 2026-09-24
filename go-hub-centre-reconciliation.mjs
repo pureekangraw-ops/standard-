@@ -80,11 +80,19 @@ async function inspectCentre(centreNamespace, workId) {
   if (!stub || typeof stub.fetch !== "function") {
     throw new Error("CENTRE_STATE_NOT_CONFIGURED");
   }
-  return jsonBody(await stub.fetch(new Request("https://centre-state.internal/inspect", {
+  const call = action => stub.fetch(new Request("https://centre-state.internal/inspect", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action: "inspect", workId }),
-  })));
+    body: JSON.stringify({ action, workId }),
+  }));
+  const v4 = await call("v4_inspect");
+  if (v4.ok) return jsonBody(v4);
+  const payload = await v4.clone().json().catch(() => ({}));
+  const code = clean(payload?.code);
+  if (code !== "unsupported Centre live action" && code !== "unsupported Centre V4 action") {
+    return jsonBody(v4);
+  }
+  return jsonBody(await call("inspect"));
 }
 
 export function createCentreReconciliationService({
