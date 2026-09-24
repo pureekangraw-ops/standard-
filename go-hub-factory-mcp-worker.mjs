@@ -831,7 +831,9 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           listWorkflowArtifacts: input => artifactDelivery.listArtifacts(input),
           archiveWorkflowArtifact: input => runMutation("artifact.archive_workflow", input, () => artifactDelivery.archiveArtifact(input)),
         }),
-        speaker: ({ area, observed }) => broadcast.speaker({ area, observed }),
+        speaker: env?.GO_HUB_BROADCAST_STATE
+          ? ({ area, observed }) => broadcast.speaker({ area, observed })
+          : null,
       });
 
       return createMcpHandler({
