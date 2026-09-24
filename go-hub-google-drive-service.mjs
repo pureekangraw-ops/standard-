@@ -1,5 +1,6 @@
 const DRIVE_API_ROOT = "https://www.googleapis.com/drive/v3";
 const DRIVE_UPLOAD_API_ROOT = "https://www.googleapis.com/upload/drive/v3";
+const DOCS_API_ROOT = "https://docs.googleapis.com/v1";
 const DRIVE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const FILE_FIELDS = "id,name,mimeType,size,modifiedTime,md5Checksum,version,parents,trashed,webViewLink,appProperties";
@@ -44,6 +45,32 @@ function validPageSize(value) {
 
 function encode(value) {
   return encodeURIComponent(String(value));
+}
+
+function collectDocumentParagraphs(elements, paragraphs, tabId = null) {
+  for (const element of Array.isArray(elements) ? elements : []) {
+    if (element?.paragraph) {
+      const value = (element.paragraph.elements || [])
+        .map(part => typeof part?.textRun?.content === "string" ? part.textRun.content : "")
+        .join("")
+        .replace(/\n$/, "");
+      if (value) paragraphs.push({ text:value, tabId });
+    }
+    if (element?.table) {
+      for (const row of element.table.tableRows || []) {
+        for (const cell of row.tableCells || []) collectDocumentParagraphs(cell.content, paragraphs, tabId);
+      }
+    }
+    if (element?.tableOfContents) collectDocumentParagraphs(element.tableOfContents.content, paragraphs, tabId);
+  }
+}
+
+function collectDocumentTabs(tabs, paragraphs) {
+  for (const tab of Array.isArray(tabs) ? tabs : []) {
+    const tabId = text(tab?.tabProperties?.tabId) || null;
+    collectDocumentParagraphs(tab?.documentTab?.body?.content, paragraphs, tabId);
+    collectDocumentTabs(tab?.childTabs, paragraphs);
+  }
 }
 
 export function createGoogleDriveService({
@@ -130,6 +157,30 @@ export function createGoogleDriveService({
           code: "DRIVE_UPSTREAM_ERROR",
           category: errorCategory(payload, upstream.status),
         }, 502),
+      };
+    }
+    return { payload };
+  }
+
+  async function docsRequest(documentId) {
+    const auth = await bearerToken();
+    if (auth.response) return { response: auth.response };
+    let upstream;
+    try {
+      upstream = await fetchImpl(
+        DOCS_API_ROOT + "/documents/" + encode(documentId) + "?includeTabsContent=true",
+        { headers:{ authorization:"Bearer " + auth.token } },
+      );
+    } catch {
+      return { response: json({ code:"DRIVE_DOCUMENT_UPSTREAM_ERROR", category:"NETWORK_ERROR" }, 502) };
+    }
+    const payload = await upstream.json().catch(() => null);
+    if (!upstream.ok || !payload) {
+      return {
+        response: json({
+          code:"DRIVE_DOCUMENT_UPSTREAM_ERROR",
+          category:errorCategory(payload, upstream.status),
+        }, upstream.status === 401 || upstream.status === 403 ? 403 : 502),
       };
     }
     return { payload };
@@ -342,6 +393,7 @@ export function createGoogleDriveService({
           "root",
           "get_item",
           "list_children",
+          "read_document",
           "create_folder",
           "move_item",
           "rename_item",
@@ -419,6 +471,44 @@ export function createGoogleDriveService({
       return json({
         items: Array.isArray(result.payload?.files) ? result.payload.files.map(normalizeFile) : [],
         nextPageToken: result.payload?.nextPageToken || null,
+      });
+    },
+
+    async readDocument(input = {}) {
+      const documentId = text(input.documentId);
+      const requestedMax = Number(input.maxChars ?? 100000);
+      const maxChars = Number.isSafeInteger(requestedMax) && requestedMax >= 1000 && requestedMax <= 200000
+        ? requestedMax
+        : null;
+      if (!documentId || maxChars == null) return json({ code:"DRIVE_INVALID_INPUT" }, 400);
+      const scoped = await isWithinScope(documentId);
+      if (!scoped.ok) return scoped.response;
+      const meta = await getRaw(documentId);
+      if (meta.response) return meta.response;
+      if (text(meta.payload?.mimeType) !== "application/vnd.google-apps.document") {
+        return json({ code:"DRIVE_DOCUMENT_TYPE_REQUIRED", mimeType:text(meta.payload?.mimeType) || null }, 409);
+      }
+      const result = await docsRequest(documentId);
+      if (result.response) return result.response;
+      const paragraphs = [];
+      if (Array.isArray(result.payload?.tabs) && result.payload.tabs.length) {
+        collectDocumentTabs(result.payload.tabs, paragraphs);
+      } else {
+        collectDocumentParagraphs(result.payload?.body?.content, paragraphs, null);
+      }
+      const fullText = paragraphs.map(item => item.text).join("\n");
+      const truncated = fullText.length > maxChars;
+      return json({
+        document:{
+          id:documentId,
+          title:typeof result.payload?.title === "string" ? result.payload.title : meta.payload?.name || null,
+          revisionId:text(result.payload?.revisionId) || null,
+          mimeType:"application/vnd.google-apps.document",
+          text:truncated ? fullText.slice(0, maxChars) : fullText,
+          paragraphs,
+          truncated,
+          totalChars:fullText.length,
+        },
       });
     },
 
