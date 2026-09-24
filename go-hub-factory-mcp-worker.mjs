@@ -4,7 +4,7 @@ import { createMcpHandler } from "./go-hub-mcp.mjs";
 import { createLinearService } from "./go-hub-linear-service.mjs";
 import { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createFactoryControllerService } from "./go-hub-factory-controller.mjs";
-import { createFactoryActionService, createFactoryAutoService } from "./go-hub-factory-service.mjs";
+import { createFactoryActionService, createFactoryAutoService, createFactoryV4Service } from "./go-hub-factory-service.mjs";
 import { createMaintenanceService } from "./go-hub-maintenance.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { routeReadOnlyFastLane } from "./go-hub-city-route.js";
@@ -612,13 +612,9 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           }
         : oauthConfig;
       const github = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
-      const factory = createFactoryControllerService({ namespace: env?.HEPHAESTUS });
-      const lifecycle = createFactoryGuardedLifecycle({ lifecycle: github, factory });
-      const factoryAction = env?.GO_HUB_FACTORY_STATE
-        ? createFactoryActionService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE })
-        : async () => json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
-      const factoryAuto = env?.GO_HUB_FACTORY_STATE
-        ? createFactoryAutoService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE })
+      const lifecycle = github;
+      const factoryV4 = env?.GO_HUB_FACTORY_STATE
+        ? createFactoryV4Service({ binding: env.GO_HUB_FACTORY_STATE })
         : async () => json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
       const maintenance = createMaintenanceService();
       const heimdallPass = async (input = {}) => centreLive.action({
@@ -677,11 +673,9 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           openPullRequest: input => runMutation("github.open_pull_request", input, () => lifecycle.openPullRequest(input)),
           rerunFailed: input => runMutation("github.rerun_failed", input, () => lifecycle.rerunFailed(input)),
           mergePullRequest: input => runMutation("github.merge_pull_request", input, () => lifecycle.mergePullRequest(input)),
-          factoryForeman: input => input.action === "state"
-            ? lifecycle.factoryForeman(input)
-            : runMutation("factory.foreman." + String(input.action || "unknown"), input, () => lifecycle.factoryForeman(input)),
-          factoryAction: input => runMutation("factory.action." + String(input.action || "unknown"), input, () => factoryAction(input)),
-          factoryAuto: input => runMutation("factory.auto", input, () => factoryAuto(input)),
+          factoryV4: input => input.action === "inspect"
+            ? factoryV4(input)
+            : runMutation("factory.v4." + String(input.action || "unknown"), input, () => factoryV4(input)),
           maintenance: input => input.work ? maintenance.maintenance(input) : json({ code: "MAINTENANCE_V4_WORK_REQUIRED" }, 409),
           heimdallPass: input => runMutation("heimdall.pass." + String(input.action || "unknown"), input, () => heimdallPass(input)),
           v4ProjectBoard: input => v4ProjectBoard(input),
