@@ -36,24 +36,25 @@ export function createLighthouseControlRoom({ work, actor, status = {}, reports 
     dataDrop: Object.freeze({ mode: "EXPLICIT_SEND_TO_APP", destination: "lighthouse" }),
     reportInbox: Object.freeze({ mode: "APP_RETURN_REPORTS", items: Object.freeze([...reports]) }),
     maintenance: Object.freeze({
+      scope: "LIGHTHOUSE_ONLY",
       mode: "READ_PREFLIGHT_SAFE_TEST",
+      crossRoomServicePath: false,
       autoRepair: false,
       traces: Object.freeze([...traces]),
     }),
-    mutationRule: "RETURN_CENTRE_UPDATE_SAME_WORK_REQUEST_DESTINATION_THEN_REENTER",
+    exits: Object.freeze(["RETURN_CENTRE"]),
+    crossRoomRoutes: false,
+    mutationRule: "RETURN_CENTRE_THEN_REQUEST_NEW_DESTINATION_PASS",
   });
 }
 
-export function requireCentreReturnForLighthouseMutation({ requestedDestination, currentPass } = {}) {
+export function lighthouseExitForExternalWork({ requestedDestination } = {}) {
   const requested = clean(requestedDestination);
-  const allowed = Array.isArray(currentPass?.allowedDestinations) ? currentPass.allowedDestinations.map(clean) : [];
-  if (!requested) throw new Error("LIGHTHOUSE_MUTATION_DESTINATION_REQUIRED");
-  if (!allowed.includes(requested) && !allowed.includes("ALL_GO_HUB_OWNED_AREAS")) {
-    return Object.freeze({
-      allowed: false,
-      action: "RETURN_CENTRE",
-      instruction: "Update the same Work Form, ask Heimdall to open the required destination, then re-enter.",
-    });
-  }
-  return Object.freeze({ allowed: true, action: "USE_ALREADY_AUTHORIZED_DESTINATION" });
+  if (!requested || requested === "centre" || requested === "lighthouse") throw new Error("LIGHTHOUSE_EXTERNAL_DESTINATION_REQUIRED");
+  return Object.freeze({
+    allowedFromRoom: false,
+    action: "RETURN_CENTRE",
+    requestedDestination: requested,
+    instruction: "Return Centre with the same Work. GO names the required destination; Heimdall checks Work/authority and opens that destination Pass.",
+  });
 }
