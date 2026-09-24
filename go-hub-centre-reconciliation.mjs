@@ -86,13 +86,23 @@ async function inspectCentre(centreNamespace, workId) {
     body: JSON.stringify({ action, workId }),
   }));
   const v4 = await call("v4_inspect");
-  if (v4.ok) return jsonBody(v4);
+  if (v4.ok) {
+    const body = await jsonBody(v4);
+    return body?.v4 === true
+      ? {
+          ...body,
+          routingWorkId:workId,
+          canonicalWorkId:clean(body?.work?.workId) || null,
+        }
+      : { ...body, routingWorkId:workId };
+  }
   const payload = await v4.clone().json().catch(() => ({}));
   const code = clean(payload?.code);
   if (code !== "unsupported Centre live action" && code !== "unsupported Centre V4 action") {
     return jsonBody(v4);
   }
-  return jsonBody(await call("inspect"));
+  const legacy = await jsonBody(await call("inspect"));
+  return { ...legacy, routingWorkId:workId };
 }
 
 export function createCentreReconciliationService({
@@ -165,14 +175,25 @@ export function createCentreReconciliationService({
           reconciliation.cursor,
           validCursor(history.lastSequence),
         );
-        const workIds = [...new Set([
-          ...(Array.isArray(seedWorkIds) ? seedWorkIds.map(clean).filter(Boolean) : []),
-          ...workIdsFromHistory(history.events),
-        ])].slice(0, limit);
+        const auditedWorkIds = workIdsFromHistory(history.events);
+        const seedIds = Array.isArray(seedWorkIds) ? seedWorkIds.map(clean).filter(Boolean) : [];
+        const audited = new Set(auditedWorkIds);
+        const seeded = new Set(seedIds);
+        const workIds = [...new Set([...auditedWorkIds, ...seedIds])].slice(0, limit);
         const projected = [];
+        const skippedWorkIds = [];
 
         for (const workId of workIds) {
-          const truth = await inspectCentre(centreNamespace, workId);
+          let truth;
+          try {
+            truth = await inspectCentre(centreNamespace, workId);
+          } catch (error) {
+            if (seeded.has(workId) && !audited.has(workId) && codeOf(error) === "CENTRE_WORK_NOT_FOUND") {
+              skippedWorkIds.push({ workId, reason:"STALE_BOARD_SEED" });
+              continue;
+            }
+            throw error;
+          }
           const projection = await projectCentre(truth);
           if (!projection?.ok) {
             throw Object.assign(
@@ -182,6 +203,7 @@ export function createCentreReconciliationService({
           }
           projected.push({
             workId,
+            canonicalWorkId:clean(truth?.canonicalWorkId) || null,
             changed: projection.changed === true,
           });
         }
@@ -192,7 +214,7 @@ export function createCentreReconciliationService({
             cursor: nextCursor,
             lastRunAt: startedAt,
             lastError: null,
-            lastProcessedWorkIds: workIds,
+            lastProcessedWorkIds: projected.map(item => item.workId),
           },
         };
         await save(next);
@@ -200,7 +222,8 @@ export function createCentreReconciliationService({
           ok: true,
           active,
           cursor: nextCursor,
-          processedWorkIds: workIds,
+          processedWorkIds: projected.map(item => item.workId),
+          skippedWorkIds,
           projected,
         };
       } catch (error) {
