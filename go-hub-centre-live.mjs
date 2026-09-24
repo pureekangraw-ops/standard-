@@ -220,7 +220,15 @@ export class GoHubCentreState {
   }
 
   async load() {
-    return (await this.ctx.storage.get("state")) || null;
+    const current = (await this.ctx.storage.get("state")) || null;
+    if (!current || current.v4 !== true || !current.work?.workId || current.work.checkpointId) return current;
+    const next = clone(current);
+    next.work.checkpointId = "CP-" + String(next.work.workId);
+    if (next.auditPendingEvent && !next.auditPendingEvent.checkpointId) {
+      next.auditPendingEvent.checkpointId = next.work.checkpointId;
+    }
+    await this.ctx.storage.put("state", clone(next));
+    return next;
   }
 
   auditEvent(state) {
@@ -229,7 +237,7 @@ export class GoHubCentreState {
       eventId: "AUDIT-" + crypto.randomUUID(),
       type: "CENTRE_" + String(this.currentAction || "MUTATION").toUpperCase(),
       workId: work.workId,
-      checkpointId: work.checkpointId,
+      checkpointId: work.checkpointId || (work.workId ? "CP-" + String(work.workId) : null),
       phase: state?.phase || null,
       targetId: work.targetId || null,
       at: new Date().toISOString(),
