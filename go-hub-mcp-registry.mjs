@@ -147,7 +147,7 @@ async function toolResult(response, broadcastReadback = null) {
   const structuredContent = payload && typeof payload === "object" && !Array.isArray(payload) && broadcastReadback
     ? { ...payload, broadcastReadback }
     : payload;
-  return { content: [{ type: "text", text: JSON.stringify(structuredContent) }], structuredContent, ...(response.ok ? {} : { isError: true }) };
+  return { content: [{ type: "text", text: JSON.stringify(payload) }], structuredContent, ...(response.ok ? {} : { isError: true }) };
 }
 
 function speakerError(result) {
