@@ -82,7 +82,7 @@ const definitions = [
   def("go_hub_gmail_profile", "Read Gmail profile metadata.", "gmailProfile", schema({}), ann(true)),
   def("go_hub_gmail_search", "Search Gmail messages using Gmail query syntax.", "gmailSearch", schema({ query: { type: "string" }, maxResults: { type: "integer", minimum: 1, maximum: 100 }, pageToken: str }), ann(true)),
   def("go_hub_gmail_get_message", "Read one Gmail message.", "gmailGetMessage", schema({ messageId: str, format: { type: "string", enum: ["minimal","full","metadata"] } }, ["messageId"]), ann(true)),
-  def("go_hub_gmail_send_message", "Send one plain-text Gmail message through governed mutation.", "gmailSendMessage", schema({ to: str, subject: str, body: str, workContext }, ["to","subject","body","workContext"]), ann(false)),
+  def("go_hub_gmail_send_message", "Send a Gmail message with optional base64-encoded file attachments through governed mutation.", "gmailSendMessage", schema({ to: str, subject: str, body: str, attachments: { type: "array", maxItems: 10, items: { type: "object", properties: { filename: str, mimeType: str, dataBase64: str }, required: ["filename","dataBase64"], additionalProperties: false } }, workContext }, ["to","subject","body","workContext"]), ann(false)),
   def("go_hub_calendar_capabilities", "Inspect governed Google Calendar bridge configuration.", "calendarCapabilities", schema({}), ann(true)),
   def("go_hub_calendar_diagnostics", "Read sanitized Calendar OAuth diagnostics.", "calendarDiagnostics", schema({}), ann(true)),
   def("go_hub_calendar_list", "List visible Google calendars.", "calendarList", schema({ maxResults: { type: "integer", minimum: 1, maximum: 250 }, pageToken: str }), ann(true)),
