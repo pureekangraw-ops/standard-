@@ -127,7 +127,29 @@ function ownerAuthFailure(request, env, policy) {
 function observerSessionsFor(injected, env) {
   if (injected) return injected;
   if (env?.OBSERVER_SESSIONS && typeof env.OBSERVER_SESSIONS.getByName === "function") {
-    return env.OBSERVER_SESSIONS.getByName("go-browser-observer-v1");
+    const durable = env.OBSERVER_SESSIONS.getByName("go-browser-observer-v1");
+    if (!durable) return null;
+    if (typeof durable.fetch !== "function") return durable;
+    const call = async (path, input = {}) => {
+      const response = await durable.fetch(new Request("https://observer-session.internal/" + path, {
+        method:"POST",
+        headers:{ "content-type":"application/json" },
+        body:JSON.stringify(input),
+      }));
+      const body = await response.json().catch(() => ({ code:"HUB_UNAVAILABLE" }));
+      return response.ok ? body : { ok:false, code:body?.code || "HUB_UNAVAILABLE" };
+    };
+    return Object.freeze({
+      start:input => call("start", input),
+      acceptSnapshot:input => call("snapshot", input),
+      read:input => call("read", input),
+      stop:input => call("stop", input),
+      grantScreenshot:input => call("grant-screenshot", input),
+      consumeScreenshot:input => call("consume-screenshot", input),
+      storeScreenshot:input => call("store-screenshot", input),
+      latest:() => call("latest"),
+      screenshot:input => call("screenshot", input),
+    });
   }
   return null;
 }
