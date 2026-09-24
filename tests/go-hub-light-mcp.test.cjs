@@ -73,6 +73,8 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.ok(names.includes("go_hub_create_branch"));
   assert.ok(names.includes("go_hub_open_pull_request"));
   assert.ok(names.includes("go_hub_centre_inspect"));
+  assert.ok(names.includes("go_hub_v4_project_board"));
+  assert.ok(names.includes("go_hub_light_centre_v4_action"));
   assert.ok(names.includes("go_hub_centre_audit_history"));
   assert.ok(names.includes("go_hub_board_read"));
   assert.ok(names.includes("go_hub_counter_create"));
@@ -195,6 +197,31 @@ test("LIGHT Centre read tools perform bounded read-only calls", async () => {
   assert.deepEqual(second.events.map(record => record.sequence), [4]);
   assert.equal(second.nextSequence, 4);
   assert.equal(second.events.every(record => record.event.type.startsWith("CENTRE_")), true);
+});
+
+test("LIGHT V4 tool rejects Return and waiting on another holder's Work", async () => {
+  const { createAccessToken } = await import(oauthUrl + "?light-v4-guard=" + Date.now());
+  const { createFactoryMcpWorker } = await import(factoryUrl + "?light-v4-guard=" + Date.now());
+  const token = await createAccessToken({ issuer:"https://hub.example", signingKey:"master-secret", resource:"https://hub.example/mcp/light", subject:"light", scope:"go-hub-light", ttlSeconds:3600 });
+  const workId = "WORK-LIGHT-V4-GUARD";
+  const checkpointId = "CP-LIGHT-V4-GUARD";
+  const calls = [];
+  const worker = createFactoryMcpWorker({ fetchImpl:async () => { throw new Error("network disabled"); } });
+  const env = { GITHUB_TOKEN:"github-token", GOHUB_MASTER_KEY:"master-secret", GOHUB_OWNER_PASSCODE:"owner-passcode",
+    GO_HUB_CENTRE_STATE:{ getByName:() => ({ fetch:async request => {
+      const input = await request.json(); calls.push(input.action);
+      return new Response(JSON.stringify({ ok:true, v4:true, work:{ workId, checkpointId, holder:"GO", status:"ON PROCESS" } }), { headers:{ "content-type":"application/json" } });
+    } }) },
+  };
+  async function call(id, action) {
+    const response = await worker.fetch(new Request("https://hub.example/mcp/light", { method:"POST", headers:{ authorization:"Bearer " + token, "content-type":"application/json", origin:"https://www.notion.so" }, body:JSON.stringify({ jsonrpc:"2.0", id, method:"tools/call", params:{ name:"go_hub_light_centre_v4_action", arguments:{ action, workId, checkpointId, reason:"pause" } } }) }), env);
+    return response.json();
+  }
+  await call(1, "v4_return");
+  assert.deepEqual(calls, []);
+  const waiting = await call(2, "v4_wait");
+  assert.match(JSON.stringify(waiting), /LIGHT_CENTRE_HOLDER_REQUIRED/);
+  assert.deepEqual(calls, ["v4_inspect"]);
 });
 
 test("LIGHT MCP board.read returns bounded authoritative Board truth without mutation tools", async () => {
