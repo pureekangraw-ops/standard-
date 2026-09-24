@@ -300,3 +300,40 @@ test("Board truth reconciliation can run without an active LIGHT session", async
   assert.deepEqual(result.processedWorkIds, ["WORK-CANCELLED"]);
   assert.deepEqual(projected, ["CANCEL"]);
 });
+
+test("reconciliation preserves routing Work identity for V4 and skips stale canonical Board seeds",async()=>{
+  const {createCentreReconciliationService}=await import(moduleUrl+"?routing-seam="+Date.now());
+  const state=activeState(0);state.session={active:false,expiresAt:0};
+  const storage=new MemoryStorage(state);
+  const projected=[];
+  const service=createCentreReconciliationService({
+    storage,requireActiveSession:false,now:()=>50_000,seedWorkIds:["WORK-CANONICAL-STALE"],
+    audit:{async history(){return response({ok:true,lastSequence:1,events:[{sequence:1,event:{type:"CENTRE_V4_CLAIM",workId:"WORK-ROUTING"}}]});}},
+    centreNamespace:{
+      getByName(workId){return{async fetch(){
+        if(workId==="WORK-CANONICAL-STALE")return response({code:"CENTRE_WORK_NOT_FOUND"},404);
+        return response({ok:true,v4:true,work:{workId:"WORK-CANONICAL",checkpointId:"CP-CANON",name:"V4",command:"test",expectedResult:"truth",requestedDestinations:["maintenance"],status:"ON PROCESS",holder:"GO",pass:null,createdAt:"2026-09-24T00:00:00Z",lastUpdated:"2026-09-24T00:00:01Z"}});
+      }};}
+    },
+    projectCentre:async view=>{projected.push(view);return{ok:true,changed:true};},
+  });
+  const result=await service.reconcile();
+  assert.equal(result.ok,true);
+  assert.deepEqual(result.processedWorkIds,["WORK-ROUTING"]);
+  assert.deepEqual(result.skippedWorkIds,[{workId:"WORK-CANONICAL-STALE",reason:"STALE_BOARD_SEED"}]);
+  assert.equal(projected[0].routingWorkId,"WORK-ROUTING");
+  assert.equal(projected[0].canonicalWorkId,"WORK-CANONICAL");
+});
+test("Centre Board projection migrates an old canonical pin to routing identity without duplicating it",async()=>{
+  const m=await import(sessionUrl+"?routing-pin="+Date.now());
+  const storage=new MemoryStorage();
+  const service=m.createLighthouseControlPortSessionService({storage,now:()=>50_000,randomUUID:()=>"lh-route",randomSessionToken:()=>"token-route"});
+  await service.start({ttlMs:60_000});
+  const oldView={ok:true,phase:"AWAY",work:{workId:"WORK-CANON",status:"AWAY",task:"Old pin",requestedResult:"truth"},ownership:{active:false}};
+  await service.projectCentre(oldView);
+  const migrated=await service.projectCentre({...oldView,routingWorkId:"WORK-ROUTE",canonicalWorkId:"WORK-CANON"});
+  assert.equal(migrated.board.pins.length,1);
+  assert.equal(migrated.board.pins[0].workId,"WORK-ROUTE");
+  assert.equal(migrated.board.pins[0].canonicalWorkId,"WORK-CANON");
+});
+
