@@ -48,6 +48,10 @@
       {
         "name": "GO_HUB_NOTION_LIGHT_STATE",
         "class_name": "GoHubNotionLightState"
+      },
+      {
+        "name": "GO_HUB_MAINTENANCE_STATE",
+        "class_name": "GoHubMaintenanceState"
       }
     ]
   },
@@ -110,6 +114,12 @@
       "tag": "v10-go-light-counter-inbox",
       "new_sqlite_classes": [
         "GoHubCounterInboxState"
+      ]
+    },
+    {
+      "tag": "v11-go-hub-maintenance-state",
+      "new_sqlite_classes": [
+        "GoHubMaintenanceState"
       ]
     }
   ],
