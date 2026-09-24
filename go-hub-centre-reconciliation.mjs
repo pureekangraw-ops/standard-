@@ -103,6 +103,7 @@ export function createCentreReconciliationService({
   now = () => Date.now(),
   limit = CENTRE_RECONCILIATION_LIMIT,
   requireActiveSession = true,
+  seedWorkIds = [],
 } = {}) {
   if (!storage || typeof storage.get !== "function" || typeof storage.put !== "function") {
     throw new TypeError("Centre reconciliation storage required");
@@ -164,7 +165,10 @@ export function createCentreReconciliationService({
           reconciliation.cursor,
           validCursor(history.lastSequence),
         );
-        const workIds = workIdsFromHistory(history.events);
+        const workIds = [...new Set([
+          ...(Array.isArray(seedWorkIds) ? seedWorkIds.map(clean).filter(Boolean) : []),
+          ...workIdsFromHistory(history.events),
+        ])].slice(0, limit);
         const projected = [];
 
         for (const workId of workIds) {
