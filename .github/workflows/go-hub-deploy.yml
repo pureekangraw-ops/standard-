@@ -386,8 +386,9 @@ jobs:
           const toolResult = payload?.result;
           const proof = toolResult?.structuredContent;
           const code = proof?.code || payload?.error?.message || null;
-          const reachable = response.ok && !payload?.error && !toolResult?.isError &&
-            (proof?.ok === true || code === "SESSION_INACTIVE" || code === "SESSION_EXPIRED");
+          const expectedIdle = code === "SESSION_INACTIVE" || code === "SESSION_EXPIRED";
+          const reachable = response.ok && !payload?.error &&
+            (proof?.ok === true || expectedIdle);
           if (!reachable) {
             console.error("::error::Browser Observer Durable Object runtime is unreachable: " + (code || "OBSERVER_RUNTIME_SMOKE_FAILED"));
             process.exit(1);
