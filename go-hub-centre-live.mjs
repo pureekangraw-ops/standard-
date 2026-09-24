@@ -1,6 +1,7 @@
 import { CENTRE_STATES, createCentrePassage } from "./go-hub-centre.js";
 import { routeInterruptionReturn } from "./go-hub-city-route.js";
 import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
+import { createCentreBoardService } from "./go-hub-centre-board-v4.mjs";
 import { createWorkRecord as createV4WorkRecord, claimWork as claimV4Work, openWorkPass as openV4WorkPass, updateWorkDestinations as updateV4WorkDestinations, waitForConfirmation as waitV4Work, resumeWork as resumeV4Work, returnWork as returnV4Work, boardView as v4BoardView } from "./go-hub-centre-v4.js";
 
 function json(payload, status = 200) {
@@ -216,6 +217,7 @@ export class GoHubCentreState {
     this.env = env;
     this.centre = createCentrePassage();
     this.audit = createGlobalAuditService({ namespace: env?.GO_HUB_GLOBAL_AUDIT });
+    this.board = createCentreBoardService({ namespace: env?.GO_HUB_CENTRE_BOARD });
     this.currentAction = null;
   }
 
@@ -269,22 +271,40 @@ export class GoHubCentreState {
     return next;
   }
 
+  async flushBoardProjection(state) {
+    if (!state?.v4 || !state?.work?.workId || !this.board.configured()) return state;
+    const response = await this.board.project(state.work);
+    const payload = await response.json().catch(() => ({}));
+    const next = clone(state);
+    if (!response.ok || payload?.ok !== true) {
+      next.boardProjectionPending = true;
+      next.boardProjectionRevision = state.boardProjectionRevision == null ? null : Number(state.boardProjectionRevision);
+      await this.ctx.storage.put("state", clone(next));
+      return next;
+    }
+    next.boardProjectionPending = false;
+    next.boardProjectionRevision = Number(payload.revision || 0);
+    await this.ctx.storage.put("state", clone(next));
+    return next;
+  }
+
   async save(state) {
     const next = clone(state);
     if (this.audit.configured()) next.auditPendingEvent = this.auditEvent(next);
     await this.ctx.storage.put("state", clone(next));
-    if (!this.audit.configured()) return next;
-    const response = await this.audit.append(next.auditPendingEvent);
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw Object.assign(new Error("CENTRE_AUDIT_RECONCILIATION_REQUIRED"), { status: 502 });
+    if (this.audit.configured()) {
+      const response = await this.audit.append(next.auditPendingEvent);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw Object.assign(new Error("CENTRE_AUDIT_RECONCILIATION_REQUIRED"), { status: 502 });
+      }
+      next.lastGlobalAuditSequence = Number(payload.sequence);
+      next.auditPendingEvent = null;
+      state.lastGlobalAuditSequence = next.lastGlobalAuditSequence;
+      state.auditPendingEvent = null;
+      await this.ctx.storage.put("state", clone(next));
     }
-    next.lastGlobalAuditSequence = Number(payload.sequence);
-    next.auditPendingEvent = null;
-    state.lastGlobalAuditSequence = next.lastGlobalAuditSequence;
-    state.auditPendingEvent = null;
-    await this.ctx.storage.put("state", clone(next));
-    return next;
+    return this.flushBoardProjection(next);
   }
 
   async act(input = {}) {
@@ -292,6 +312,7 @@ export class GoHubCentreState {
     this.currentAction = action;
     let state = await this.load();
     if (state?.auditPendingEvent) state = await this.flushPendingAudit(state);
+    if (state?.v4 && state?.boardProjectionPending) state = await this.flushBoardProjection(state);
 
     if (action === "v4_create") {
       if (state) throw Object.assign(new Error("CENTRE_WORK_ALREADY_EXISTS"), { status: 409 });
@@ -339,8 +360,11 @@ export class GoHubCentreState {
 
     if (!state) throw Object.assign(new Error("CENTRE_WORK_NOT_FOUND"), { status: 404 });
     if (state.v4 === true) {
-      if (action === "v4_inspect") return json({ ok: true, v4: true, work: clone(state.work) });
-      if (action === "v4_board") return json({ ok: true, v4: true, board: v4BoardView([state.work]) });
+      if (action === "v4_inspect") return json({ ok: true, v4: true, work: clone(state.work), boardProjectionPending:state.boardProjectionPending === true, boardProjectionRevision:state.boardProjectionRevision ?? null });
+      if (action === "v4_board") {
+        if (!this.board.configured()) return json({ code:"CENTRE_BOARD_NOT_CONFIGURED" }, 503);
+        return this.board.read(input);
+      }
       if (action === "v4_claim") state.work = claimV4Work(state.work, { actor: input.actor });
       else if (action === "v4_open_pass") state.work = openV4WorkPass(state.work, { kind: input.kind, destinations: input.destinations, actor: input.actor });
       else if (action === "v4_update_destinations") state.work = updateV4WorkDestinations(state.work, { destinations: input.destinations });
