@@ -186,6 +186,12 @@ test("merge schema uses exact-head GitHub owner truth without Foreman identity",
   assert.equal(received.number, 50);
   assert.equal(Object.hasOwn(received, "goId"), false);
   assert.equal(Object.hasOwn(received, "jobId"), false);
+  const legacy = await registry.callTool("go_hub_merge_pull_request", {
+    repository: "pureekangraw-ops/standard-", number: 51, expectedHeadSha: "head-sha", goId: "legacy-go", jobId: "legacy-job", workContext: factoryWorkContext,
+  });
+  assert.equal(legacy.structuredContent.ok, true);
+  assert.equal(received.goId, "legacy-go");
+  assert.equal(received.jobId, "legacy-job");
 });
 
 test("registry preserves domain failures and rejects unknown tools", async () => {

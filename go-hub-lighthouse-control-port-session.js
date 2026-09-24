@@ -80,6 +80,7 @@ function newState() {
       lastRunAt:null,
       lastError:null,
       lastProcessedWorkIds:[],
+      lastSkippedWorkIds:[],
     },
   };
 }

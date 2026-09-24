@@ -320,9 +320,25 @@ test("reconciliation preserves routing Work identity for V4 and skips stale cano
   const result=await service.reconcile();
   assert.equal(result.ok,true);
   assert.deepEqual(result.processedWorkIds,["WORK-ROUTING"]);
+  assert.deepEqual(storage.map.get("state").reconciliation.lastSkippedWorkIds,result.skippedWorkIds);
   assert.deepEqual(result.skippedWorkIds,[{workId:"WORK-CANONICAL-STALE",reason:"STALE_BOARD_SEED"}]);
   assert.equal(projected[0].routingWorkId,"WORK-ROUTING");
   assert.equal(projected[0].canonicalWorkId,"WORK-CANONICAL");
+});
+test("reconciliation contains missing audited canonical aliases and reports them",async()=>{
+  const {createCentreReconciliationService}=await import(moduleUrl+"?orphan-audit="+Date.now());
+  const storage=new MemoryStorage(activeState(0));
+  const projected=[];
+  const service=createCentreReconciliationService({storage,requireActiveSession:false,now:()=>50_000,
+    audit:{async history(){return response({ok:true,lastSequence:2,events:[{sequence:1,event:{type:"CENTRE_V4_CREATE",workId:"WORK-CANONICAL-ORPHAN"}},{sequence:2,event:{type:"CENTRE_V4_CREATE",workId:"WORK-ROUTING"}}]});}},
+    centreNamespace:{getByName(workId){return{async fetch(){return workId==="WORK-CANONICAL-ORPHAN"?response({code:"CENTRE_WORK_NOT_FOUND"},404):response({ok:true,v4:true,work:{workId,checkpointId:"CP-"+workId,name:"V4",command:"check",expectedResult:"truth",status:"OPEN",holder:null,pass:null}});}};}},
+    projectCentre:async view=>{projected.push(view.work.workId);return{ok:true,changed:true};},
+  });
+  const result=await service.reconcile();
+  assert.equal(result.ok,true);
+  assert.deepEqual(result.skippedWorkIds,[{workId:"WORK-CANONICAL-ORPHAN",reason:"AUDIT_WORK_NOT_ADDRESSABLE"}]);
+  assert.deepEqual(result.processedWorkIds,["WORK-ROUTING"]);
+  assert.deepEqual(projected,["WORK-ROUTING"]);
 });
 test("Centre Board projection migrates an old canonical pin to routing identity without duplicating it",async()=>{
   const m=await import(sessionUrl+"?routing-pin="+Date.now());
@@ -336,4 +352,3 @@ test("Centre Board projection migrates an old canonical pin to routing identity 
   assert.equal(migrated.board.pins[0].workId,"WORK-ROUTE");
   assert.equal(migrated.board.pins[0].canonicalWorkId,"WORK-CANON");
 });
-
