@@ -154,7 +154,7 @@ textarea{resize:vertical}button{padding:11px 14px;border:0;border-radius:10px;fo
 </form>
 </section>
 
-<section class="card"><h2>Report Inbox + LIGHTHOUSE Maintenance</h2><p class="muted">Returned app receipts/state belong here. Diagnostics are limited to LIGHTHOUSE: READ / PREFLIGHT / SAFE TEST. No cross-room Service Path and no auto-repair.</p><label>Latest report / diagnostic trace<textarea id="report-inbox" readonly rows="8">Refresh Reality to inspect the latest app state.</textarea></label></section>
+<section class="card"><h2>Report Inbox + LIGHTHOUSE Maintenance</h2><p class="muted">Returned app reports and app state stay inside this room. Diagnostics use LIGHTHOUSE-only READ / PREFLIGHT / SAFE TEST. No cross-room Service Path and no auto-repair.</p><div class="buttons"><button class="secondary" id="run-lighthouse-check" type="button">Run LIGHTHOUSE Check</button></div><label>Returned Reports<textarea id="report-inbox" readonly rows="8">Refresh Reality to inspect returned reports.</textarea></label><label>Latest App State<textarea id="app-state" readonly rows="8">Refresh Reality to inspect current app state.</textarea></label><label>Diagnostic Trace<textarea id="diagnostic-trace" readonly rows="8">Run LIGHTHOUSE Check for a bounded reality check.</textarea></label></section>
 
 <script>
 const realityStatus=document.getElementById('reality-status');
@@ -164,8 +164,25 @@ const roomActor=String(roomParams.get('actor')||'').trim();
 document.getElementById('room-work').textContent=roomWorkId||'UNKNOWN';
 document.getElementById('room-actor').textContent=roomActor||'UNKNOWN';
 const roomQuery='?work_id='+encodeURIComponent(roomWorkId)+'&actor='+encodeURIComponent(roomActor);
-async function refreshReality(){realityStatus.textContent='Reading owner-source reality…';try{const r=await fetch('/hub/api/lighthouse-control-port/owner-state'+roomQuery,{method:'POST',headers:{'content-type':'application/json','x-go-owner-passcode':document.getElementById('passcode')?.value||''},body:'{}'});const raw=await r.text();let b={};try{b=raw?JSON.parse(raw):{};}catch{throw new Error('REALITY_NON_JSON_'+r.status);}if(!r.ok)throw new Error(b.code||'REALITY_READ_FAILED');document.getElementById('live-session').textContent=b.session?.status||b.session?.code||b.status||'UNKNOWN';document.getElementById('live-revision').textContent=String(b.board?.revision??b.revision??'UNKNOWN');document.getElementById('live-seen').textContent=b.session?.lastSeenAt||b.session?.updatedAt||b.lastSeenAt||'UNKNOWN';document.getElementById('live-report').textContent=b.session?.lastReportAt||b.board?.updatedAt||b.lastReportAt||'UNKNOWN';document.getElementById('report-inbox').value=JSON.stringify(b,null,2);realityStatus.textContent='Reality refreshed.';}catch(err){realityStatus.textContent=err.message||'REALITY_READ_FAILED';}}
+let latestLighthouseReality=null;
+async function readLighthouseReality(){
+  const r=await fetch('/hub/api/lighthouse-control-port/owner-state'+roomQuery,{method:'POST',headers:{'content-type':'application/json','x-go-owner-passcode':document.getElementById('passcode')?.value||''},body:'{}'});
+  const raw=await r.text();let b={};try{b=raw?JSON.parse(raw):{};}catch{throw new Error('REALITY_NON_JSON_'+r.status);}
+  if(!r.ok)throw new Error(b.code||'REALITY_READ_FAILED');
+  latestLighthouseReality=b;return b;
+}
+function renderLighthouseReality(b){
+  document.getElementById('live-session').textContent=b.sourceStatus||'UNKNOWN';
+  document.getElementById('live-revision').textContent=String(b.board?.revision??'UNKNOWN');
+  document.getElementById('live-seen').textContent=b.session?.lastSeenAt||'UNKNOWN';
+  const receipts=Array.isArray(b.receipts)?b.receipts:[];
+  document.getElementById('live-report').textContent=receipts.length?String(receipts.at(-1)?.receiptAt||receipts.at(-1)?.at||'RECEIVED'):'NONE';
+  document.getElementById('report-inbox').value=JSON.stringify(receipts,null,2);
+  document.getElementById('app-state').value=JSON.stringify(b.appState??null,null,2);
+}
+async function refreshReality(){realityStatus.textContent='Reading owner-source reality…';try{const b=await readLighthouseReality();renderLighthouseReality(b);realityStatus.textContent='Reality refreshed.';}catch(err){realityStatus.textContent=err.message||'REALITY_READ_FAILED';}}
 document.getElementById('refresh-reality').addEventListener('click',refreshReality);
+document.getElementById('run-lighthouse-check').addEventListener('click',async()=>{realityStatus.textContent='Running LIGHTHOUSE-only check…';try{const b=await readLighthouseReality();renderLighthouseReality(b);const checks=[{point:'CONTROL_PORT_SESSION',status:b.sourceStatus==='ACTIVE'?'PASS':(b.sourceStatus||'UNKNOWN'),observed:b.sourceStatus||'UNKNOWN'},{point:'LIVE_BOARD',status:Number.isSafeInteger(Number(b.board?.revision))?'PASS':'UNKNOWN',observed:b.board?.revision??null},{point:'APP_STATE',status:b.appState==null?'UNKNOWN':'PASS',observed:b.appState==null?'NOT_REPORTED':'PRESENT'},{point:'REPORT_RETURN',status:Array.isArray(b.receipts)&&b.receipts.length?'PASS':'UNKNOWN',observed:Array.isArray(b.receipts)?b.receipts.length:0}];document.getElementById('diagnostic-trace').value=JSON.stringify({scope:'LIGHTHOUSE_ONLY',mode:'READ_PREFLIGHT_SAFE_TEST',autoRepair:false,crossRoomServicePath:false,checkedAt:new Date().toISOString(),checks},null,2);realityStatus.textContent='LIGHTHOUSE check complete. No cross-room action was taken.';}catch(err){document.getElementById('diagnostic-trace').value=JSON.stringify({scope:'LIGHTHOUSE_ONLY',status:'UNKNOWN',error:err.message||'REALITY_READ_FAILED'},null,2);realityStatus.textContent=err.message||'REALITY_READ_FAILED';}});
 document.getElementById('return-centre').addEventListener('click',async()=>{realityStatus.textContent='Returning to Centre…';try{const r=await fetch('/hub/api/centre/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'v4_return',workId:roomWorkId,actor:roomActor,status:'OPEN',result:{room:'LIGHTHOUSE_CONTROL_ROOM',outcome:'RETURNED_TO_CENTRE'}})});const b=await r.json().catch(()=>({}));if(!r.ok)throw new Error(b.code||b.message||'CENTRE_RETURN_FAILED');realityStatus.textContent='Returned to Centre. LIGHTHOUSE Pass closed on the same Work.';document.getElementById('return-centre').disabled=true;document.getElementById('refresh-reality').disabled=true;}catch(err){realityStatus.textContent=err.message||'CENTRE_RETURN_FAILED';}});
 const TRANSFER_CONTRACT="lighthouse-transfer-v1";
 const catalog=${catalog};
@@ -291,7 +308,16 @@ export function createLighthouseControlPortHttpService({ namespace, ownerPasscod
         try {
           const latest = await sessions.latest();
           const board = await sessions.latestBoard();
-          return json({ ok:true, session:latest?.session || latest || null, board:board?.board || null }, 200);
+          return json({
+            ok:true,
+            sourceStatus:latest?.ok === true ? "ACTIVE" : clean(latest?.code) || "UNKNOWN",
+            session:latest?.session || null,
+            appState:latest?.latest ?? null,
+            commands:Array.isArray(latest?.commands) ? latest.commands : [],
+            receipts:Array.isArray(latest?.receipts) ? latest.receipts : [],
+            reconciliation:latest?.reconciliation || null,
+            board:board?.board || latest?.board || null,
+          }, 200);
         } catch (error) { return json({ code:clean(error?.message || "HUB_UNAVAILABLE") }, 503); }
       }
 

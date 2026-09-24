@@ -233,6 +233,10 @@ jobs:
             "Live Reality Board",
             "LIGHTHOUSE Transfer Form",
             "Report Inbox + LIGHTHOUSE Maintenance",
+            "Run LIGHTHOUSE Check",
+            "Returned Reports",
+            "Latest App State",
+            "Diagnostic Trace",
             "Return Centre",
             "No cross-room Service Path",
           ];
@@ -249,23 +253,44 @@ jobs:
             },
           );
           const reality = await realityResponse.json().catch(() => null);
-          if (!realityResponse.ok || reality?.ok !== true) {
+          if (!realityResponse.ok || reality?.ok !== true ||
+              !Array.isArray(reality?.commands) || !Array.isArray(reality?.receipts) ||
+              !Object.prototype.hasOwnProperty.call(reality || {}, "appState")) {
             throw new Error("LIGHTHOUSE_OWNER_REALITY_FAILED:" + (reality?.code || realityResponse.status));
           }
 
-          const returned = await centre({
+          const returnedOpen = await centre({
+            action:"v4_return",
+            workId,
+            actor,
+            status:"OPEN",
+            result:{ room:"LIGHTHOUSE_CONTROL_ROOM", outcome:"RETURNED_TO_CENTRE" },
+            evidence:[{ kind:"RUNTIME_SMOKE", reference:"github-actions:" + process.env.GITHUB_RUN_ID + ":return-open" }],
+          });
+          if (returnedOpen?.work?.status !== "OPEN" || returnedOpen?.work?.holder !== null || returnedOpen?.work?.pass?.state !== "CLOSED") {
+            throw new Error("LIGHTHOUSE_RETURN_CENTRE_OPEN_FAILED");
+          }
+
+          await centre({ action:"v4_claim", workId, actor });
+          await centre({ action:"v4_open_pass", workId, actor, kind:"WORK", destinations:["lighthouse"] });
+          const reentered = await fetch(roomUrl, { redirect:"manual" });
+          if (!reentered.ok || !(await reentered.text()).includes("LIGHTHOUSE Control Room")) {
+            throw new Error("LIGHTHOUSE_SAME_WORK_REENTRY_FAILED");
+          }
+
+          const cleanup = await centre({
             action:"v4_return",
             workId,
             actor,
             status:"CANCEL",
-            result:{ room:"LIGHTHOUSE_CONTROL_ROOM", outcome:"SMOKE_VERIFIED" },
-            evidence:[{ kind:"RUNTIME_SMOKE", reference:"github-actions:" + process.env.GITHUB_RUN_ID }],
+            result:{ room:"LIGHTHOUSE_CONTROL_ROOM", outcome:"SMOKE_VERIFIED_AND_CLEANED" },
+            evidence:[{ kind:"RUNTIME_SMOKE", reference:"github-actions:" + process.env.GITHUB_RUN_ID + ":cleanup" }],
           });
-          if (returned?.work?.status !== "CANCEL" || returned?.work?.holder !== null || returned?.work?.pass?.state !== "CLOSED") {
-            throw new Error("LIGHTHOUSE_RETURN_CENTRE_FAILED");
+          if (cleanup?.work?.status !== "CANCEL" || cleanup?.work?.holder !== null || cleanup?.work?.pass?.state !== "CLOSED") {
+            throw new Error("LIGHTHOUSE_SMOKE_CLEANUP_FAILED");
           }
 
-          console.log("LIGHTHOUSE Control Room runtime smoke passed.");
+          console.log("LIGHTHOUSE Control Room runtime smoke passed: entry, reality, Return Centre OPEN, same-Work re-entry, cleanup.");
           NODE
 
       - name: Verify deployed LIGHT MCP runtime

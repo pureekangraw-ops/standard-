@@ -164,3 +164,46 @@ test("owner command rejects wrong passcode before touching the paired session", 
   assert.equal((await response.json()).code, "OWNER_AUTH_FAILED");
   assert.equal(calls, 0);
 });
+
+
+test("owner-state returns app state, returned reports, commands and board reality", async () => {
+  const service = await import(serviceUrl + "?owner-state-rich=" + Date.now());
+  const namespace = {
+    getByName(name) {
+      assert.equal(name, "lighthouse-control-port-v1");
+      return {
+        async fetch(request) {
+          const pathname = new URL(request.url).pathname;
+          if (pathname === "/latest") {
+            return new Response(JSON.stringify({
+              ok:true,
+              session:{ sessionId:"lh-rich", active:true, lastSeenAt:1234 },
+              latest:{ screen:"HOME", health:"OK" },
+              commands:[{ requestId:"REQ-1", status:"RECEIPT" }],
+              receipts:[{ requestId:"REQ-1", status:"OK", at:"2026-09-24T02:10:00Z" }],
+              reconciliation:{ cursor:3, lastError:null },
+            }), { status:200, headers:{ "content-type":"application/json" } });
+          }
+          if (pathname === "/board/latest") {
+            return new Response(JSON.stringify({ ok:true, board:{ revision:9, pins:[], updatedAt:"2026-09-24T02:10:00Z" } }), { status:200, headers:{ "content-type":"application/json" } });
+          }
+          return new Response(JSON.stringify({ ok:false, code:"NOT_FOUND" }), { status:404, headers:{ "content-type":"application/json" } });
+        },
+      };
+    },
+  };
+  const http = service.createLighthouseControlPortHttpService({ namespace, ownerPasscode:"owner-secret" });
+  const response = await http.fetch(new Request("https://hub.example/hub/api/lighthouse-control-port/owner-state", {
+    method:"POST",
+    headers:{ "x-go-owner-passcode":"owner-secret" },
+  }));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.sourceStatus, "ACTIVE");
+  assert.equal(body.appState.screen, "HOME");
+  assert.equal(body.receipts[0].requestId, "REQ-1");
+  assert.equal(body.commands[0].status, "RECEIPT");
+  assert.equal(body.reconciliation.cursor, 3);
+  assert.equal(body.board.revision, 9);
+});
