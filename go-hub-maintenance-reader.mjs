@@ -40,13 +40,25 @@ function observeText(expected,content){
   if(typeof e==="number")return content.length;
   return true;
 }
+function boundaryBoolean(body,ok=true){
+  for(const key of ["configured","ok","available","enabled","healthy","ready"]){
+    if(typeof body?.[key]==="boolean")return body[key];
+  }
+  const status=text(body?.status||body?.upstream).toUpperCase();
+  if(["PASS","ACTIVE","READY","AVAILABLE","HEALTHY"].includes(status))return true;
+  if(["FAIL","INACTIVE","UNAVAILABLE","UNHEALTHY","ERROR"].includes(status))return false;
+  return Boolean(ok);
+}
 function observePayload(expected,body,ok=true){
   const e=wanted(expected),serialized=JSON.stringify(body??{});
-  if(typeof e==="boolean")return e?Boolean(ok):!ok;
+  if(typeof e==="boolean"){
+    const actual=boundaryBoolean(body,ok);
+    return e?actual:!actual;
+  }
   if(typeof e==="string")return serialized.includes(e)?e:`MISSING:${e}`;
   if(Array.isArray(e))return e.filter(v=>serialized.includes(String(v)));
   if(expected&&typeof expected==="object"&&Array.isArray(expected.contains))return expected.contains.filter(v=>serialized.includes(String(v)));
-  return ok;
+  return boundaryBoolean(body,ok);
 }
 export function createMaintenanceRealityReader({
   env={},lifecycle,registryRef=()=>null,googleWorkspace=null,drive=null,linear=null,observer=null,
@@ -66,6 +78,7 @@ export function createMaintenanceRealityReader({
   async function serviceObservation(point,key,fn){
     if(typeof fn!=="function")return{available:false,reason:"MAINTENANCE_SERVICE_READER_UNAVAILABLE"};
     const res=await once("service:"+key,fn);
+    if(res==null)return{available:false,reason:"MAINTENANCE_SERVICE_READER_UNAVAILABLE"};
     const p=res instanceof Response?await payload(res):{ok:res?.ok!==false,status:200,body:res??{}};
     if(!p.ok)return{available:true,status:"UNKNOWN",reason:text(p.body?.code)||"BOUNDARY_RESPONSE_UNAVAILABLE",value:null,evidenceRef:`service://${key}`,safeEvidence:evidence("BOUNDARY_RESPONSE",{service:key,status:p.status,code:text(p.body?.code)||null})};
     return{available:true,value:observePayload(point.expected,p.body,p.ok),evidenceRef:`service://${key}`,safeEvidence:evidence("BOUNDARY_RESPONSE",{service:key,status:p.status,ok:true})};
