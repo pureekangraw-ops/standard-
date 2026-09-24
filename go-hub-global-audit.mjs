@@ -26,11 +26,15 @@ function sequenceKey(sequence) {
 }
 function normalizeEvent(input = {}) {
   rejectSecrets(input, "event");
+  const type = required(input.type, "Event type");
+  const workId = required(input.workId, "Work ID");
+  const checkpointId = text(input.checkpointId) ||
+    (type.startsWith("CENTRE_V4_") ? "CP-" + workId : required(input.checkpointId, "Checkpoint ID"));
   return {
     eventId: required(input.eventId, "Event ID"),
-    type: required(input.type, "Event type"),
-    workId: required(input.workId, "Work ID"),
-    checkpointId: required(input.checkpointId, "Checkpoint ID"),
+    type,
+    workId,
+    checkpointId,
     phase: text(input.phase) || null,
     targetId: text(input.targetId) || null,
     at: text(input.at) || new Date().toISOString(),
