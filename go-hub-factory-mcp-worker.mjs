@@ -596,6 +596,16 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         ? createFactoryAutoService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE })
         : async () => json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
       const maintenance = createMaintenanceService();
+      const heimdallPass = async (input = {}) => centreLive.action({
+        action: input.action === "open" ? "v4_open_pass" : "v4_return",
+        workId: input.workId, checkpointId: input.checkpointId, actor: input.actor || input.holder,
+        holder: input.holder, kind: input.kind, scope: input.scope, destinations: input.destinations,
+        expiresAt: input.expiresAt, closeCondition: input.closeCondition, returnAddress: input.returnAddress,
+        reason: input.reason, audit: input.audit, status: input.status, result: input.result, evidence: input.evidence,
+      });
+      const v4ProjectBoard = input => centreLive.action({
+        action: "v4_board", workId: input.workId, checkpointId: input.checkpointId, returnAddress: input.checkpointId,
+      });
       const linear = createLinearService({
         fetchImpl,
         token: env?.LINEAR_API_KEY || env?.["linear-API"],
@@ -647,7 +657,9 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
             : runMutation("factory.foreman." + String(input.action || "unknown"), input, () => lifecycle.factoryForeman(input)),
           factoryAction: input => runMutation("factory.action." + String(input.action || "unknown"), input, () => factoryAction(input)),
           factoryAuto: input => runMutation("factory.auto", input, () => factoryAuto(input)),
-          maintenance: input => maintenance.maintenance(input),
+          maintenance: input => input.work ? maintenance.maintenance(input) : json({ code: "MAINTENANCE_V4_WORK_REQUIRED" }, 409),
+          heimdallPass: input => runMutation("heimdall.pass." + String(input.action || "unknown"), input, () => heimdallPass(input)),
+          v4ProjectBoard: input => v4ProjectBoard(input),
           observerLatest: () => observer.latest(),
           observerScreenshot: input => observer.screenshot(input),
           auditHistory: input => globalAudit.history(input),

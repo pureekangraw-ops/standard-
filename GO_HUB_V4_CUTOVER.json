@@ -1,0 +1,14 @@
+{
+  "version": "V4",
+  "ownerSource": "Centre Durable Store",
+  "globalProjectBoard": "Heimdall read-model/index only",
+  "projectTypes": ["WORK_CENTRE", "FACTORY", "MAINTENANCE"],
+  "passKinds": ["WORK", "READ", "MAINTENANCE", "EMERGENCY"],
+  "factoryLifecycle": ["PLAN", "BUILD", "ASSEMBLY", "MERGE", "CHECK", "OUTPUT"],
+  "maintenanceActions": ["inspect_map", "run_system_check", "probe_route", "repair_context", "plan_closeout"],
+  "ownerSourceFallback": "UNKNOWN",
+  "staleTruth": "STALE",
+  "legacyPolicy": "compatibility surfaces remain source-only and are quarantined; no active V4 caller may use them",
+  "boardPolicy": "Board stores project refs and compact status only; workspace truth remains in Factory or Maintenance",
+  "emergencyPass": "reason + scope + expiry + audit + explicit close required"
+}

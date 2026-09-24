@@ -1,197 +1,32 @@
 import { createId, nowIso } from "./go-hub-utils.js";
 
-export const WORK_STATUS = Object.freeze({
-  OPEN: "OPEN",
-  ON_PROCESS: "ON PROCESS",
-  WAIT_CONFIRM: "WAIT CONFIRM",
-  COMPLETE: "COMPLETE",
-  CANCEL: "CANCEL",
-});
+export const WORK_STATUS = Object.freeze({ OPEN:"OPEN", ON_PROCESS:"ON PROCESS", WAIT_CONFIRM:"WAIT CONFIRM", COMPLETE:"COMPLETE", CANCEL:"CANCEL" });
+export const PASS_KIND = Object.freeze({ WORK:"WORK", READ:"READ", MAINTENANCE:"MAINTENANCE", EMERGENCY:"EMERGENCY" });
+const STATUS_VALUES=new Set(Object.values(WORK_STATUS));
+const PASS_VALUES=new Set(Object.values(PASS_KIND));
+const PROJECT_TYPES=Object.freeze(["WORK_CENTRE","FACTORY","MAINTENANCE"]);
+function text(v){return String(v??"").trim();}
+function required(v,label){const s=text(v);if(!s)throw new Error(`${label} is required`);return s;}
+function unique(v=[]){return [...new Set((Array.isArray(v)?v:[]).map(text).filter(Boolean))];}
+function clone(v){return v==null?v:structuredClone(v);}
+function freeze(v){if(v&&typeof v==="object"&&!Object.isFrozen(v)){Object.values(v).forEach(freeze);Object.freeze(v);}return v;}
+function snap(v){return freeze(clone(v));}
+function projectRefs(input={}){const source=input.projectRefs||input.projects||{};const refs={};for(const type of PROJECT_TYPES){const key=type==="WORK_CENTRE"?"workCentre":type.toLowerCase();const value=source[type]||source[key]||input[`${key}ProjectRef`]||null;if(value)refs[type]={type,ref:text(value.ref||value.id||value),status:text(value.status)||"UNKNOWN",workspace:text(value.workspace)||null,destination:text(value.destination)||null,lastUpdated:text(value.lastUpdated)||null};}return refs;}
 
-export const PASS_KIND = Object.freeze({
-  WORK: "WORK",
-  READ: "READ",
-  MAINTENANCE: "MAINTENANCE",
-});
+export function createWorkRecord(input={}){const now=text(input.createdAt)||nowIso();const workId=text(input.workId)||createId("WORK");return snap({workId,checkpointId:text(input.checkpointId)||`CP-${workId}`,name:required(input.name||input.command,"Work name"),command:required(input.command,"Command"),expectedResult:required(input.expectedResult,"Expected Result"),requestedDestinations:unique(input.requestedDestinations),destination:text(input.destination)||null,projectRefs:projectRefs(input),status:WORK_STATUS.OPEN,holder:null,pass:null,createdAt:now,lastUpdated:now,waitReason:null,readback:null,attention:null});}
+export function validateWorkRecord(work){if(!work||typeof work!=="object"||Array.isArray(work))throw new Error("Work record is required");required(work.workId,"Work ID");required(work.name,"Work name");required(work.command,"Command");required(work.expectedResult,"Expected Result");if(!STATUS_VALUES.has(work.status))throw new Error("Work status is invalid");if(work.status===WORK_STATUS.ON_PROCESS&&!text(work.holder))throw new Error("ON PROCESS Work requires holder");if(work.pass?.state==="ACTIVE"&&(work.status!==WORK_STATUS.ON_PROCESS||!text(work.holder)))throw new Error("Active Pass requires ON PROCESS Work with holder");return snap(work);}
+export function claimWork(work,{actor,at=nowIso()}={}){validateWorkRecord(work);if(work.status!==WORK_STATUS.OPEN)throw new Error("Work is not OPEN");const next=clone(work);next.status=WORK_STATUS.ON_PROCESS;next.holder=required(actor,"Holder");next.lastUpdated=at;return snap(next);}
+export function openWorkPass(work,{kind=PASS_KIND.WORK,destinations,scope,actor,at=nowIso(),expiresAt=null,closeCondition="RETURN",returnAddress,reason=null,audit=null}={}){validateWorkRecord(work);if(work.status!==WORK_STATUS.ON_PROCESS||!work.holder)throw new Error("ON PROCESS Work with holder is required before Pass");const passKind=text(kind).toUpperCase();if(!PASS_VALUES.has(passKind))throw new Error("Pass kind is invalid");const opener=required(actor||work.holder,"Pass actor");if(opener!==work.holder)throw new Error("Only current holder can open Pass");if(passKind===PASS_KIND.MAINTENANCE&&opener.toUpperCase()!=="GO")throw new Error("Maintenance Pass is GO-only");let allowed=unique(scope??destinations??work.requestedDestinations);if(passKind===PASS_KIND.MAINTENANCE)allowed=["ALL_GO_HUB_OWNED_AREAS"];if(!allowed.length)throw new Error("Pass destinations are required");const emergencyReason=passKind===PASS_KIND.EMERGENCY?required(reason,"Emergency reason"):reason;const emergencyExpiry=passKind===PASS_KIND.EMERGENCY?required(expiresAt,"Emergency expiry"):text(expiresAt)||null;const next=clone(work);next.pass={kind:passKind,state:"ACTIVE",holder:work.holder,scope:allowed,allowedDestinations:allowed,openedAt:at,expiresAt:emergencyExpiry,closeCondition:required(closeCondition,"Pass close condition"),returnAddress:text(returnAddress)||work.checkpointId,reason:emergencyReason,audit:audit==null?null:clone(audit),openedBy:"heimdall"};next.lastUpdated=at;return snap(next);}
+export function closeWorkPass(work,{actor,status=WORK_STATUS.OPEN,result,evidence=[],at=nowIso()}={}){return returnWork(work,{actor,status,result,evidence,at});}
+export function updateWorkDestinations(work,{destinations,at=nowIso()}={}){validateWorkRecord(work);if(work.status!==WORK_STATUS.OPEN||work.holder||work.pass?.state==="ACTIVE")throw new Error("Return Centre and OPEN the Work before changing destinations");const next=clone(work);next.requestedDestinations=unique(destinations);next.lastUpdated=at;return snap(next);}
+export function waitForConfirmation(work,{reason,at=nowIso()}={}){validateWorkRecord(work);if(work.status!==WORK_STATUS.ON_PROCESS)throw new Error("Only ON PROCESS Work can wait");const next=clone(work);next.status=WORK_STATUS.WAIT_CONFIRM;next.waitReason=required(reason,"Wait reason");next.readback={type:"WAIT",reason:next.waitReason};next.attention="WAIT_CONFIRM";next.lastUpdated=at;return snap(next);}
+export function resumeWork(work,{actor,at=nowIso()}={}){validateWorkRecord(work);if(work.status!==WORK_STATUS.WAIT_CONFIRM)throw new Error("Work is not WAIT CONFIRM");const holder=required(actor,"Holder");if(work.holder&&work.holder!==holder)throw new Error("Work holder mismatch");const next=clone(work);next.status=WORK_STATUS.ON_PROCESS;next.holder=holder;next.waitReason=null;next.attention=null;next.readback=null;next.lastUpdated=at;return snap(next);}
+export function returnWork(work,{actor,status=WORK_STATUS.COMPLETE,result,evidence=[],at=nowIso()}={}){validateWorkRecord(work);if(![WORK_STATUS.ON_PROCESS,WORK_STATUS.WAIT_CONFIRM].includes(work.status))throw new Error("Active Work is required for Return");const holder=required(actor,"Holder");if(holder!==work.holder)throw new Error("Only current holder can update Work on Return");const nextStatus=text(status).toUpperCase();if(![WORK_STATUS.COMPLETE,WORK_STATUS.CANCEL,WORK_STATUS.OPEN].includes(nextStatus))throw new Error("Return status must be COMPLETE, CANCEL, or OPEN");if(nextStatus===WORK_STATUS.COMPLETE&&(!Array.isArray(evidence)||!evidence.length||!evidence.every(x=>x&&typeof x==="object"&&text(x.ref||x.evidenceRef))))throw new Error("COMPLETE requires owner-source evidence refs");const next=clone(work);next.status=nextStatus;next.readback={actor:holder,result:result??null,evidence:Array.isArray(evidence)?clone(evidence):[],returnedAt:at};if(next.pass)next.pass={...next.pass,state:"CLOSED",closedAt:at};next.holder=null;next.attention=null;next.lastUpdated=at;return snap(next);}
+export function boardView(works=[]){return Object.freeze(works.map(work=>{validateWorkRecord(work);return Object.freeze({workId:work.workId,name:work.name,status:work.status,holder:work.holder,lastUpdated:work.lastUpdated,requestedDestinations:work.requestedDestinations,destination:work.destination||null,waitReason:work.waitReason||null,attention:work.attention||null,projectRefs:clone(work.projectRefs||{}),pass:work.pass?{kind:work.pass.kind,state:work.pass.state,holder:work.pass.holder||work.holder,scope:work.pass.scope||work.pass.allowedDestinations,allowedDestinations:work.pass.allowedDestinations,openedAt:work.pass.openedAt,expiresAt:work.pass.expiresAt||null,returnAddress:work.pass.returnAddress||work.checkpointId}:null});}));}
 
-const STATUS_VALUES = new Set(Object.values(WORK_STATUS));
-const PASS_VALUES = new Set(Object.values(PASS_KIND));
+const INDEX_KEY="centre.work.index.v4";
+function memoryStorage(){const values=new Map();return{async get(k){return clone(values.get(k));},async put(k,v){values.set(k,clone(v));}};}
+export function createCentreBackedWorkIndex({storage=memoryStorage(),source="CENTRE_DURABLE_STORE"}={}){async function load(){return (await storage.get(INDEX_KEY))||{source,revision:0,works:{}};}async function save(state){state.revision=(state.revision||0)+1;await storage.put(INDEX_KEY,state);return state;}async function put(work){validateWorkRecord(work);const state=await load();const existing=state.works[work.workId];if(existing&&JSON.stringify(existing)!==JSON.stringify(work))throw new Error("DUPLICATE_WORK_ID");if(!existing){state.works[work.workId]=clone(work);await save(state);}return clone(state.works[work.workId]);}async function replace(work){validateWorkRecord(work);const state=await load();state.works[work.workId]=clone(work);await save(state);return clone(work);}async function get(workId){const state=await load();return clone(state.works[text(workId)]||null);}async function all(){const state=await load();return Object.values(state.works).map(clone);}async function search(query=""){const q=text(query).toLowerCase();return (await all()).filter(w=>!q||[w.workId,w.name,w.command,w.status,w.holder,w.destination,w.waitReason,...w.requestedDestinations].some(v=>String(v??"").toLowerCase().includes(q)));}async function active(){return (await all()).filter(w=>w.status===WORK_STATUS.ON_PROCESS);}async function waiting(){return (await all()).filter(w=>w.status===WORK_STATUS.WAIT_CONFIRM);}async function resumable(){return (await all()).filter(w=>[WORK_STATUS.WAIT_CONFIRM,WORK_STATUS.OPEN].includes(w.status));}return Object.freeze({source,load,put,replace,get,all,search,active,waiting,resumable});}
 
-function text(value) { return String(value ?? "").trim(); }
-function required(value, label) {
-  const valueText = text(value);
-  if (!valueText) throw new Error(`${label} is required`);
-  return valueText;
-}
-function unique(values = []) {
-  return [...new Set(values.map(text).filter(Boolean))];
-}
-function freeze(value) {
-  if (value && typeof value === "object" && !Object.isFrozen(value)) {
-    Object.values(value).forEach(freeze);
-    Object.freeze(value);
-  }
-  return value;
-}
-function snapshot(value) { return freeze(structuredClone(value)); }
-
-export function createWorkRecord(input = {}) {
-  const now = text(input.createdAt) || nowIso();
-  const workId = text(input.workId) || createId("WORK");
-  return snapshot({
-    workId,
-    checkpointId: text(input.checkpointId) || ("CP-" + workId),
-    name: required(input.name || input.command, "Work name"),
-    command: required(input.command, "Command"),
-    expectedResult: required(input.expectedResult, "Expected Result"),
-    requestedDestinations: unique(input.requestedDestinations),
-    status: WORK_STATUS.OPEN,
-    holder: null,
-    pass: null,
-    createdAt: now,
-    lastUpdated: now,
-    readback: null,
-  });
-}
-
-export function claimWork(work, { actor, at = nowIso() } = {}) {
-  validateWorkRecord(work);
-  if (work.status !== WORK_STATUS.OPEN) throw new Error("Work is not OPEN");
-  const next = structuredClone(work);
-  next.status = WORK_STATUS.ON_PROCESS;
-  next.holder = required(actor, "Holder");
-  next.lastUpdated = at;
-  return snapshot(next);
-}
-
-export function openWorkPass(work, { kind = PASS_KIND.WORK, destinations, actor, at = nowIso() } = {}) {
-  validateWorkRecord(work);
-  if (work.status !== WORK_STATUS.ON_PROCESS || !work.holder) {
-    throw new Error("ON PROCESS Work with holder is required before Pass");
-  }
-  const passKind = text(kind).toUpperCase();
-  if (!PASS_VALUES.has(passKind)) throw new Error("Pass kind is invalid");
-  const opener = required(actor || work.holder, "Pass actor");
-  if (opener !== work.holder) throw new Error("Only current holder can open Pass");
-  if (passKind === PASS_KIND.MAINTENANCE && opener.toUpperCase() !== "GO") throw new Error("Maintenance Pass is GO-only");
-  const requested = unique(destinations ?? work.requestedDestinations);
-  const allowedDestinations = passKind === PASS_KIND.MAINTENANCE
-    ? Object.freeze(["ALL_GO_HUB_OWNED_AREAS"])
-    : Object.freeze(requested);
-  if (!allowedDestinations.length) throw new Error("Pass destinations are required");
-  const next = structuredClone(work);
-  next.pass = {
-    kind: passKind,
-    state: "ACTIVE",
-    openedAt: at,
-    openedBy: "heimdall",
-    allowedDestinations,
-  };
-  next.lastUpdated = at;
-  return snapshot(next);
-}
-
-export function updateWorkDestinations(work, { destinations, at = nowIso() } = {}) {
-  validateWorkRecord(work);
-  if (work.status !== WORK_STATUS.OPEN || work.holder || work.pass?.state === "ACTIVE") {
-    throw new Error("Return Centre and OPEN the Work before changing destinations");
-  }
-  const next = structuredClone(work);
-  next.requestedDestinations = unique(destinations);
-  next.lastUpdated = at;
-  return snapshot(next);
-}
-
-export function waitForConfirmation(work, { reason, at = nowIso() } = {}) {
-  validateWorkRecord(work);
-  if (work.status !== WORK_STATUS.ON_PROCESS) throw new Error("Only ON PROCESS Work can wait");
-  const next = structuredClone(work);
-  next.status = WORK_STATUS.WAIT_CONFIRM;
-  next.readback = { type: "WAIT", reason: required(reason, "Wait reason") };
-  next.lastUpdated = at;
-  return snapshot(next);
-}
-
-export function resumeWork(work, { actor, at = nowIso() } = {}) {
-  validateWorkRecord(work);
-  if (work.status !== WORK_STATUS.WAIT_CONFIRM) throw new Error("Work is not WAIT CONFIRM");
-  const holder = required(actor, "Holder");
-  if (work.holder && work.holder !== holder) throw new Error("Work holder mismatch");
-  const next = structuredClone(work);
-  next.status = WORK_STATUS.ON_PROCESS;
-  next.holder = holder;
-  next.readback = null;
-  next.lastUpdated = at;
-  return snapshot(next);
-}
-
-export function returnWork(work, { actor, status = WORK_STATUS.COMPLETE, result, evidence = [], at = nowIso() } = {}) {
-  validateWorkRecord(work);
-  if (![WORK_STATUS.ON_PROCESS, WORK_STATUS.WAIT_CONFIRM].includes(work.status)) {
-    throw new Error("Active Work is required for Return");
-  }
-  const holder = required(actor, "Holder");
-  if (holder !== work.holder) throw new Error("Only current holder can update Work on Return");
-  const nextStatus = text(status).toUpperCase();
-  if (![WORK_STATUS.COMPLETE, WORK_STATUS.CANCEL, WORK_STATUS.OPEN].includes(nextStatus)) {
-    throw new Error("Return status must be COMPLETE, CANCEL, or OPEN");
-  }
-  const next = structuredClone(work);
-  next.status = nextStatus;
-  next.readback = {
-    actor: holder,
-    result: result ?? null,
-    evidence: Array.isArray(evidence) ? structuredClone(evidence) : [],
-    returnedAt: at,
-  };
-  if (next.pass) next.pass = { ...next.pass, state: "CLOSED", closedAt: at };
-  next.holder = null;
-  next.lastUpdated = at;
-  return snapshot(next);
-}
-
-export function boardView(works = []) {
-  return Object.freeze(works.map(work => {
-    validateWorkRecord(work);
-    return Object.freeze({
-      workId: work.workId,
-      name: work.name,
-      status: work.status,
-      holder: work.holder,
-      lastUpdated: work.lastUpdated,
-      requestedDestinations: work.requestedDestinations,
-      pass: work.pass ? {
-        kind: work.pass.kind,
-        state: work.pass.state,
-        allowedDestinations: work.pass.allowedDestinations,
-      } : null,
-    });
-  }));
-}
-
-export function validateWorkRecord(work) {
-  if (!work || typeof work !== "object" || Array.isArray(work)) throw new Error("Work record is required");
-  required(work.workId, "Work ID");
-  required(work.name, "Work name");
-  required(work.command, "Command");
-  required(work.expectedResult, "Expected Result");
-  if (!STATUS_VALUES.has(work.status)) throw new Error("Work status is invalid");
-  if (work.status === WORK_STATUS.ON_PROCESS && !text(work.holder)) throw new Error("ON PROCESS Work requires holder");
-  if (work.pass?.state === "ACTIVE" && (work.status !== WORK_STATUS.ON_PROCESS || !text(work.holder))) {
-    throw new Error("Active Pass requires ON PROCESS Work with holder");
-  }
-  return snapshot(work);
-}
-
-export function createCentreWorkSystem() {
-  return freeze({
-    create: createWorkRecord,
-    claim: claimWork,
-    openPass: openWorkPass,
-    updateDestinations: updateWorkDestinations,
-    wait: waitForConfirmation,
-    resume: resumeWork,
-    return: returnWork,
-    board: boardView,
-  });
-}
+export function createCentreWorkSystem(){return freeze({create:createWorkRecord,claim:claimWork,openPass:openWorkPass,closePass:closeWorkPass,updateDestinations:updateWorkDestinations,wait:waitForConfirmation,resume:resumeWork,return:returnWork,board:boardView,index:createCentreBackedWorkIndex});}
+export { PROJECT_TYPES, projectRefs };

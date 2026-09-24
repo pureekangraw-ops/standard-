@@ -64,7 +64,7 @@ const retiredRuntimeNames = [
 
 test("active publication truth declares exclusive GO Hub ownership", () => {
   assert.equal(release.product, "GO Hub");
-  assert.equal(release.release, "go-hub-hard-cutover-1");
+  assert.equal(release.release, "go-hub-v4-cutover-1");
   assert.equal(release.rootEntry, "index.html");
   assert.equal(Object.hasOwn(release, "compatibility"), false);
   assert.equal(release.serviceWorker.file, "go-hub-sw.js");
@@ -73,6 +73,9 @@ test("active publication truth declares exclusive GO Hub ownership", () => {
   assert.equal(release.serviceWorker.autoActivate, true);
 
   const files = release.productionFiles.map(item => item.path).sort();
+  const serverRuntimeFiles = (release.serverRuntimeFiles || []).map(item => item.path).sort();
+  assert.deepEqual(serverRuntimeFiles, ["GO_HUB_V4_CUTOVER.json", "go-hub-centre-v4.js", "go-hub-heimdall-v4.js", "go-hub-factory-v4.js", "go-hub-maintenance.js", "go-hub-v4-cutover.mjs"].sort());
+  for (const file of serverRuntimeFiles) assert.equal(fs.existsSync(path.join(root, file)), true);
   assert.deepEqual(files, [...activeHubFiles].sort());
 
   const allowlist = read(".assetsignore");
