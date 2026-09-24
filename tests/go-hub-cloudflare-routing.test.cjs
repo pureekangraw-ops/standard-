@@ -41,7 +41,7 @@ test("Counter HTTP surface reuses Centre identity, Counter runtime, and the two 
   assert.match(source, /COUNTER_API_ROOT = "\/hub\/api\/counter"/);
   assert.match(source, /COUNTER_API_ROOT}\/handoff/);
   assert.match(source, /COUNTER_API_ROOT}\/mirror/);
-  assert.match(source, /action:"inspect", workId, checkpointId/);
+  assert.match(source, /action:"v4_inspect", workId/);
   assert.match(source, /createCounterDispatchLifecycle/);
   assert.match(source, /bellType:"MIRROR_REFRESH"/);
 });
