@@ -10,3 +10,14 @@ test("Factory V4 creates a Project ID and its Live Board is UNKNOWN or STALE ins
 test("Maintenance persists map and latest probe while never auto-repairing",async()=>{const {createMaintenanceV4}=await import("../go-hub-maintenance.js");const storage={values:new Map(),async get(k){return structuredClone(this.values.get(k));},async put(k,v){this.values.set(k,structuredClone(v));}};const work={workId:"WORK-MAINT-1",status:"ON PROCESS",holder:"GO",pass:{kind:"MAINTENANCE",state:"ACTIVE",allowedDestinations:["ALL_GO_HUB_OWNED_AREAS"]}};const map={routes:[{id:"route-1",from:"centre",to:"factory",checkpoints:[{id:"cp-1",importantValue:"path",expected:true,source:"centre",probeAction:"read",mode:"READ"}]}]};const s=createMaintenanceV4({storage,readValue:async()=>({available:true,value:true,evidenceRef:"ev://1"}),now:()=>"2026-09-24T00:00:00Z",traceId:()=>"TRACE-1"});const b=await (await s.run({work,action:"run_system_check",map})).json();assert.equal(b.routes[0].checkpoints[0].evidenceRef,"ev://1");assert.equal(b.autoRepair,false);const s2=createMaintenanceV4({storage});assert.equal((await s2.load()).lastProbe.traceId,"TRACE-1");});
 
 test("COMPLETE requires owner-source evidence; OPEN return may remain pending",async()=>{const {createWorkRecord,claimWork,openWorkPass,returnWork}=await import("../go-hub-centre-v4.js");let w=createWorkRecord({workId:"WORK-EVIDENCE-1",name:"evidence",command:"cutover",expectedResult:"verified",requestedDestinations:["factory"]});w=claimWork(w,{actor:"GO"});w=openWorkPass(w,{actor:"GO"});assert.throws(()=>returnWork(w,{actor:"GO",status:"COMPLETE",result:"done",evidence:[]}),/owner-source evidence/);assert.equal(returnWork(w,{actor:"GO",status:"OPEN",result:"pending"}).status,"OPEN");assert.equal(returnWork(w,{actor:"GO",status:"COMPLETE",result:"done",evidence:[{ref:"github://pureekangraw-ops/standard-/commit/abc"}]}).status,"COMPLETE");});
+
+
+test("Emergency Pass refuses already-expired time and reports live expiry state",async()=>{
+  const c=await import("../go-hub-centre-v4.js");
+  let w=c.createWorkRecord({workId:"WORK-EMERGENCY-AGE",name:"age",command:"recover",expectedResult:"bounded pass",requestedDestinations:["factory"]});
+  w=c.claimWork(w,{actor:"GO",at:"2026-09-24T07:00:00Z"});
+  assert.throws(()=>c.openWorkPass(w,{actor:"GO",kind:"EMERGENCY",scope:["factory"],reason:"smoke",at:"2026-09-24T07:00:00Z",expiresAt:"2026-09-24T06:59:59Z"}),/already expired/);
+  w=c.openWorkPass(w,{actor:"GO",kind:"EMERGENCY",scope:["factory"],reason:"smoke",at:"2026-09-24T07:00:00Z",expiresAt:"2026-09-24T07:05:00Z"});
+  assert.equal(c.passIsExpired(w.pass,{at:"2026-09-24T07:04:59Z"}),false);
+  assert.equal(c.passIsExpired(w.pass,{at:"2026-09-24T07:05:00Z"}),true);
+});
