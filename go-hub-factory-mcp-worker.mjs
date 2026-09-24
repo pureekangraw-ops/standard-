@@ -696,7 +696,20 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           factoryV4: input => input.action === "inspect"
             ? factoryV4(input)
             : runMutation("factory.v4." + String(input.action || "unknown"), input, () => factoryV4(input)),
-          maintenance: input => input.work ? maintenance.maintenance(input) : json({ code: "MAINTENANCE_V4_WORK_REQUIRED" }, 409),
+          maintenance: async input => {
+            const workId = String(input?.workContext?.workId || "").trim();
+            const checkpointId = String(input?.workContext?.checkpointId || "").trim();
+            if (!workId || !checkpointId || input?.work?.workId !== workId) {
+              return json({ code:"MAINTENANCE_V4_WORK_REQUIRED" }, 409);
+            }
+            const inspected = await centreLive.action({ action:"v4_inspect", workId });
+            if (!inspected.ok) return inspected;
+            const reality = await responsePayload(inspected);
+            if (reality?.v4 !== true || reality?.work?.workId !== workId || reality.work.checkpointId !== checkpointId) {
+              return json({ code:"MAINTENANCE_CENTRE_IDENTITY_MISMATCH" }, 409);
+            }
+            return maintenance.maintenance({ ...input, work:reality.work });
+          },
           heimdallPass: input => runMutation("heimdall.pass." + String(input.action || "unknown"), input, () => heimdallPass(input)),
           v4ProjectBoard: input => v4ProjectBoard(input),
           lightCentreV4Action: async input => {
