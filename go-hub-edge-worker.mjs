@@ -232,10 +232,10 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
         if (!checkpointId) return json({ code:"COUNTER_CHECKPOINT_REQUIRED" }, 400);
 
         const centreLive = createCentreLiveService({ namespace:env?.GO_HUB_CENTRE_STATE });
-        const inspected = await centreLive.action({ action:"inspect", workId, checkpointId });
+        const inspected = await centreLive.action({ action:"v4_inspect", workId });
         if (!inspected.ok) return inspected;
         const centre = await inspected.clone().json().catch(() => ({}));
-        if (String(centre.workId || "") !== workId || String(centre.checkpointId || "") !== checkpointId) {
+        if (String(centre?.work?.workId || "") !== workId) {
           return json({ code:"COUNTER_CENTRE_IDENTITY_MISMATCH" }, 409);
         }
 
@@ -273,10 +273,10 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
         if (!checkpointId) return json({ code:"COUNTER_CHECKPOINT_REQUIRED" }, 400);
 
         const centreLive = createCentreLiveService({ namespace:env?.GO_HUB_CENTRE_STATE });
-        const inspected = await centreLive.action({ action:"inspect", workId, checkpointId });
+        const inspected = await centreLive.action({ action:"v4_inspect", workId });
         if (!inspected.ok) return inspected;
         const centre = await inspected.clone().json().catch(() => ({}));
-        if (String(centre.workId || "") !== workId || String(centre.checkpointId || "") !== checkpointId) {
+        if (String(centre?.work?.workId || "") !== workId) {
           return json({ code:"COUNTER_CENTRE_IDENTITY_MISMATCH" }, 409);
         }
 
@@ -320,7 +320,7 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
           toActor:"LIGHT",
           request:requestText,
           requestedResult,
-          authority:String(body.authority || centre.authority || "BIG"),
+          authority:String(body.authority || "BIG"),
           target:body.target == null ? null : String(body.target),
           projectRef:body.projectRef == null ? "GO Hub" : String(body.projectRef),
           workContext,

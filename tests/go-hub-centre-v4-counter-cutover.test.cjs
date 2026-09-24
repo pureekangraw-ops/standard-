@@ -1,0 +1,2 @@
+const test=require("node:test");const assert=require("node:assert/strict");const fs=require("node:fs");
+test("Counter edge reads Centre V4 Work truth",()=>{const s=fs.readFileSync("go-hub-edge-worker.mjs","utf8");const a=s.indexOf("COUNTER_API_ROOT}/inbox");const b=s.indexOf('url.pathname === "/hub/observer"');const counter=s.slice(a,b);assert.ok(counter.includes('action:"v4_inspect"'));assert.ok(counter.includes("centre?.work?.workId"));assert.equal(counter.includes('action:"inspect"'),false);});
