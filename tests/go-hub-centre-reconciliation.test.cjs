@@ -270,3 +270,33 @@ test("reconciliation prefers V4 inspect and falls back only for legacy Centre wo
   assert.equal(result.ok, true);
   assert.deepEqual(actions, ["v4_inspect", "inspect"]);
 });
+
+
+test("Board truth reconciliation can run without an active LIGHT session", async () => {
+  const { createCentreReconciliationService } = await import(moduleUrl + "?board-read=" + Date.now());
+  const state = activeState(0);
+  state.session = { active:false, expiresAt:0 };
+  const storage = new MemoryStorage(state);
+  const projected = [];
+  const service = createCentreReconciliationService({
+    storage,
+    requireActiveSession:false,
+    now:() => 50_000,
+    audit:{ async history(){ return response({ ok:true, lastSequence:7, events:[{ sequence:7, event:{ type:"CENTRE_V4_RETURN", workId:"WORK-CANCELLED" } }] }); } },
+    centreNamespace:{
+      getByName(workId) {
+        return { async fetch(request) {
+          const body = await request.json();
+          assert.equal(body.action, "v4_inspect");
+          return response({ ok:true, v4:true, work:{ workId, checkpointId:"CP-WORK-CANCELLED", name:"done", command:"smoke", expectedResult:"closed", requestedDestinations:["factory"], status:"CANCEL", holder:null, pass:null, createdAt:"2026-09-24T00:00:00Z", lastUpdated:"2026-09-24T00:01:00Z" } });
+        }};
+      },
+    },
+    projectCentre:async view => { projected.push(view.work.status); return { ok:true, changed:true }; },
+  });
+  const result = await service.reconcile();
+  assert.equal(result.ok, true);
+  assert.equal(result.active, false);
+  assert.deepEqual(result.processedWorkIds, ["WORK-CANCELLED"]);
+  assert.deepEqual(projected, ["CANCEL"]);
+});
