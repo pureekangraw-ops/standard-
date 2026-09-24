@@ -110,6 +110,30 @@ export class ObserverSessionRegistry {
   async storeScreenshot(input) { return this.service().storeScreenshot(input); }
   async latest() { return this.service().latest(); }
   async screenshot(input) { return this.service().screenshot(input); }
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (request.method !== "POST") return new Response(JSON.stringify({ code:"METHOD_NOT_ALLOWED" }), { status:405, headers:{ "content-type":"application/json" } });
+    const input = await request.json().catch(() => ({}));
+    const routes = {
+      "/start": value => this.start(value),
+      "/snapshot": value => this.acceptSnapshot(value),
+      "/read": value => this.read(value),
+      "/stop": value => this.stop(value),
+      "/grant-screenshot": value => this.grantScreenshot(value),
+      "/consume-screenshot": value => this.consumeScreenshot(value),
+      "/store-screenshot": value => this.storeScreenshot(value),
+      "/latest": () => this.latest(),
+      "/screenshot": value => this.screenshot(value),
+    };
+    const run = routes[url.pathname];
+    if (!run) return new Response(JSON.stringify({ code:"NOT_FOUND" }), { status:404, headers:{ "content-type":"application/json" } });
+    try {
+      const result = await run(input);
+      return new Response(JSON.stringify(result), { status:200, headers:{ "content-type":"application/json" } });
+    } catch (error) {
+      return new Response(JSON.stringify({ code:"HUB_UNAVAILABLE", reason:clean(error?.message || error) }), { status:503, headers:{ "content-type":"application/json" } });
+    }
+  }
 }
 
 export { DEFAULT_TTL_MS, MAX_SCREENSHOT_DATA_URL_CHARS };

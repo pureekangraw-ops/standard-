@@ -420,30 +420,38 @@ export function createObserverEvidenceService({ namespace } = {}) {
     if (!namespace || typeof namespace.getByName !== "function") return null;
     return namespace.getByName("go-browser-observer-v1");
   }
+  async function call(method, input = {}) {
+    const current = stub();
+    if (!current) return { ok:false, code:"HUB_UNAVAILABLE" };
+    try {
+      if (typeof current.fetch === "function") {
+        const path = method === "latest" ? "latest" : "screenshot";
+        const response = await current.fetch(new Request("https://observer-session.internal/" + path, {
+          method:"POST",
+          headers:{ "content-type":"application/json" },
+          body:JSON.stringify(input),
+        }));
+        const body = await response.json().catch(() => ({ code:"HUB_UNAVAILABLE" }));
+        return response.ok ? body : { ok:false, code:body?.code || "HUB_UNAVAILABLE" };
+      }
+      if (typeof current[method] === "function") return await current[method](input);
+      return { ok:false, code:"HUB_UNAVAILABLE" };
+    } catch {
+      return { ok:false, code:"HUB_UNAVAILABLE" };
+    }
+  }
   return Object.freeze({
     async latest() {
-      const current = stub();
-      if (!current || typeof current.latest !== "function") return json({ code: "HUB_UNAVAILABLE" }, 503);
-      try {
-        const result = await current.latest();
-        if (!result?.ok) return json({ code: result?.code || "HUB_UNAVAILABLE" }, observerStatus(result?.code));
-        return json(result, 200);
-      } catch {
-        return json({ code: "HUB_UNAVAILABLE" }, 503);
-      }
+      const result = await call("latest");
+      if (!result?.ok) return json({ code: result?.code || "HUB_UNAVAILABLE" }, observerStatus(result?.code));
+      return json(result, 200);
     },
     async screenshot({ screenshotRef } = {}) {
       const ref = String(screenshotRef || "").trim();
       if (!ref) return json({ code: "SCHEMA_REJECTED" }, 400);
-      const current = stub();
-      if (!current || typeof current.screenshot !== "function") return json({ code: "HUB_UNAVAILABLE" }, 503);
-      try {
-        const result = await current.screenshot({ screenshotRef: ref });
-        if (!result?.ok) return json({ code: result?.code || "HUB_UNAVAILABLE" }, observerStatus(result?.code));
-        return json(result, 200);
-      } catch {
-        return json({ code: "HUB_UNAVAILABLE" }, 503);
-      }
+      const result = await call("screenshot", { screenshotRef: ref });
+      if (!result?.ok) return json({ code: result?.code || "HUB_UNAVAILABLE" }, observerStatus(result?.code));
+      return json(result, 200);
     },
   });
 }

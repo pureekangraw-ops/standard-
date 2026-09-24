@@ -127,7 +127,29 @@ function ownerAuthFailure(request, env, policy) {
 function observerSessionsFor(injected, env) {
   if (injected) return injected;
   if (env?.OBSERVER_SESSIONS && typeof env.OBSERVER_SESSIONS.getByName === "function") {
-    return env.OBSERVER_SESSIONS.getByName("go-browser-observer-v1");
+    const durable = env.OBSERVER_SESSIONS.getByName("go-browser-observer-v1");
+    if (!durable) return null;
+    if (typeof durable.fetch !== "function") return durable;
+    const call = async (path, input = {}) => {
+      const response = await durable.fetch(new Request("https://observer-session.internal/" + path, {
+        method:"POST",
+        headers:{ "content-type":"application/json" },
+        body:JSON.stringify(input),
+      }));
+      const body = await response.json().catch(() => ({ code:"HUB_UNAVAILABLE" }));
+      return response.ok ? body : { ok:false, code:body?.code || "HUB_UNAVAILABLE" };
+    };
+    return Object.freeze({
+      start:input => call("start", input),
+      acceptSnapshot:input => call("snapshot", input),
+      read:input => call("read", input),
+      stop:input => call("stop", input),
+      grantScreenshot:input => call("grant-screenshot", input),
+      consumeScreenshot:input => call("consume-screenshot", input),
+      storeScreenshot:input => call("store-screenshot", input),
+      latest:() => call("latest"),
+      screenshot:input => call("screenshot", input),
+    });
   }
   return null;
 }
@@ -145,6 +167,32 @@ function observerStatus(code) {
   if (code === "STALE_PAGE") return 409;
   if (code === "HUB_UNAVAILABLE") return 503;
   return 403;
+}
+
+async function authorizeLighthouseRoom(request, env) {
+  const url = new URL(request.url);
+  const workId = String(url.searchParams.get("work_id") || "").trim();
+  const actor = String(url.searchParams.get("actor") || "").trim();
+  if (!workId || !actor) {
+    return { ok:false, response:json({ code:"LIGHTHOUSE_CENTRE_PASS_REQUIRED" }, 403) };
+  }
+  const inspected = await createCentreLiveService({ namespace:env?.GO_HUB_CENTRE_STATE }).action({
+    action:"v4_inspect",
+    workId,
+  });
+  if (!inspected.ok) return { ok:false, response:inspected };
+  const payload = await inspected.clone().json().catch(() => ({}));
+  const work = payload?.work;
+  const pass = work?.pass;
+  const allowed = Array.isArray(pass?.allowedDestinations) ? pass.allowedDestinations.map(value => String(value || "").trim()) : [];
+  const authorized = work?.status === "ON PROCESS" &&
+    String(work?.holder || "").trim() === actor &&
+    pass?.state === "ACTIVE" &&
+    (allowed.includes("lighthouse") || allowed.includes("ALL_GO_HUB_OWNED_AREAS"));
+  if (!authorized) {
+    return { ok:false, response:json({ code:"LIGHTHOUSE_CENTRE_PASS_REQUIRED" }, 403) };
+  }
+  return { ok:true, workId, actor };
 }
 
 function lightMcpOwnerPage(result = null) {
@@ -334,6 +382,13 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
       }
       if (url.pathname === LIGHTHOUSE_CONTROL_PORT_OWNER_PATH ||
           url.pathname.startsWith(LIGHTHOUSE_CONTROL_PORT_API_ROOT + "/")) {
+        const ownerRoomPath = url.pathname === LIGHTHOUSE_CONTROL_PORT_OWNER_PATH ||
+          url.pathname === `${LIGHTHOUSE_CONTROL_PORT_API_ROOT}/owner-state` ||
+          url.pathname === `${LIGHTHOUSE_CONTROL_PORT_API_ROOT}/owner-command`;
+        if (ownerRoomPath) {
+          const access = await authorizeLighthouseRoom(request, env);
+          if (!access.ok) return access.response;
+        }
         return createLighthouseControlPortHttpService({
           namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS,
           ownerPasscode:env?.GOHUB_OWNER_PASSCODE,
