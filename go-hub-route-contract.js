@@ -10,6 +10,7 @@ const DESTINATIONS = Object.freeze({
   github: Object.freeze({ id: "github", role: "code-reality-entry", route: "destination://github" }),
   gmail: Object.freeze({ id: "gmail", role: "mail-entry", route: "destination://gmail" }),
   calendar: Object.freeze({ id: "calendar", role: "calendar-entry", route: "destination://calendar" }),
+  lighthouse: Object.freeze({ id: "lighthouse", role: "app-control-room-entry", route: "destination://lighthouse" }),
 });
 
 const WORK_CONTEXT_FIELDS = Object.freeze([
@@ -54,7 +55,7 @@ export const THOUGHT_DESTINATION_TOPOLOGY = Object.freeze({
     contains: Object.freeze(["board", "heimdall", "notion", "counter", "work-drop", "archive-drop"]),
     returnAlwaysAvailable: true,
   }),
-  normalDestinations: Object.freeze(["factory", "github", "drive", "gmail", "calendar", "browser", "linear", "notion", "counter"]),
+  normalDestinations: Object.freeze(["factory", "github", "drive", "gmail", "calendar", "browser", "linear", "notion", "counter", "lighthouse"]),
   maintenance: Object.freeze({
     room: "maintenance",
     servicePath: "ALL_GO_HUB_OWNED_AREAS",
