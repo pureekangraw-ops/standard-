@@ -348,7 +348,7 @@ jobs:
           });
           const toolsPayload = await toolsResponse.json().catch(() => null);
           const names = (toolsPayload?.result?.tools || []).map(tool => tool?.name).filter(Boolean);
-          const required = ["go_hub_read_file", "go_hub_create_branch", "go_hub_put_file", "go_hub_compare_refs", "go_hub_open_pull_request"];
+          const required = ["go_hub_read_file", "go_hub_create_branch", "go_hub_put_file", "go_hub_compare_refs", "go_hub_open_pull_request", "go_hub_drive_read_document"];
           const forbidden = ["go_hub_delete_file", "go_hub_merge_pull_request", "go_hub_centre_live_action"];
           const missing = required.filter(name => !names.includes(name));
           const exposed = forbidden.filter(name => names.includes(name));
