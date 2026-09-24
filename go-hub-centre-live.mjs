@@ -303,7 +303,11 @@ export class GoHubCentreState {
 
     if (action === "v4_create") {
       if (state) throw Object.assign(new Error("CENTRE_WORK_ALREADY_EXISTS"), { status: 409 });
-      const work = createV4WorkRecord(input.work || input);
+      const supplied = input.work || input;
+      if (supplied.workId && supplied.workId !== input.workId) {
+        throw Object.assign(new Error("CENTRE_IDENTITY_CONFLICT"), { status: 409 });
+      }
+      const work = createV4WorkRecord({ ...supplied, workId: input.workId });
       await createCentreBackedWorkIndex({ storage: this.ctx.storage }).put(work);
       state = await this.save({ v4: true, work, phase: "V4_OPEN", ownership: { revision: 0, enforced: false }, effectLedger: { revision: 0, entries: [] }, executionCheckpoint: { revision: 0, latest: null } });
       return json({ ok: true, v4: true, work });
