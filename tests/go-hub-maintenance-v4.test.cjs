@@ -5,3 +5,45 @@ test("Maintenance is Work/Pass bound",async()=>{const {createMaintenanceV4}=awai
 test("Probe overlays observed reality on GO-defined route",async()=>{const {createMaintenanceV4}=await mod();const s=createMaintenanceV4({readValue:async p=>({available:true,value:p.id==="centre-pass"?true:["PLAN","BUILD","ASSEMBLY","MERGE","CHECK","OUTPUT"],evidence:p.source}),traceId:()=>"T1",now:()=>"NOW"});const r=await s.run({work,action:"run_system_check",map});const b=await r.json();assert.equal(b.status,"MAINTENANCE_CHECK_COMPLETE");assert.equal(b.routes[0].status,"PASS");assert.equal(b.traceId,"T1");});
 test("First bad value stops downstream and no auto repair",async()=>{const {createMaintenanceV4}=await mod();let reads=0;const s=createMaintenanceV4({readValue:async p=>{reads++;return{available:true,value:p.id==="centre-pass"?false:[]};}});const b=await (await s.run({work,action:"run_system_check",map})).json();assert.equal(b.routes[0].checkpoints[0].status,"FAIL");assert.equal(b.routes[0].checkpoints[1].status,"NOT_CHECKED");assert.equal(reads,1);assert.equal(b.autoRepair,false);});
 test("Mutating probes are blocked",async()=>{const {createMaintenanceV4}=await mod();let reads=0;const s=createMaintenanceV4({readValue:async()=>{reads++;return{available:true,value:true};}});const bad={routes:[{id:"gmail",from:"centre",to:"gmail",checkpoints:[{id:"send",importantValue:"send",expected:true,source:"gmail",probeAction:"send",mode:"MUTATE"}]}]};const b=await (await s.run({work,action:"run_system_check",map:bad})).json();assert.equal(b.routes[0].status,"BLOCKED");assert.equal(reads,0);});
+
+test("Maintenance persists the first reality map and reuses it on later checks",async()=>{
+  const {createMaintenanceV4}=await mod();
+  let reads=0;
+  const s=createMaintenanceV4({readValue:async p=>{reads++;return{available:true,value:p.id==="centre-pass"?true:["PLAN","BUILD","ASSEMBLY","MERGE","CHECK","OUTPUT"],evidenceRef:"test://"+p.id};},traceId:()=>"T-PERSIST",now:()=>"NOW"});
+  const saved=await (await s.run({work,action:"inspect_map",map})).json();
+  assert.equal(saved.persisted,true);
+  assert.equal(saved.map.routes.length,1);
+  const checked=await (await s.run({work,action:"run_system_check"})).json();
+  assert.equal(checked.status,"MAINTENANCE_CHECK_COMPLETE");
+  assert.equal(checked.report.mapSource,"GO_FIRST_REALITY_RUN");
+  assert.equal(checked.report.coverage.checkpoints.total,2);
+  assert.equal(reads,2);
+  const readback=await (await s.run({work,action:"inspect_map"})).json();
+  assert.equal(readback.map.routes[0].id,"centre-factory");
+  assert.equal(readback.persisted,true);
+});
+
+test("Maintenance report exposes reached-until, safe evidence, relation mismatch and bounded persona-aware views",async()=>{
+  const {createMaintenanceV4}=await mod();
+  const s=createMaintenanceV4({
+    readValue:async p=>p.id==="centre-pass"
+      ? {available:true,value:true,evidenceRef:"owner://centre",safeEvidence:{kind:"CENTRE"}}
+      : {available:true,value:["PLAN","BUILD"],evidenceRef:"owner://factory",safeEvidence:{kind:"FACTORY"}},
+    traceId:()=>"T-REPORT",now:()=>"NOW",
+  });
+  const body=await (await s.run({work,action:"run_system_check",map})).json();
+  assert.equal(body.status,"MAINTENANCE_CHECK_ATTENTION");
+  assert.equal(body.routes[0].firstBreak,"factory-flow");
+  assert.equal(body.routes[0].reachedUntil,"factory-flow");
+  assert.equal(body.routes[0].firstBadValue.relationMismatch.type,"RELATION_MISMATCH");
+  assert.equal(body.routes[0].checkpoints[0].safeEvidence.kind,"CENTRE");
+  assert.equal(body.report.reportVersion,2);
+  assert.equal(body.report.firstBreaks[0].firstBreak,"factory-flow");
+  assert.equal(body.report.decisionPoints[0].checkpointId,"factory-flow");
+  assert.equal(body.views.cartographer.brokenRoutes[0].routeId,"centre-factory");
+  assert.equal(body.views.detective.causalLeads[0].verdict,"EVIDENCE_BOUND_FIRST_CAUSAL_BREAK");
+  assert.equal(body.views.detective.hardLock,"READ_ONLY_ZERO_MUTATION");
+  assert.deepEqual(body.views.ghostbusters.confirmedGhosts,[]);
+  assert.equal(body.report.safety.autoRepair,false);
+});
+
