@@ -294,3 +294,28 @@ test("paired LIGHTHOUSE can read Hub Board but cannot read it with a bad session
   assert.equal(good.board.pins[0].workId, "WORK-READ-1");
   assert.equal((await service.board({ sessionId:"lh-session-board-read", sessionToken:"wrong" })).code, "SESSION_INACTIVE");
 });
+
+
+test("V4 terminal and active statuses project to Board without falling back to OPEN", async () => {
+  const m = await load("v4-board-status");
+  const service = m.createLighthouseControlPortSessionService({
+    storage:new MemoryStorage(),
+    now:() => Date.parse("2026-09-24T07:00:00Z"),
+    randomUUID:() => "lh-session-v4-board",
+    randomSessionToken:() => "device-token-v4-board",
+  });
+  await service.start({ ttlMs:60_000 });
+  const base = {
+    ok:true, v4:true, phase:"V4", workId:"WORK-V4-BOARD",
+    work:{ workId:"WORK-V4-BOARD", name:"V4", command:"smoke", expectedResult:"truth", requestedDestinations:["factory"], holder:null },
+    projectBoard:[],
+  };
+  let projected = await service.projectCentre({ ...base, work:{ ...base.work, status:"CANCEL" } });
+  assert.equal(projected.pin.status, "ARCHIVED");
+  projected = await service.projectCentre({ ...base, work:{ ...base.work, status:"COMPLETE" } });
+  assert.equal(projected.pin.status, "ARCHIVED");
+  projected = await service.projectCentre({ ...base, work:{ ...base.work, status:"ON PROCESS", holder:"GO" } });
+  assert.equal(projected.pin.status, "DOING");
+  projected = await service.projectCentre({ ...base, work:{ ...base.work, status:"WAIT CONFIRM", holder:"GO" } });
+  assert.equal(projected.pin.status, "WAIT_CONFIRM");
+});
