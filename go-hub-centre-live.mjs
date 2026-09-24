@@ -672,7 +672,8 @@ export class GoHubCentreState {
       if (request.method !== "POST") return json({ code: "METHOD_NOT_ALLOWED" }, 405);
       const input = await request.json().catch(() => null);
       if (!input || typeof input !== "object" || Array.isArray(input)) return json({ code: "INVALID_JSON" }, 400);
-      return json(await this.act(input), 200);
+      const result = await this.act(input);
+      return result instanceof Response ? result : json(result, 200);
     } catch (error) {
       return json({ code: error?.message || "CENTRE_LIVE_ERROR" }, error?.status || 400);
     }
