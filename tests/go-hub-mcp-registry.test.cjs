@@ -38,7 +38,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
     "go_hub_gmail_capabilities", "go_hub_gmail_diagnostics", "go_hub_gmail_profile", "go_hub_gmail_search", "go_hub_gmail_get_message", "go_hub_gmail_send_message",
     "go_hub_calendar_capabilities", "go_hub_calendar_diagnostics", "go_hub_calendar_list", "go_hub_calendar_events", "go_hub_calendar_create_event",
-    "go_hub_drive_capabilities", "go_hub_drive_health", "go_hub_drive_diagnostics", "go_hub_drive_root", "go_hub_drive_get_item", "go_hub_drive_list_children",
+    "go_hub_drive_capabilities", "go_hub_drive_health", "go_hub_drive_diagnostics", "go_hub_drive_root", "go_hub_drive_get_item", "go_hub_drive_list_children", "go_hub_drive_read_document",
     "go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
@@ -75,6 +75,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_root").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_get_item").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_list_children").annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_drive_read_document").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_create_folder").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_move_item").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_rename_item").annotations.readOnlyHint, false);
