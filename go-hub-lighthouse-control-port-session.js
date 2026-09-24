@@ -92,9 +92,10 @@ function boardStatus(view = {}) {
   const phase = clean(view.phase).toUpperCase();
   const workStatus = clean(view.work?.status).toUpperCase();
   if (phase === "RECOVERY_REQUIRED" || clean(view.interruption?.state).toUpperCase() === "RECOVERY_REQUIRED") return "PENDING_RECOVERY";
-  if (workStatus === "RETURNED" || phase === "RETURNED") return "ARCHIVED";
+  if (["RETURNED", "COMPLETE", "CANCEL"].includes(workStatus) || phase === "RETURNED") return "ARCHIVED";
   if (phase === "VALIDATED" || phase === "REALITY") return "VERIFY";
-  if (workStatus === "AWAY" || phase === "AWAY" || phase === "EXECUTION_RESUME") return "DOING";
+  if (workStatus === "ON PROCESS" || workStatus === "AWAY" || phase === "AWAY" || phase === "EXECUTION_RESUME") return "DOING";
+  if (workStatus === "WAIT CONFIRM") return "WAIT_CONFIRM";
   return "OPEN";
 }
 
