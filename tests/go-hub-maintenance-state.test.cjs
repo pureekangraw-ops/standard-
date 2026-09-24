@@ -14,7 +14,8 @@ test("Maintenance durable state persists and reads back mounted cartridge/probe 
   await durable.put("maintenance.v4.state",{revision:3,mountedCartridge:{cartridgeId:"FULL-V4-001",profile:"FULL_SYSTEM",version:"V4",hash:"h1",manifest:{expectedRoutes:1,expectedCheckpoints:1},source:"GO_FIRST_REALITY_RUN",routes:[{id:"r",checkpoints:[{id:"c"}]}]}});
   const read=await durable.get("maintenance.v4.state");
   assert.equal(read.revision,3);
-  assert.equal(read.mountedCartridge.cartridgeId,"FULL-V4-001");\n  assert.equal(read.mountedCartridge.routes[0].id,"r");
+  assert.equal(read.mountedCartridge.cartridgeId,"FULL-V4-001");
+  assert.equal(read.mountedCartridge.routes[0].id,"r");
 });
 test("Maintenance durable storage refuses missing binding instead of silently falling back to memory",async()=>{
   const {createMaintenanceDurableStorage}=await import(url+"?missing="+Date.now());
