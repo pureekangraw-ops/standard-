@@ -44,12 +44,6 @@ node_modules/**
 !/go-hub-work-targets.js
 !/go-hub-lean-flow.js
 
-!/go-hub-centre-v4.js
-!/go-hub-heimdall-v4.js
-!/go-hub-factory-v4.js
-!/go-hub-maintenance.js
-!/go-hub-v4-cutover.mjs
-!/GO_HUB_V4_CUTOVER.json
 
 !/go-hub-authority-map.js
 !/go-hub-heimdall.js
