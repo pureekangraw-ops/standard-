@@ -132,7 +132,18 @@ async function inspectCentreCompat(centreLive, input = {}) {
     returnAddress: input.returnAddress || input.checkpointId,
   };
   const v4 = await centreLive.action({ action: "v4_inspect", ...base });
-  if (v4.ok) return v4;
+  if (v4.ok) {
+    const payload = await responsePayload(v4);
+    if (payload?.v4 === true && payload?.work) {
+      return json({
+        ...payload,
+        workId: payload.work.workId,
+        checkpointId: payload.work.checkpointId,
+        returnAddress: payload.work.checkpointId,
+      });
+    }
+    return v4;
+  }
   const payload = await responsePayload(v4);
   if (!CENTRE_INSPECT_FALLBACK_CODES.has(workText(payload.code))) return v4;
   return centreLive.action({ action: "inspect", ...base });
