@@ -37,7 +37,7 @@ function rpc(token, name, args = {}) {
   });
 }
 
-test("registry publishes nine governed Drive bridge tools", async () => {
+test("registry publishes ten governed Drive bridge tools", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?drive-tools=" + Date.now());
   const lifecycle = new Proxy({}, {
     get: (_, name) => async input => new Response(JSON.stringify({ operation: name, input }), {
@@ -53,11 +53,12 @@ test("registry publishes nine governed Drive bridge tools", async () => {
     "go_hub_drive_root",
     "go_hub_drive_get_item",
     "go_hub_drive_list_children",
+    "go_hub_drive_read_document",
     "go_hub_drive_create_folder",
     "go_hub_drive_move_item",
     "go_hub_drive_rename_item",
   ]);
-  assert.deepEqual(tools.map(tool => tool.annotations.readOnlyHint), [true, true, true, true, true, true, false, false, false]);
+  assert.deepEqual(tools.map(tool => tool.annotations.readOnlyHint), [true, true, true, true, true, true, true, false, false, false]);
 
   await registry.callTool("go_hub_drive_move_item", {
     fileId: "file-a",
@@ -143,4 +144,68 @@ test("Factory MCP Drive route fails closed without server config", async () => {
   assert.equal(payload.result.isError, true);
   assert.deepEqual(payload.result.structuredContent, { code: "DRIVE_NOT_CONFIGURED" });
   assert.equal(calls, 0);
+});
+
+test("Factory MCP reads native Google Doc text through the governed Drive bridge", async () => {
+  const { createFactoryMcpWorker } = await import(workerUrl + "?drive-doc=" + Date.now());
+  const { createTestAccessToken } = await import(oauthUrl + "?drive-doc-token=" + Date.now());
+  const signingKey = "test-signing-key-with-enough-entropy";
+  const token = await createTestAccessToken({ issuer:"https://hub.example", signingKey });
+  const requests = [];
+  const fetchImpl = async (url, init = {}) => {
+    requests.push(String(url));
+    if (String(url) === "https://oauth2.googleapis.com/token") {
+      return new Response(JSON.stringify({ access_token:"fresh-doc-access", expires_in:3600 }), {
+        headers:{ "content-type":"application/json" },
+      });
+    }
+    if (String(url).startsWith("https://www.googleapis.com/drive/v3/files/doc-a")) {
+      assert.equal(init.headers.authorization, "Bearer fresh-doc-access");
+      return new Response(JSON.stringify({
+        id:"doc-a",
+        name:"LIGHT REGISTRY QUEUE — CURRENT",
+        mimeType:"application/vnd.google-apps.document",
+        parents:["folder-a"],
+        trashed:false,
+      }), { headers:{ "content-type":"application/json" } });
+    }
+    if (String(url) === "https://docs.googleapis.com/v1/documents/doc-a?includeTabsContent=true") {
+      assert.equal(init.headers.authorization, "Bearer fresh-doc-access");
+      return new Response(JSON.stringify({
+        documentId:"doc-a",
+        title:"LIGHT REGISTRY QUEUE — CURRENT",
+        revisionId:"rev-1",
+        body:{ content:[
+          { paragraph:{ elements:[{ textRun:{ content:"SYSTEM / WORK\n" } }] } },
+          { paragraph:{ elements:[{ textRun:{ content:"Drive Folder ID: folder-system\n" } }] } },
+        ] },
+      }), { headers:{ "content-type":"application/json" } });
+    }
+    throw new Error("unexpected upstream " + url);
+  };
+  const worker = createFactoryMcpWorker({ fetchImpl });
+  const response = await worker.fetch(rpc(token, "go_hub_drive_read_document", {
+    documentId:"doc-a",
+    maxChars:5000,
+  }), {
+    GITHUB_TOKEN:"github-token",
+    GOHUB_MASTER_KEY:signingKey,
+    GOHUB_OWNER_PASSCODE:"owner-passcode",
+    GOOGLE_DRIVE_REFRESH_TOKEN:"refresh-secret",
+    GOOGLE_DRIVE_CLIENT_ID:"client-id",
+    GOOGLE_DRIVE_CLIENT_SECRET:"client-secret",
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.result.isError, undefined);
+  assert.equal(payload.result.structuredContent.document.id, "doc-a");
+  assert.equal(payload.result.structuredContent.document.revisionId, "rev-1");
+  assert.match(payload.result.structuredContent.document.text, /folder-system/);
+  assert.deepEqual(payload.result.structuredContent.document.paragraphs.map(item => item.text), [
+    "SYSTEM / WORK",
+    "Drive Folder ID: folder-system",
+  ]);
+  assert.equal(payload.result.structuredContent.document.truncated, false);
+  assert.equal(requests.length, 3);
+  assert.doesNotMatch(JSON.stringify(payload), /refresh-secret|fresh-doc-access/);
 });
