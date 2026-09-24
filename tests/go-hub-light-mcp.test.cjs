@@ -95,6 +95,7 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.ok(names.includes("go_hub_drive_root"));
   assert.ok(names.includes("go_hub_drive_get_item"));
   assert.ok(names.includes("go_hub_drive_list_children"));
+  assert.ok(names.includes("go_hub_drive_read_document"));
   assert.ok(names.includes("go_hub_drive_create_folder"));
   assert.ok(names.includes("go_hub_drive_move_item"));
   assert.ok(names.includes("go_hub_drive_rename_item"));
