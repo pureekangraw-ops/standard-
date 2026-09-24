@@ -116,7 +116,7 @@ textarea{resize:vertical}button{padding:11px 14px;border:0;border-radius:10px;fo
 <h1>LIGHTHOUSE Control Room</h1>
 <p class="muted">Closed app-control room. Inspect LIGHTHOUSE reality, send app data, receive reports, and use LIGHTHOUSE-only diagnostics.</p>
 <p class="room-rule"><strong>Room rule:</strong> LIGHTHOUSE has one exit: Return Centre. External repair work never opens another room from here.</p>
-<section class="card"><h2>Live Reality Board</h2><div class="status-grid"><div class="status-tile"><span>Session</span><strong id="live-session">UNKNOWN</strong></div><div class="status-tile"><span>Revision</span><strong id="live-revision">UNKNOWN</strong></div><div class="status-tile"><span>Last seen</span><strong id="live-seen">UNKNOWN</strong></div><div class="status-tile"><span>Last report</span><strong id="live-report">UNKNOWN</strong></div></div><div class="buttons" style="margin-top:12px"><button class="secondary" id="refresh-reality" type="button">Refresh Reality</button><button class="secondary" id="return-centre" type="button">Return Centre</button></div><p id="reality-status" class="status"></p></section>
+<section class="card"><h2>Live Reality Board</h2><div class="status-grid"><div class="status-tile"><span>Work</span><strong id="room-work">UNKNOWN</strong></div><div class="status-tile"><span>Holder</span><strong id="room-actor">UNKNOWN</strong></div><div class="status-tile"><span>Session</span><strong id="live-session">UNKNOWN</strong></div><div class="status-tile"><span>Revision</span><strong id="live-revision">UNKNOWN</strong></div><div class="status-tile"><span>Last seen</span><strong id="live-seen">UNKNOWN</strong></div><div class="status-tile"><span>Last report</span><strong id="live-report">UNKNOWN</strong></div></div><div class="buttons" style="margin-top:12px"><button class="secondary" id="refresh-reality" type="button">Refresh Reality</button><button class="secondary" id="return-centre" type="button">Return Centre</button></div><p id="reality-status" class="status"></p></section>
 
 <section class="card">
 <h2>Device pairing</h2>
@@ -158,9 +158,15 @@ textarea{resize:vertical}button{padding:11px 14px;border:0;border-radius:10px;fo
 
 <script>
 const realityStatus=document.getElementById('reality-status');
-async function refreshReality(){realityStatus.textContent='Reading owner-source reality…';try{const r=await fetch('/hub/api/lighthouse-control-port/owner-state',{method:'POST',headers:{'content-type':'application/json','x-go-owner-passcode':document.getElementById('passcode')?.value||''},body:'{}'});const raw=await r.text();let b={};try{b=raw?JSON.parse(raw):{};}catch{throw new Error('REALITY_NON_JSON_'+r.status);}if(!r.ok)throw new Error(b.code||'REALITY_READ_FAILED');document.getElementById('live-session').textContent=b.session?.status||b.status||'UNKNOWN';document.getElementById('live-revision').textContent=String(b.board?.revision??b.revision??'UNKNOWN');document.getElementById('live-seen').textContent=b.session?.lastSeenAt||b.lastSeenAt||'UNKNOWN';document.getElementById('live-report').textContent=b.session?.lastReportAt||b.lastReportAt||'UNKNOWN';document.getElementById('report-inbox').value=JSON.stringify(b,null,2);realityStatus.textContent='Reality refreshed.';}catch(err){realityStatus.textContent=err.message||'REALITY_READ_FAILED';}}
+const roomParams=new URLSearchParams(location.search);
+const roomWorkId=String(roomParams.get('work_id')||'').trim();
+const roomActor=String(roomParams.get('actor')||'').trim();
+document.getElementById('room-work').textContent=roomWorkId||'UNKNOWN';
+document.getElementById('room-actor').textContent=roomActor||'UNKNOWN';
+const roomQuery='?work_id='+encodeURIComponent(roomWorkId)+'&actor='+encodeURIComponent(roomActor);
+async function refreshReality(){realityStatus.textContent='Reading owner-source reality…';try{const r=await fetch('/hub/api/lighthouse-control-port/owner-state'+roomQuery,{method:'POST',headers:{'content-type':'application/json','x-go-owner-passcode':document.getElementById('passcode')?.value||''},body:'{}'});const raw=await r.text();let b={};try{b=raw?JSON.parse(raw):{};}catch{throw new Error('REALITY_NON_JSON_'+r.status);}if(!r.ok)throw new Error(b.code||'REALITY_READ_FAILED');document.getElementById('live-session').textContent=b.session?.status||b.session?.code||b.status||'UNKNOWN';document.getElementById('live-revision').textContent=String(b.board?.revision??b.revision??'UNKNOWN');document.getElementById('live-seen').textContent=b.session?.lastSeenAt||b.session?.updatedAt||b.lastSeenAt||'UNKNOWN';document.getElementById('live-report').textContent=b.session?.lastReportAt||b.board?.updatedAt||b.lastReportAt||'UNKNOWN';document.getElementById('report-inbox').value=JSON.stringify(b,null,2);realityStatus.textContent='Reality refreshed.';}catch(err){realityStatus.textContent=err.message||'REALITY_READ_FAILED';}}
 document.getElementById('refresh-reality').addEventListener('click',refreshReality);
-document.getElementById('return-centre').addEventListener('click',()=>{location.href='/hub/api/centre';});
+document.getElementById('return-centre').addEventListener('click',async()=>{realityStatus.textContent='Returning to Centre…';try{const r=await fetch('/hub/api/centre/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'v4_return',workId:roomWorkId,actor:roomActor,status:'OPEN',result:{room:'LIGHTHOUSE_CONTROL_ROOM',outcome:'RETURNED_TO_CENTRE'}})});const b=await r.json().catch(()=>({}));if(!r.ok)throw new Error(b.code||b.message||'CENTRE_RETURN_FAILED');realityStatus.textContent='Returned to Centre. LIGHTHOUSE Pass closed on the same Work.';document.getElementById('return-centre').disabled=true;document.getElementById('refresh-reality').disabled=true;}catch(err){realityStatus.textContent=err.message||'CENTRE_RETURN_FAILED';}});
 const TRANSFER_CONTRACT="lighthouse-transfer-v1";
 const catalog=${catalog};
 const pair=document.getElementById('pair'),bootstrap=document.getElementById('bootstrap'),pairStatus=document.getElementById('status');
@@ -235,7 +241,7 @@ transfer.addEventListener('submit',async e=>{
   e.preventDefault();transferStatus.textContent='Sending…';
   try{
     const value=packet();
-    const r=await fetch('/hub/api/lighthouse-control-port/owner-command',{method:'POST',headers:{'content-type':'application/json','x-go-owner-passcode':transferPasscode.value},body:JSON.stringify(value)});
+    const r=await fetch('/hub/api/lighthouse-control-port/owner-command'+roomQuery,{method:'POST',headers:{'content-type':'application/json','x-go-owner-passcode':transferPasscode.value},body:JSON.stringify(value)});
     const raw=await r.text();let b={};try{b=raw?JSON.parse(raw):{};}catch{throw new Error('TRANSFER_NON_JSON_'+r.status);}
     transferPasscode.value='';
     if(!r.ok)throw new Error(b.code||'TRANSFER_SEND_FAILED');
