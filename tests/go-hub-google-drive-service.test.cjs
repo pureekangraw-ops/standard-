@@ -353,3 +353,79 @@ test("Drive upstream failures are sanitized", async () => {
   assert.deepEqual(payload, { code: "DRIVE_UPSTREAM_ERROR", category: "forbidden" });
   assert.doesNotMatch(JSON.stringify(payload), /super-secret-token/);
 });
+
+
+test("Drive readDocument falls back to governed Drive export when Docs API returns 403", async () => {
+  const { createGoogleDriveService } = await load("doc-export-fallback");
+  const requests = [];
+  const fetchImpl = async (url, init = {}) => {
+    const current = String(url);
+    requests.push(current);
+    if (current.startsWith("https://www.googleapis.com/drive/v3/files/doc-a?")) {
+      return new Response(JSON.stringify(driveFile({
+        id:"doc-a",
+        name:"LIGHT REGISTRY QUEUE — CURRENT",
+        mimeType:"application/vnd.google-apps.document",
+        parents:["folder-a"],
+      })), { headers:{ "content-type":"application/json" } });
+    }
+    if (current === "https://docs.googleapis.com/v1/documents/doc-a?includeTabsContent=true") {
+      return new Response(JSON.stringify({
+        error:{ code:403, status:"PERMISSION_DENIED", message:"Docs API rejected the request" },
+      }), { status:403, headers:{ "content-type":"application/json" } });
+    }
+    if (current === "https://www.googleapis.com/drive/v3/files/doc-a/export?mimeType=text%2Fplain") {
+      assert.equal(init.headers.authorization, "Bearer token-a");
+      return new Response("SYSTEM / WORK\nDrive Folder ID: folder-system\n", {
+        headers:{ "content-type":"text/plain; charset=utf-8" },
+      });
+    }
+    throw new Error("unexpected upstream " + current);
+  };
+  const service = createGoogleDriveService({ fetchImpl, accessToken:"token-a" });
+  const response = await service.readDocument({ documentId:"doc-a", maxChars:5000 });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.document.id, "doc-a");
+  assert.equal(payload.document.title, "LIGHT REGISTRY QUEUE — CURRENT");
+  assert.equal(payload.document.source, "drive_export");
+  assert.equal(payload.document.fallbackCategory, "PERMISSION_DENIED");
+  assert.equal(payload.document.revisionId, null);
+  assert.match(payload.document.text, /folder-system/);
+  assert.deepEqual(payload.document.paragraphs.map(item => item.text), [
+    "SYSTEM / WORK",
+    "Drive Folder ID: folder-system",
+  ]);
+  assert.equal(requests.length, 3);
+});
+
+test("Drive readDocument keeps Docs API as the primary structured source", async () => {
+  const { createGoogleDriveService } = await load("doc-primary");
+  const fetchImpl = async url => {
+    const current = String(url);
+    if (current.startsWith("https://www.googleapis.com/drive/v3/files/doc-a?")) {
+      return new Response(JSON.stringify(driveFile({
+        id:"doc-a",
+        name:"Doc A",
+        mimeType:"application/vnd.google-apps.document",
+      })), { headers:{ "content-type":"application/json" } });
+    }
+    if (current === "https://docs.googleapis.com/v1/documents/doc-a?includeTabsContent=true") {
+      return new Response(JSON.stringify({
+        title:"Doc A",
+        revisionId:"rev-1",
+        body:{ content:[
+          { paragraph:{ elements:[{ textRun:{ content:"hello\n" } }] } },
+        ] },
+      }), { headers:{ "content-type":"application/json" } });
+    }
+    throw new Error("unexpected upstream " + current);
+  };
+  const service = createGoogleDriveService({ fetchImpl, accessToken:"token-a" });
+  const response = await service.readDocument({ documentId:"doc-a" });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.document.source, "docs_api");
+  assert.equal(payload.document.revisionId, "rev-1");
+  assert.equal(payload.document.text, "hello");
+});
