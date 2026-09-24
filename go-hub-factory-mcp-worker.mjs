@@ -7,6 +7,7 @@ import { createFactoryControllerService } from "./go-hub-factory-controller.mjs"
 import { createFactoryActionService, createFactoryAutoService, createFactoryV4Service } from "./go-hub-factory-service.mjs";
 import { createMaintenanceService } from "./go-hub-maintenance.js";
 import { createMaintenanceRealityReader } from "./go-hub-maintenance-reader.mjs";
+import { createMaintenanceDurableStorage } from "./go-hub-maintenance-state.mjs";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { routeReadOnlyFastLane } from "./go-hub-city-route.js";
 import { createLighthouseControlPortMcpService } from "./go-hub-lighthouse-control-port-service.mjs";
@@ -664,6 +665,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       });
       let registry = null;
       const maintenance = createMaintenanceService({
+        storage:createMaintenanceDurableStorage({ namespace:env?.GO_HUB_MAINTENANCE_STATE }),
         readValue:createMaintenanceRealityReader({
           env,
           lifecycle,
