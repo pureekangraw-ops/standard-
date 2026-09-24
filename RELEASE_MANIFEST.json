@@ -1,7 +1,7 @@
 {
-  "release": "go-hub-hard-cutover-1",
+  "release": "go-hub-v4-cutover-1",
   "product": "GO Hub",
-  "releaseDate": "2026-09-14",
+  "releaseDate": "2026-09-24",
   "rootEntry": "index.html",
   "features": [
     "GO Hub neutral root control surface",
@@ -13,13 +13,17 @@
     "durable CENTRE checkpoint before destination access",
     "single CENTRE entry and return passage for GO",
     "explicit repository-neutral Work Target routing into LIGHTHOUSE through Factory",
-    "Heimdall boundary and evidence gate with Optician intake/lens routing"
+    "Centre-backed durable Work Index with restart-safe resume",
+    "Heimdall Work registry, holder, scoped Passes, Warp, and three-way Project Board",
+    "Factory V4 PLAN → BUILD → ASSEMBLY → MERGE → CHECK → OUTPUT lifecycle",
+    "Maintenance V4 persisted Map, safe probes, first-break readback, and closeout plan",
+    "Counter → LIGHT → Work → Answer → Readback continuity"
   ],
   "serviceWorker": {
     "file": "go-hub-sw.js",
     "mode": "go-hub-exclusive",
     "cachePrefix": "go-hub-app-",
-    "cacheGeneration": "v11-heimdall-authority-boundary",
+    "cacheGeneration": "v12-go-hub-v4-cutover",
     "autoActivate": true
   },
   "validation": {
@@ -33,10 +37,12 @@
       "utf8",
       "no executable ride references",
       "CENTRE checkpoint identity and destination gate",
-      "Heimdall boundary evidence authority and Optician routing separation"
+      "one active owner per concern",
+      "V4 Pass scope, expiry, close condition, and Return Address",
+      "Factory/Maintenance runtime readback and legacy caller quarantine"
     ]
   },
-  "note": "GO Hub owns the active root. Heimdall owns Hub boundary passage and evidence acceptance; Optician owns intake/lens/route; CENTRE owns Work identity/state/distribution/return; Factory owns production and internal QC. Repository credentials remain server-side.",
+  "note": "GO Hub V4 keeps Centre as the durable Work owner. Heimdall is the Work registry, holder, Pass, Warp, and three-way Project Board read model; Factory and Maintenance retain workspace truth; Counter owns LIGHT tickets; Audit is immutable history. Evidence acceptance, RCA, and repair authority are not part of Heimdall.",
   "productionFiles": [
     {
       "path": "index.html"
@@ -157,6 +163,24 @@
     },
     {
       "path": "go-hub-heimdall.js"
+    },
+    {
+      "path": "go-hub-centre-v4.js"
+    },
+    {
+      "path": "go-hub-heimdall-v4.js"
+    },
+    {
+      "path": "go-hub-factory-v4.js"
+    },
+    {
+      "path": "go-hub-maintenance.js"
+    },
+    {
+      "path": "go-hub-v4-cutover.mjs"
+    },
+    {
+      "path": "GO_HUB_V4_CUTOVER.json"
     }
   ]
 }
