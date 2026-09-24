@@ -8,6 +8,7 @@ import { createFactoryActionService, createFactoryAutoService, createFactoryV4Se
 import { createMaintenanceService } from "./go-hub-maintenance.js";
 import { createMaintenanceRealityReader } from "./go-hub-maintenance-reader.mjs";
 import { createMaintenanceDurableStorage } from "./go-hub-maintenance-state.mjs";
+import { createBroadcastService } from "./go-hub-broadcast-state.mjs";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { routeReadOnlyFastLane } from "./go-hub-city-route.js";
 import { createLighthouseControlPortMcpService } from "./go-hub-lighthouse-control-port-service.mjs";
@@ -47,6 +48,7 @@ const LIGHT_CODE_TOOL_NAMES = new Set([
   "go_hub_get_pull_request",
   "go_hub_get_ci",
   "go_hub_get_failure_evidence",
+  "go_hub_broadcast_read",
   "go_hub_centre_inspect",
   "go_hub_v4_project_board",
   "go_hub_light_centre_v4_action",
@@ -638,6 +640,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       });
       const observer = createObserverEvidenceService({ namespace: env?.OBSERVER_SESSIONS });
       const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
+      const broadcast = createBroadcastService({ namespace: env?.GO_HUB_BROADCAST_STATE });
       const globalAudit = createGlobalAuditService({ namespace: env?.GO_HUB_GLOBAL_AUDIT });
       const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE, inboxNamespace: env?.GO_HUB_COUNTER_INBOX });
       const dispatch = createCounterDispatchService({
@@ -678,6 +681,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           projectStatus,
           boardRead:() => lighthouseControlPort.boardRead(),
           globalAudit,
+          broadcast,
         }),
       });
       const artifactDelivery = createWorkflowArtifactService({ fetchImpl, token: env.GITHUB_TOKEN, drive });
@@ -687,6 +691,10 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       registry = createMcpRegistry({
         lifecycle: Object.freeze({
           ...lifecycle,
+          broadcastRead: () => broadcast.current(),
+          broadcastActivate: input => lightMcp
+            ? json({ code:"LIGHT_BROADCAST_ACTIVATE_FORBIDDEN" }, 403)
+            : broadcast.activate(input),
           createBranch: input => runMutation("github.create_branch", input, () => lifecycle.createBranch(input)),
           putFile: input => runMutation("github.put_file", input, () => lifecycle.putFile(input)),
           deleteFile: input => runMutation("github.delete_file", input, () => lifecycle.deleteFile(input)),
@@ -824,6 +832,9 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           listWorkflowArtifacts: input => artifactDelivery.listArtifacts(input),
           archiveWorkflowArtifact: input => runMutation("artifact.archive_workflow", input, () => artifactDelivery.archiveArtifact(input)),
         }),
+        speaker: env?.GO_HUB_BROADCAST_STATE
+          ? ({ area, observed }) => broadcast.speaker({ area, observed })
+          : null,
       });
 
       return createMcpHandler({

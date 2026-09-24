@@ -4,7 +4,7 @@ const STANDARD_REPO="pureekangraw-ops/standard-";
 const ALLOWED_BINDINGS=new Set([
   "GO_HUB_CENTRE_STATE","GO_HUB_FACTORY_STATE","GO_HUB_COUNTER_STATE","GO_HUB_GLOBAL_AUDIT",
   "GO_HUB_COUNTER_INBOX","GO_HUB_COUNTER_DISPATCH_STATE","LIGHTHOUSE_CONTROL_PORT_SESSIONS",
-  "OBSERVER_SESSIONS","GO_HUB_NOTION_LIGHT_STATE","GO_HUB_MAINTENANCE_STATE",
+  "OBSERVER_SESSIONS","GO_HUB_NOTION_LIGHT_STATE","GO_HUB_MAINTENANCE_STATE","GO_HUB_BROADCAST_STATE",
 ]);
 const ALLOWED_CONFIG_REFS=new Set([
   "GOHUB_MASTER_KEY","GOHUB_OWNER_PASSCODE","GOHUB_NOTION_CLIENT_SECRET","GITHUB_TOKEN",
@@ -62,7 +62,7 @@ function observePayload(expected,body,ok=true){
 }
 export function createMaintenanceRealityReader({
   env={},lifecycle,registryRef=()=>null,googleWorkspace=null,drive=null,linear=null,observer=null,
-  lighthouseControlPort=null,projectStatus=null,boardRead=null,globalAudit=null,
+  lighthouseControlPort=null,projectStatus=null,boardRead=null,globalAudit=null,broadcast=null,
 }={}){
   const cache=new Map();
   async function once(key,fn){if(cache.has(key))return cache.get(key);const promise=Promise.resolve().then(fn);cache.set(key,promise);return promise;}
@@ -159,6 +159,7 @@ export function createMaintenanceRealityReader({
     if(lower==="lighthouse:state"||lower==="service:lighthouse")return serviceObservation(point,"lighthouse-state",()=>lighthouseControlPort?.state?.({targetId:"lighthouse"}));
     if(lower==="board:live"||lower==="service:board")return serviceObservation(point,"board-live",()=>boardRead?.());
     if(lower==="audit:history"||lower==="service:audit")return serviceObservation(point,"audit-history",()=>globalAudit?.history?.({limit:1}));
+    if(lower==="broadcast:current"||lower==="service:broadcast")return serviceObservation(point,"broadcast-current",()=>broadcast?.current?.());
     const project=/^project:(.+)$/.exec(source);
     if(project)return serviceObservation(point,"project-"+text(project[1]),()=>projectStatus?.read?.({targetId:text(project[1])}));
 
