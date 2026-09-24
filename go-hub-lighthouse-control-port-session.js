@@ -446,10 +446,10 @@ export class LighthouseControlPortSessionRegistry {
     }
   }
 
-  async alarm() {
+  async reconcileCentre({ requireActiveSession = true } = {}) {
     const session = this.service();
     const auditNamespace = this.env?.GO_HUB_GLOBAL_AUDIT;
-    const reconciliation = createCentreReconciliationService({
+    return createCentreReconciliationService({
       storage:this.ctx.storage,
       audit:{
         async history(input) {
@@ -475,8 +475,12 @@ export class LighthouseControlPortSessionRegistry {
       },
       centreNamespace:this.env?.GO_HUB_CENTRE_STATE,
       projectCentre:view => session.projectCentre(view),
-    });
-    const result = await reconciliation.reconcile();
+      requireActiveSession,
+    }).reconcile();
+  }
+
+  async alarm() {
+    const result = await this.reconcileCentre({ requireActiveSession:true });
     const state = await this.ctx.storage.get("state");
     if (centreSessionIsActive(state, Date.now())) {
       await this.scheduleReconciliation();
@@ -564,7 +568,11 @@ export class LighthouseControlPortSessionRegistry {
     if (url.pathname === "/state") return internalJson(await service.pushState(input));
     if (url.pathname === "/latest") return internalJson(await service.latest());
     if (url.pathname === "/board") return internalJson(await service.board(input));
-    if (url.pathname === "/board/latest") return internalJson(await service.boardLatest());
+    if (url.pathname === "/board/latest") {
+      const reconciliation = await this.reconcileCentre({ requireActiveSession:false });
+      if (!reconciliation?.ok) return internalJson({ ok:false, code:reconciliation?.code || "CENTRE_RECONCILIATION_FAILED" }, 503);
+      return internalJson(await service.boardLatest());
+    }
     if (url.pathname === "/board/project") return internalJson(await service.projectCentre(input.view));
     if (url.pathname === "/stop") return internalJson(await service.stop(input));
     return internalJson({ ok:false, code:"NOT_FOUND" }, 404);
