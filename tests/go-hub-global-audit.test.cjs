@@ -61,3 +61,16 @@ test("global audit duplicate event IDs are idempotent but conflicting rewrites f
   assert.equal(conflict.status, 409);
   assert.equal(conflict.body.code, "GLOBAL_AUDIT_EVENT_ID_CONFLICT");
 });
+
+
+test("global audit derives only Centre V4 checkpoint identity when missing", async () => {
+  const { GoHubGlobalAuditLog } = await import(moduleUrl + "?v4-checkpoint=" + Date.now());
+  const instance = new GoHubGlobalAuditLog({ storage: new MemoryStorage() }, {});
+  const v4 = await call(instance, { action:"append", event:{ eventId:"EV-V4", type:"CENTRE_V4_CREATE", workId:"WORK-V4", phase:"V4_OPEN", details:{} } });
+  assert.equal(v4.status, 200);
+  assert.equal(v4.body.event.checkpointId, "CP-WORK-V4");
+
+  const legacy = await call(instance, { action:"append", event:{ eventId:"EV-LEGACY", type:"CENTRE_START", workId:"WORK-LEGACY", phase:"ARRIVED", details:{} } });
+  assert.equal(legacy.status, 400);
+  assert.equal(legacy.body.code, "Checkpoint ID is required");
+});

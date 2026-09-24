@@ -26,11 +26,15 @@ function sequenceKey(sequence) {
 }
 function normalizeEvent(input = {}) {
   rejectSecrets(input, "event");
+  const type = required(input.type, "Event type");
+  const workId = required(input.workId, "Work ID");
+  const checkpointId = text(input.checkpointId) ||
+    (type.startsWith("CENTRE_V4_") ? "CP-" + workId : required(input.checkpointId, "Checkpoint ID"));
   return {
     eventId: required(input.eventId, "Event ID"),
-    type: required(input.type, "Event type"),
-    workId: required(input.workId, "Work ID"),
-    checkpointId: required(input.checkpointId, "Checkpoint ID"),
+    type,
+    workId,
+    checkpointId,
     phase: text(input.phase) || null,
     targetId: text(input.targetId) || null,
     at: text(input.at) || new Date().toISOString(),
@@ -108,8 +112,8 @@ export class GoHubGlobalAuditLog {
       if (request.method !== "POST") return json({ code: "METHOD_NOT_ALLOWED" }, 405);
       const input = await request.json().catch(() => null);
       if (!input || typeof input !== "object" || Array.isArray(input)) return json({ code: "INVALID_JSON" }, 400);
-      if (input.action === "append") return this.append(input.event);
-      if (input.action === "history") return this.history(input);
+      if (input.action === "append") return await this.append(input.event);
+      if (input.action === "history") return await this.history(input);
       return json({ code: "GLOBAL_AUDIT_UNSUPPORTED_ACTION" }, 400);
     } catch (error) {
       return json({ code: error?.message || "GLOBAL_AUDIT_ERROR" }, error?.status || 400);

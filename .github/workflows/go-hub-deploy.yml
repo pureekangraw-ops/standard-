@@ -205,7 +205,7 @@ jobs:
             return payload;
           };
 
-          await centre({
+          const created = await centre({
             action:"v4_create",
             workId,
             name:"LIGHTHOUSE runtime smoke",
@@ -213,6 +213,9 @@ jobs:
             expectedResult:"Work-bound room and owner-source readback verified",
             requestedDestinations:["lighthouse"],
           });
+          if (created?.work?.checkpointId !== "CP-" + workId) {
+            throw new Error("LIGHTHOUSE_CENTRE_CHECKPOINT_MISSING");
+          }
           await centre({ action:"v4_claim", workId, actor });
           await centre({ action:"v4_open_pass", workId, actor, kind:"WORK", destinations:["lighthouse"] });
 
