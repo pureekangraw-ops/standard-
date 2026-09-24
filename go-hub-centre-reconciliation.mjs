@@ -40,6 +40,7 @@ function reconciliationState(state) {
     lastProcessedWorkIds: Array.isArray(source.lastProcessedWorkIds)
       ? [...new Set(source.lastProcessedWorkIds.map(clean).filter(Boolean))]
       : [],
+    lastSkippedWorkIds: Array.isArray(source.lastSkippedWorkIds) ? clone(source.lastSkippedWorkIds) : [],
   };
 }
 
@@ -188,8 +189,8 @@ export function createCentreReconciliationService({
           try {
             truth = await inspectCentre(centreNamespace, workId);
           } catch (error) {
-            if (seeded.has(workId) && !audited.has(workId) && codeOf(error) === "CENTRE_WORK_NOT_FOUND") {
-              skippedWorkIds.push({ workId, reason:"STALE_BOARD_SEED" });
+            if (codeOf(error) === "CENTRE_WORK_NOT_FOUND") {
+              skippedWorkIds.push({ workId, reason:audited.has(workId) ? "AUDIT_WORK_NOT_ADDRESSABLE" : "STALE_BOARD_SEED" });
               continue;
             }
             throw error;
@@ -215,6 +216,7 @@ export function createCentreReconciliationService({
             lastRunAt: startedAt,
             lastError: null,
             lastProcessedWorkIds: projected.map(item => item.workId),
+            lastSkippedWorkIds: skippedWorkIds,
           },
         };
         await save(next);
