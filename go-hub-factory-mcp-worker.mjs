@@ -681,6 +681,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           projectStatus,
           boardRead:() => lighthouseControlPort.boardRead(),
           globalAudit,
+          broadcast,
         }),
       });
       const artifactDelivery = createWorkflowArtifactService({ fetchImpl, token: env.GITHUB_TOKEN, drive });
