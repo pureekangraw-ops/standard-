@@ -99,9 +99,32 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.ok(names.includes("go_hub_drive_create_folder"));
   assert.ok(names.includes("go_hub_drive_move_item"));
   assert.ok(names.includes("go_hub_drive_rename_item"));
+  for (const name of [
+    "go_hub_get_workflow_runs",
+    "go_hub_list_workflow_artifacts",
+    "go_hub_audit_history",
+    "go_hub_centre_read_only_fast_lane",
+    "go_hub_lighthouse_control_port_state",
+    "go_hub_project_status",
+    "go_hub_board_pin_route",
+    "go_hub_observer_latest",
+    "go_hub_observer_screenshot",
+    "go_hub_linear_list_projects",
+    "go_hub_linear_get_issue",
+  ]) assert.ok(names.includes(name), "LIGHT should inherit read-only tool " + name);
   assert.equal(names.includes("go_hub_delete_file"), false);
   assert.equal(names.includes("go_hub_merge_pull_request"), false);
   assert.equal(names.includes("go_hub_centre_live_action"), false);
+  for (const name of [
+    "go_hub_heimdall_pass",
+    "go_hub_maintenance",
+    "go_hub_factory_v4",
+    "go_hub_lighthouse_control_port_command",
+    "go_hub_linear_create_issue",
+    "go_hub_linear_update_issue",
+    "go_hub_archive_workflow_artifact",
+    "go_hub_rerun_failed_jobs",
+  ]) assert.equal(names.includes(name), false, "LIGHT should not inherit mutation " + name);
   assert.equal(payload.result.tools.some(tool => Object.hasOwn(tool, "securitySchemes")), false);
 });
 

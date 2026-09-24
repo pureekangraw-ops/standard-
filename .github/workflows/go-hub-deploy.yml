@@ -193,16 +193,23 @@ jobs:
           const workId = "SMOKE-LIGHTHOUSE-" + process.env.GITHUB_RUN_ID + "-" + process.env.GITHUB_RUN_ATTEMPT;
           const actor = "GO";
           const centre = async body => {
-            const response = await fetch(origin + "/hub/api/centre/action", {
-              method:"POST",
-              headers:{ "content-type":"application/json" },
-              body:JSON.stringify(body),
-            });
-            const payload = await response.json().catch(() => null);
-            if (!response.ok || payload?.ok !== true) {
-              throw new Error("CENTRE_SMOKE_FAILED:" + (payload?.code || payload?.message || response.status));
+            for (let attempt = 1; attempt <= 8; attempt += 1) {
+              const response = await fetch(origin + "/hub/api/centre/action", {
+                method:"POST",
+                headers:{ "content-type":"application/json" },
+                body:JSON.stringify(body),
+              });
+              const payload = await response.json().catch(() => null);
+              if (response.ok && payload?.ok === true) return payload;
+              const reason = String(payload?.code || payload?.message || response.status);
+              const resetting = /Durable Object reset because its code was updated/i.test(reason);
+              if (resetting && attempt < 8) {
+                await new Promise(resolve => setTimeout(resolve, 750));
+                continue;
+              }
+              throw new Error("CENTRE_SMOKE_FAILED:" + reason);
             }
-            return payload;
+            throw new Error("CENTRE_SMOKE_FAILED:retry-exhausted");
           };
 
           const created = await centre({
@@ -348,7 +355,12 @@ jobs:
           });
           const toolsPayload = await toolsResponse.json().catch(() => null);
           const names = (toolsPayload?.result?.tools || []).map(tool => tool?.name).filter(Boolean);
-          const required = ["go_hub_read_file", "go_hub_create_branch", "go_hub_put_file", "go_hub_compare_refs", "go_hub_open_pull_request", "go_hub_drive_read_document"];
+          const required = [
+            "go_hub_read_file", "go_hub_create_branch", "go_hub_put_file", "go_hub_compare_refs", "go_hub_open_pull_request",
+            "go_hub_drive_read_document", "go_hub_get_workflow_runs", "go_hub_list_workflow_artifacts",
+            "go_hub_audit_history", "go_hub_lighthouse_control_port_state", "go_hub_project_status",
+            "go_hub_observer_latest", "go_hub_linear_list_projects", "go_hub_linear_get_issue",
+          ];
           const forbidden = ["go_hub_delete_file", "go_hub_merge_pull_request", "go_hub_centre_live_action"];
           const missing = required.filter(name => !names.includes(name));
           const exposed = forbidden.filter(name => names.includes(name));

@@ -37,52 +37,30 @@ function firstEnv(env, names) {
   return "";
 }
 
-const LIGHT_CODE_TOOL_NAMES = new Set([
-  "go_hub_inspect_repository",
-  "go_hub_list_repositories",
-  "go_hub_read_file",
+const LIGHT_MUTATION_TOOL_NAMES = new Set([
   "go_hub_create_branch",
   "go_hub_put_file",
-  "go_hub_compare_refs",
   "go_hub_open_pull_request",
-  "go_hub_get_pull_request",
-  "go_hub_get_ci",
-  "go_hub_get_failure_evidence",
-  "go_hub_broadcast_read",
-  "go_hub_centre_inspect",
-  "go_hub_v4_project_board",
   "go_hub_light_centre_v4_action",
-  "go_hub_centre_audit_history",
-  "go_hub_board_read",
   "go_hub_counter_create",
-  "go_hub_counter_inbox",
-  "go_hub_counter_get",
   "go_hub_counter_seen",
   "go_hub_counter_pickup",
   "go_hub_counter_answer",
   "go_hub_counter_readback",
-  "go_hub_gmail_capabilities",
-  "go_hub_gmail_diagnostics",
-  "go_hub_gmail_profile",
-  "go_hub_gmail_search",
-  "go_hub_gmail_get_message",
   "go_hub_gmail_send_message",
-  "go_hub_calendar_capabilities",
-  "go_hub_calendar_diagnostics",
-  "go_hub_calendar_list",
-  "go_hub_calendar_events",
   "go_hub_calendar_create_event",
-  "go_hub_drive_capabilities",
-  "go_hub_drive_health",
-  "go_hub_drive_diagnostics",
-  "go_hub_drive_root",
-  "go_hub_drive_get_item",
-  "go_hub_drive_list_children",
-  "go_hub_drive_read_document",
   "go_hub_drive_create_folder",
   "go_hub_drive_move_item",
   "go_hub_drive_rename_item",
 ]);
+
+function lightAllowedTools(registry) {
+  const allowed = new Set(LIGHT_MUTATION_TOOL_NAMES);
+  for (const tool of registry.listTools()) {
+    if (tool?.annotations?.readOnlyHint === true) allowed.add(tool.name);
+  }
+  return allowed;
+}
 
 function restrictRegistry(registry, allowedTools) {
   return Object.freeze({
@@ -840,7 +818,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       });
 
       return createMcpHandler({
-        registry: lightMcp ? restrictRegistry(registry, LIGHT_CODE_TOOL_NAMES) : registry,
+        registry: lightMcp ? restrictRegistry(registry, lightAllowedTools(registry)) : registry,
         issuer: url.origin,
         authenticate: current => verifyAccessToken(current, accessConfig),
         allowedOrigins: lightMcp
