@@ -4,6 +4,8 @@ const revision = { type: "integer", minimum: 0 };
 const obj = { type: "object" };
 const priority = { type: "integer", minimum: 0, maximum: 4 };
 const nullableStr = { anyOf: [{ type: "string" }, { type: "null" }] };
+const broadcastRef = schemaBroadcast();
+function schemaBroadcast() { return { type: "object", properties: { program: str, version: str, hash: str }, required: ["program","version","hash"], additionalProperties: false }; }
 const FACTORY = "destination://factory";
 const LINEAR = "destination://linear";
 const MAINTENANCE = "destination://maintenance";
@@ -24,11 +26,13 @@ const workContext = {
 const schema = (properties, required = []) => ({ type: "object", properties, required, additionalProperties: false });
 const ann = (readOnlyHint, destructiveHint = false) => ({ readOnlyHint, destructiveHint });
 const def = (name, description, operation, inputSchema, annotations) => ({
-  name, description, operation, inputSchema,
+  name, description, operation, inputSchema: { ...inputSchema, properties: { ...inputSchema.properties, broadcast: broadcastRef } },
   securitySchemes: [{ type: "oauth2", scopes: ["go-hub"] }], annotations,
 });
 
 const definitions = [
+  def("go_hub_broadcast_read", "Read the single GO Hub current broadcast used by version-aware speakers.", "broadcastRead", schema({}), ann(true)),
+  def("go_hub_broadcast_activate", "GO changes the current GO Hub broadcast plate atomically; no Heimdall Pass or Work approval is required.", "broadcastActivate", schema({ program: str, version: str, hash: str, sourceRef: str }, ["program","version","hash","sourceRef"]), ann(false)),
   def("go_hub_inspect_repository", "Inspect repository truth and tree.", "inspect", schema({ repository: str, branch: str }, ["repository"]), ann(true)),
   def("go_hub_list_repositories", "List visible owner repositories.", "listRepositories", schema({}), ann(true)),
   def("go_hub_read_file", "Read one UTF-8 repository file.", "readFile", schema({ repository: str, path: str, ref: str }, ["repository", "path"]), ann(true)),
@@ -138,12 +142,19 @@ function assertLifecycle(name, args) {
   if (counterTools.has(name)) assertWork(args.workContext, COUNTER);
 }
 
-async function toolResult(response) {
+async function toolResult(response, broadcastReadback = null) {
   const payload = await response.json().catch(() => ({ code: "INVALID_TOOL_RESPONSE" }));
-  return { content: [{ type: "text", text: JSON.stringify(payload) }], structuredContent: payload, ...(response.ok ? {} : { isError: true }) };
+  const structuredContent = payload && typeof payload === "object" && !Array.isArray(payload) && broadcastReadback
+    ? { ...payload, broadcastReadback }
+    : payload;
+  return { content: [{ type: "text", text: JSON.stringify(structuredContent) }], structuredContent, ...(response.ok ? {} : { isError: true }) };
 }
 
-export function createMcpRegistry({ lifecycle } = {}) {
+function speakerError(result) {
+  return new Response(JSON.stringify(result), { status: 409, headers: { "content-type": "application/json; charset=utf-8" } });
+}
+
+export function createMcpRegistry({ lifecycle, speaker = null } = {}) {
   if (!lifecycle) throw new Error("lifecycle service is required");
   const byName = new Map(definitions.map(item => [item.name, item]));
   return Object.freeze({
@@ -155,9 +166,15 @@ export function createMcpRegistry({ lifecycle } = {}) {
       if (!definition) throw new Error("unknown MCP tool: " + name);
       assertArgs(definition, args);
       assertLifecycle(name, args);
+      let broadcastReadback = null;
+      if (typeof speaker === "function" && name !== "go_hub_broadcast_activate") {
+        const heard = await speaker({ area: definition.operation, observed: args.broadcast || null });
+        if (!heard?.ok) return toolResult(speakerError(heard));
+        broadcastReadback = heard.current || null;
+      }
       const operation = lifecycle[definition.operation];
       if (typeof operation !== "function") throw new Error("lifecycle operation unavailable: " + definition.operation);
-      return toolResult(await operation(args));
+      return toolResult(await operation(args), broadcastReadback);
     },
   });
 }
