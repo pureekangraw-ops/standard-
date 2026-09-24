@@ -100,7 +100,8 @@ function boardStatus(view = {}) {
 }
 
 function hubBoardPin(view = {}, previous = null, at = new Date().toISOString()) {
-  const workId = requestId(view.workId || view.work?.workId);
+  const workId = requestId(view.routingWorkId || view.workId || view.work?.workId);
+  const canonicalWorkId = clean(view.canonicalWorkId || view.work?.workId);
   const owner = clean(view.ownership?.ownerId) || clean(view.work?.role?.roleId) || "GO";
   const priorTouched = Array.isArray(previous?.touchedBy) ? previous.touchedBy.map(clean).filter(Boolean) : [];
   const touchedBy = [...new Set([...priorTouched, owner].filter(Boolean))];
@@ -118,7 +119,8 @@ function hubBoardPin(view = {}, previous = null, at = new Date().toISOString()) 
   return {
     pinId:("PIN:" + workId).slice(0, 128),
     workId,
-    title:clean(view.work?.task) || workId,
+    canonicalWorkId:canonicalWorkId && canonicalWorkId !== workId ? canonicalWorkId : null,
+    title:clean(view.work?.task || view.work?.name || view.work?.command) || workId,
     detail:clean(view.work?.requestedResult),
     status,
     ownerEmployeeId:owner || null,
@@ -218,8 +220,12 @@ export function createLighthouseControlPortSessionService({
     if (!view || typeof view !== "object" || Array.isArray(view) || view.ok !== true) return { ok:false, code:"SCHEMA_REJECTED" };
     const at = new Date(Number(now())).toISOString();
     const board = await loadHubBoard();
-    const workId = requestId(view.workId || view.work?.workId);
-    const index = board.pins.findIndex(pin => pin?.workId === workId);
+    const workId = requestId(view.routingWorkId || view.workId || view.work?.workId);
+    const canonicalWorkId = clean(view.canonicalWorkId || view.work?.workId);
+    let index = board.pins.findIndex(pin => pin?.workId === workId);
+    if (index < 0 && canonicalWorkId && canonicalWorkId !== workId) {
+      index = board.pins.findIndex(pin => pin?.workId === canonicalWorkId);
+    }
     const previous = index >= 0 ? board.pins[index] : null;
     const pin = hubBoardPin(view, previous, at);
     if (previous && projectionSignature(previous) === projectionSignature(pin)) {
