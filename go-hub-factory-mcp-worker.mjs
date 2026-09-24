@@ -693,7 +693,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           maintenance: input => input.work ? maintenance.maintenance(input) : json({ code: "MAINTENANCE_V4_WORK_REQUIRED" }, 409),
           heimdallPass: input => runMutation("heimdall.pass." + String(input.action || "unknown"), input, () => heimdallPass(input)),
           v4ProjectBoard: input => v4ProjectBoard(input),
-          lightCentreV4Action: input => {
+          lightCentreV4Action: async input => {
             if (!lightMcp || !["v4_inspect", "v4_claim", "v4_wait", "v4_resume"].includes(input?.action)) {
               return json({ code:"LIGHT_CENTRE_ACTION_NOT_ALLOWED" }, 403);
             }
@@ -706,6 +706,14 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
               ...(input.reason ? { reason:input.reason } : {}),
               ...(input.resumeFrom ? { resumeFrom:input.resumeFrom } : {}),
             };
+            if (input.action === "v4_wait") {
+              const inspected = await centreLive.action({ action:"v4_inspect", workId:input.workId });
+              if (!inspected.ok) return inspected;
+              const view = await responsePayload(inspected);
+              if (view?.work?.checkpointId !== input.checkpointId || view?.work?.holder !== "LIGHT") {
+                return json({ code:"LIGHT_CENTRE_HOLDER_REQUIRED" }, 403);
+              }
+            }
             return centreLive.action(routed);
           },
           observerLatest: () => observer.latest(),
