@@ -134,7 +134,7 @@ export function createBroadcastService({ namespace, name = DEFAULT_STATE_NAME } 
   return Object.freeze({
     async current() {
       const result = await call(stub, { action: "current" });
-      if (!result) return json({ ok: true, broadcast: clone(BOOTSTRAP_BROADCAST), configured: false });
+      if (!result) return json({ code: "BROADCAST_STATE_NOT_CONFIGURED" }, 503);
       return json({ ...result.body, configured: true }, result.response.status);
     },
     async activate(input = {}) {
@@ -143,11 +143,19 @@ export function createBroadcastService({ namespace, name = DEFAULT_STATE_NAME } 
       return json(result.body, result.response.status);
     },
     async speaker({ area, observed = null } = {}) {
+      const speakerArea = text(area) || "unknown";
       const result = await call(stub, { action: "current" });
-      const current = result?.response?.ok && result.body?.broadcast
-        ? result.body.broadcast
-        : clone(BOOTSTRAP_BROADCAST);
-      return compareBroadcast(current, observed, { area: text(area) || "unknown" });
+      if (!result || !result.response.ok || !result.body?.broadcast) {
+        return Object.freeze({
+          ok: false,
+          code: "NO_BROADCAST",
+          area: speakerArea,
+          expected: null,
+          observed: observed ? identity(observed) : null,
+          next: "MAINTENANCE_RUNNER",
+        });
+      }
+      return compareBroadcast(result.body.broadcast, observed, { area: speakerArea });
     },
   });
 }
