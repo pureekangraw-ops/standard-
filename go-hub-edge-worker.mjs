@@ -8,6 +8,7 @@ import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { createNotionLightService } from "./go-hub-notion-light.mjs";
 import { createCounterService } from "./go-hub-counter.mjs";
 import { createCounterDispatchService } from "./go-hub-counter-dispatcher.mjs";
+import { createGoHubV4, CUTOVER_CONTRACT } from "./go-hub-v4-cutover.mjs";
 import {
   createLighthouseControlPortHttpService,
   createLighthouseControlPortMcpService,
@@ -15,6 +16,7 @@ import {
   LIGHTHOUSE_CONTROL_PORT_OWNER_PATH,
 } from "./go-hub-lighthouse-control-port-service.mjs";
 export { HephaestusForeman } from "./go-hub-factory-controller.mjs";
+export { createGoHubV4, CUTOVER_CONTRACT };
 export { GoHubFactoryState } from "./go-hub-factory-state.mjs";
 export { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 export { GoHubCentreState } from "./go-hub-centre-live.mjs";
