@@ -163,7 +163,9 @@
     },
     {
       "path": "go-hub-heimdall.js"
-    },
+    }
+  ],
+  "serverRuntimeFiles": [
     {
       "path": "go-hub-centre-v4.js"
     },
