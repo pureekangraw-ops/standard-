@@ -33,8 +33,13 @@ function normalizeFile(file) {
 }
 
 function errorCategory(payload, status) {
-  const reason = payload?.error?.errors?.[0]?.reason;
-  return typeof reason === "string" && reason ? reason : "HTTP_" + status;
+  const candidates = [
+    payload?.error?.errors?.[0]?.reason,
+    payload?.error?.details?.[0]?.reason,
+    payload?.error?.status,
+  ];
+  const reason = candidates.find(value => typeof value === "string" && value.trim());
+  return reason ? reason.trim() : "HTTP_" + status;
 }
 
 function validPageSize(value) {
@@ -184,6 +189,30 @@ export function createGoogleDriveService({
       };
     }
     return { payload };
+  }
+
+  async function exportDocumentText(documentId) {
+    const auth = await bearerToken();
+    if (auth.response) return { response: auth.response };
+    let upstream;
+    try {
+      upstream = await fetchImpl(
+        DRIVE_API_ROOT + "/files/" + encode(documentId) + "/export?mimeType=" + encode("text/plain"),
+        { headers:{ authorization:"Bearer " + auth.token } },
+      );
+    } catch {
+      return { response: json({ code:"DRIVE_DOCUMENT_EXPORT_UPSTREAM_ERROR", category:"NETWORK_ERROR" }, 502) };
+    }
+    if (!upstream.ok) {
+      const payload = await upstream.json().catch(() => null);
+      return {
+        response: json({
+          code:"DRIVE_DOCUMENT_EXPORT_UPSTREAM_ERROR",
+          category:errorCategory(payload, upstream.status),
+        }, upstream.status === 401 || upstream.status === 403 ? 403 : 502),
+      };
+    }
+    return { text: await upstream.text() };
   }
 
   async function getRaw(fileId) {
@@ -489,7 +518,33 @@ export function createGoogleDriveService({
         return json({ code:"DRIVE_DOCUMENT_TYPE_REQUIRED", mimeType:text(meta.payload?.mimeType) || null }, 409);
       }
       const result = await docsRequest(documentId);
-      if (result.response) return result.response;
+      if (result.response) {
+        if (result.response.status !== 403) return result.response;
+        const docsFailure = await result.response.clone().json().catch(() => ({}));
+        const exported = await exportDocumentText(documentId);
+        if (exported.response) return exported.response;
+        const fullText = typeof exported.text === "string" ? exported.text : "";
+        const paragraphs = fullText
+          .split(/\r?\n/)
+          .map(value => value.replace(/\s+$/, ""))
+          .filter(Boolean)
+          .map(value => ({ text:value, tabId:null }));
+        const truncated = fullText.length > maxChars;
+        return json({
+          document:{
+            id:documentId,
+            title:meta.payload?.name || null,
+            revisionId:null,
+            mimeType:"application/vnd.google-apps.document",
+            text:truncated ? fullText.slice(0, maxChars) : fullText,
+            paragraphs,
+            truncated,
+            totalChars:fullText.length,
+            source:"drive_export",
+            fallbackCategory:text(docsFailure?.category) || "HTTP_403",
+          },
+        });
+      }
       const paragraphs = [];
       if (Array.isArray(result.payload?.tabs) && result.payload.tabs.length) {
         collectDocumentTabs(result.payload.tabs, paragraphs);
@@ -508,6 +563,7 @@ export function createGoogleDriveService({
           paragraphs,
           truncated,
           totalChars:fullText.length,
+          source:"docs_api",
         },
       });
     },
