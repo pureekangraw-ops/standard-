@@ -37,8 +37,10 @@ function snapshot(value) { return freeze(structuredClone(value)); }
 
 export function createWorkRecord(input = {}) {
   const now = text(input.createdAt) || nowIso();
+  const workId = text(input.workId) || createId("WORK");
   return snapshot({
-    workId: text(input.workId) || createId("WORK"),
+    workId,
+    checkpointId: text(input.checkpointId) || ("CP-" + workId),
     name: required(input.name || input.command, "Work name"),
     command: required(input.command, "Command"),
     expectedResult: required(input.expectedResult, "Expected Result"),
