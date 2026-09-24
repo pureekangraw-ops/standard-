@@ -147,6 +147,32 @@ function observerStatus(code) {
   return 403;
 }
 
+async function authorizeLighthouseRoom(request, env) {
+  const url = new URL(request.url);
+  const workId = String(url.searchParams.get("work_id") || "").trim();
+  const actor = String(url.searchParams.get("actor") || "").trim();
+  if (!workId || !actor) {
+    return { ok:false, response:json({ code:"LIGHTHOUSE_CENTRE_PASS_REQUIRED" }, 403) };
+  }
+  const inspected = await createCentreLiveService({ namespace:env?.GO_HUB_CENTRE_STATE }).action({
+    action:"v4_inspect",
+    workId,
+  });
+  if (!inspected.ok) return { ok:false, response:inspected };
+  const payload = await inspected.clone().json().catch(() => ({}));
+  const work = payload?.work;
+  const pass = work?.pass;
+  const allowed = Array.isArray(pass?.allowedDestinations) ? pass.allowedDestinations.map(value => String(value || "").trim()) : [];
+  const authorized = work?.status === "ON PROCESS" &&
+    String(work?.holder || "").trim() === actor &&
+    pass?.state === "ACTIVE" &&
+    (allowed.includes("lighthouse") || allowed.includes("ALL_GO_HUB_OWNED_AREAS"));
+  if (!authorized) {
+    return { ok:false, response:json({ code:"LIGHTHOUSE_CENTRE_PASS_REQUIRED" }, 403) };
+  }
+  return { ok:true, workId, actor };
+}
+
 function lightMcpOwnerPage(result = null) {
   const resultHtml = result
     ? `<section><h2>LIGHT MCP ready</h2><p>MCP URL</p><textarea readonly rows="2" style="width:100%">${result.mcpUrl}</textarea><p>Bearer token (expires ${result.expiresLabel})</p><textarea readonly rows="6" style="width:100%">${result.token}</textarea><p>Connect this as a custom MCP server in Notion Agent and enable only the code tools you need.</p></section>`
@@ -334,6 +360,13 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
       }
       if (url.pathname === LIGHTHOUSE_CONTROL_PORT_OWNER_PATH ||
           url.pathname.startsWith(LIGHTHOUSE_CONTROL_PORT_API_ROOT + "/")) {
+        const ownerRoomPath = url.pathname === LIGHTHOUSE_CONTROL_PORT_OWNER_PATH ||
+          url.pathname === `${LIGHTHOUSE_CONTROL_PORT_API_ROOT}/owner-state` ||
+          url.pathname === `${LIGHTHOUSE_CONTROL_PORT_API_ROOT}/owner-command`;
+        if (ownerRoomPath) {
+          const access = await authorizeLighthouseRoom(request, env);
+          if (!access.ok) return access.response;
+        }
         return createLighthouseControlPortHttpService({
           namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS,
           ownerPasscode:env?.GOHUB_OWNER_PASSCODE,
