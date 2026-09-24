@@ -616,7 +616,19 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const factoryV4 = env?.GO_HUB_FACTORY_STATE
         ? createFactoryV4Service({ binding: env.GO_HUB_FACTORY_STATE })
         : async () => json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
-      const maintenance = createMaintenanceService();
+      const maintenance = createMaintenanceService({
+        readValue: async point => {
+          const source = String(point?.source || "").trim();
+          const match = /^binding:(GO_HUB_CENTRE_STATE|GO_HUB_FACTORY_STATE|GO_HUB_COUNTER_STATE)$/.exec(source);
+          if (!match) return { available:false, reason:"MAINTENANCE_READER_UNAVAILABLE" };
+          const binding = match[1];
+          return {
+            available:true,
+            value:Boolean(env?.[binding]),
+            evidenceRef:"worker-binding://" + binding,
+          };
+        },
+      });
       const heimdallPass = async (input = {}) => centreLive.action({
         action: input.action === "open" ? "v4_open_pass" : "v4_return",
         workId: input.workId, checkpointId: input.checkpointId, actor: input.actor || input.holder,
