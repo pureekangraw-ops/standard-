@@ -112,8 +112,8 @@ export class GoHubGlobalAuditLog {
       if (request.method !== "POST") return json({ code: "METHOD_NOT_ALLOWED" }, 405);
       const input = await request.json().catch(() => null);
       if (!input || typeof input !== "object" || Array.isArray(input)) return json({ code: "INVALID_JSON" }, 400);
-      if (input.action === "append") return this.append(input.event);
-      if (input.action === "history") return this.history(input);
+      if (input.action === "append") return await this.append(input.event);
+      if (input.action === "history") return await this.history(input);
       return json({ code: "GLOBAL_AUDIT_UNSUPPORTED_ACTION" }, 400);
     } catch (error) {
       return json({ code: error?.message || "GLOBAL_AUDIT_ERROR" }, error?.status || 400);
