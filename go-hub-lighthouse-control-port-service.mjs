@@ -128,7 +128,7 @@ textarea{resize:vertical}button{padding:11px 14px;border:0;border-radius:10px;fo
 </section>
 
 <section class="card">
-<h2>Data Drop → LIGHTHOUSE</h2>
+<h2>LIGHTHOUSE Transfer Form · Data Drop → LIGHTHOUSE</h2>
 <p class="muted">38 capabilities are shown. Read-only and device-secret capabilities stay visible but cannot be queued. Exported JSON carries the route metadata with the payload.</p>
 <form id="transfer">
 <div class="grid">
