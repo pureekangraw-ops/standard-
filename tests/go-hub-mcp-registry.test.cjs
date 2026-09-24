@@ -26,6 +26,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   const registry = createMcpRegistry({ lifecycle });
   const tools = registry.listTools();
   assert.deepEqual(tools.map(tool => tool.name), [
+    "go_hub_broadcast_read", "go_hub_broadcast_activate",
     "go_hub_inspect_repository", "go_hub_list_repositories", "go_hub_read_file",
     "go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_compare_refs",
     "go_hub_open_pull_request", "go_hub_get_pull_request", "go_hub_get_ci",
@@ -41,6 +42,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_broadcast_activate").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_factory_v4").annotations.readOnlyHint, false);
   assert.equal(tools.some(tool => tool.name === "go_hub_factory_ready_gate"), false);
   assert.equal(tools.some(tool => tool.name === "go_hub_factory_foreman"), false);
