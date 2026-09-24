@@ -120,6 +120,24 @@ async function responsePayload(response) {
   return response.clone().json().catch(() => ({}));
 }
 
+const CENTRE_INSPECT_FALLBACK_CODES = new Set([
+  "unsupported Centre live action",
+  "unsupported Centre V4 action",
+]);
+
+async function inspectCentreCompat(centreLive, input = {}) {
+  const base = {
+    workId: input.workId,
+    checkpointId: input.checkpointId,
+    returnAddress: input.returnAddress || input.checkpointId,
+  };
+  const v4 = await centreLive.action({ action: "v4_inspect", ...base });
+  if (v4.ok) return v4;
+  const payload = await responsePayload(v4);
+  if (!CENTRE_INSPECT_FALLBACK_CODES.has(workText(payload.code))) return v4;
+  return centreLive.action({ action: "inspect", ...base });
+}
+
 const CENTRE_AUDIT_PAGE_SIZE = 200;
 
 function sequenceOf(record) {
@@ -337,11 +355,7 @@ export function createGovernedMutationRunner({ centreLive, globalAudit } = {}) {
     const workContext = input?.workContext;
     if (!workContext || typeof workContext !== "object") return json({ code: "WORK_CONTEXT_REQUIRED" }, 400);
 
-    const inspected = await centreLive.action({
-      action: "inspect",
-      workId: workContext.workId,
-      checkpointId: workContext.checkpointId,
-    });
+    const inspected = await inspectCentreCompat(centreLive, workContext);
     const centre = await responsePayload(inspected);
     if (!inspected.ok) return json({ code: centre.code || "CENTRE_WORK_UNAVAILABLE" }, inspected.status || 502);
     if (String(centre.checkpointId || "") !== String(workContext.checkpointId || "")) {
@@ -663,12 +677,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           observerLatest: () => observer.latest(),
           observerScreenshot: input => observer.screenshot(input),
           auditHistory: input => globalAudit.history(input),
-          centreInspect: input => centreLive.action({
-            action: "inspect",
-            workId: input.workId,
-            checkpointId: input.checkpointId,
-            returnAddress: input.checkpointId,
-          }),
+          centreInspect: input => inspectCentreCompat(centreLive, input),
           centreAuditHistory: input => centreAuditHistory(globalAudit, input),
           centreLiveAction: async input => {
             const response = await centreLive.action(input);
