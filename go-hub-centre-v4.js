@@ -62,13 +62,16 @@ export function claimWork(work, { actor, at = nowIso() } = {}) {
   return snapshot(next);
 }
 
-export function openWorkPass(work, { kind = PASS_KIND.WORK, destinations, at = nowIso() } = {}) {
+export function openWorkPass(work, { kind = PASS_KIND.WORK, destinations, actor, at = nowIso() } = {}) {
   validateWorkRecord(work);
   if (work.status !== WORK_STATUS.ON_PROCESS || !work.holder) {
     throw new Error("ON PROCESS Work with holder is required before Pass");
   }
   const passKind = text(kind).toUpperCase();
   if (!PASS_VALUES.has(passKind)) throw new Error("Pass kind is invalid");
+  const opener = required(actor || work.holder, "Pass actor");
+  if (opener !== work.holder) throw new Error("Only current holder can open Pass");
+  if (passKind === PASS_KIND.MAINTENANCE && opener.toUpperCase() !== "GO") throw new Error("Maintenance Pass is GO-only");
   const requested = unique(destinations ?? work.requestedDestinations);
   const allowedDestinations = passKind === PASS_KIND.MAINTENANCE
     ? Object.freeze(["ALL_GO_HUB_OWNED_AREAS"])
@@ -88,8 +91,8 @@ export function openWorkPass(work, { kind = PASS_KIND.WORK, destinations, at = n
 
 export function updateWorkDestinations(work, { destinations, at = nowIso() } = {}) {
   validateWorkRecord(work);
-  if (![WORK_STATUS.OPEN, WORK_STATUS.ON_PROCESS, WORK_STATUS.WAIT_CONFIRM].includes(work.status)) {
-    throw new Error("Work destinations cannot change in terminal state");
+  if (work.status !== WORK_STATUS.OPEN || work.holder || work.pass?.state === "ACTIVE") {
+    throw new Error("Return Centre and OPEN the Work before changing destinations");
   }
   const next = structuredClone(work);
   next.requestedDestinations = unique(destinations);
