@@ -33,7 +33,7 @@ test("Return can only be written by holder and closes Pass", async () => {
   work=claimWork(work,{actor:"LIGHT"});
   work=openWorkPass(work,{kind:"WORK"});
   assert.throws(()=>returnWork(work,{actor:"GO",result:"done"}),/current holder/);
-  work=returnWork(work,{actor:"LIGHT",result:"done",evidence:["owner-source-ref"],at:"2026-09-24T02:00:00Z"});
+  work=returnWork(work,{actor:"LIGHT",result:"done",evidence:[{ref:"github://pureekangraw-ops/standard-/commit/abc"}],at:"2026-09-24T02:00:00Z"});
   assert.equal(work.status,"COMPLETE");
   assert.equal(work.pass.state,"CLOSED");
   assert.equal(work.holder,null);
