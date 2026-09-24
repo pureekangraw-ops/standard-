@@ -1,7 +1,7 @@
 import { CENTRE_STATES, createCentrePassage } from "./go-hub-centre.js";
 import { routeInterruptionReturn } from "./go-hub-city-route.js";
 import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
-import { createWorkRecord as createV4WorkRecord, claimWork as claimV4Work, openWorkPass as openV4WorkPass, updateWorkDestinations as updateV4WorkDestinations, returnWork as returnV4Work } from "./go-hub-centre-v4.js";
+import { createWorkRecord as createV4WorkRecord, claimWork as claimV4Work, openWorkPass as openV4WorkPass, updateWorkDestinations as updateV4WorkDestinations, returnWork as returnV4Work, boardView as v4BoardView } from "./go-hub-centre-v4.js";
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -332,6 +332,7 @@ export class GoHubCentreState {
     if (!state) throw Object.assign(new Error("CENTRE_WORK_NOT_FOUND"), { status: 404 });
     if (state.v4 === true) {
       if (action === "v4_inspect") return json({ ok: true, v4: true, work: clone(state.work) });
+      if (action === "v4_board") return json({ ok: true, v4: true, board: v4BoardView([state.work]) });
       if (action === "v4_claim") state.work = claimV4Work(state.work, { actor: input.actor });
       else if (action === "v4_open_pass") state.work = openV4WorkPass(state.work, { kind: input.kind, destinations: input.destinations });
       else if (action === "v4_update_destinations") state.work = updateV4WorkDestinations(state.work, { destinations: input.destinations });
