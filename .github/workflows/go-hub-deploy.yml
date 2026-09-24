@@ -166,6 +166,105 @@ jobs:
             npx wrangler deploy --config wrangler.go-hub.jsonc
           fi
 
+      - name: Verify deployed LIGHTHOUSE Control Room runtime
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const cloudflareToken = process.env.CLOUDFLARE_API_TOKEN;
+          const ownerPasscode = process.env.GOHUB_OWNER_PASSCODE;
+          if (!accountId || !cloudflareToken || !ownerPasscode) {
+            console.error("::error::LIGHTHOUSE runtime smoke prerequisites are missing.");
+            process.exit(1);
+          }
+
+          const subdomainResponse = await fetch(
+            "https://api.cloudflare.com/client/v4/accounts/" + accountId + "/workers/subdomain",
+            { headers: { authorization: "Bearer " + cloudflareToken } },
+          );
+          const subdomainPayload = await subdomainResponse.json().catch(() => null);
+          const subdomain = String(subdomainPayload?.result?.subdomain || "").trim();
+          if (!subdomainResponse.ok || !subdomain) {
+            console.error("::error::Unable to resolve Cloudflare workers.dev subdomain for LIGHTHOUSE smoke.");
+            process.exit(1);
+          }
+
+          const origin = "https://go-hub." + subdomain + ".workers.dev";
+          const workId = "SMOKE-LIGHTHOUSE-" + process.env.GITHUB_RUN_ID + "-" + process.env.GITHUB_RUN_ATTEMPT;
+          const actor = "GO";
+          const centre = async body => {
+            const response = await fetch(origin + "/hub/api/centre/action", {
+              method:"POST",
+              headers:{ "content-type":"application/json" },
+              body:JSON.stringify(body),
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok || payload?.ok !== true) {
+              throw new Error("CENTRE_SMOKE_FAILED:" + (payload?.code || payload?.message || response.status));
+            }
+            return payload;
+          };
+
+          await centre({
+            action:"v4_create",
+            workId,
+            name:"LIGHTHOUSE runtime smoke",
+            command:"Verify closed LIGHTHOUSE Control Room",
+            expectedResult:"Work-bound room and owner-source readback verified",
+            requestedDestinations:["lighthouse"],
+          });
+          await centre({ action:"v4_claim", workId, actor });
+          await centre({ action:"v4_open_pass", workId, actor, kind:"WORK", destinations:["lighthouse"] });
+
+          const denied = await fetch(origin + "/hub/lighthouse", { redirect:"manual" });
+          const deniedBody = await denied.json().catch(() => null);
+          if (denied.status !== 403 || deniedBody?.code !== "LIGHTHOUSE_CENTRE_PASS_REQUIRED") {
+            throw new Error("LIGHTHOUSE_BYPASS_GUARD_FAILED");
+          }
+
+          const roomUrl = origin + "/hub/lighthouse?work_id=" + encodeURIComponent(workId) + "&actor=" + encodeURIComponent(actor);
+          const roomResponse = await fetch(roomUrl, { redirect:"manual" });
+          const roomHtml = await roomResponse.text();
+          const requiredText = [
+            "LIGHTHOUSE Control Room",
+            "Live Reality Board",
+            "LIGHTHOUSE Transfer Form",
+            "Report Inbox + LIGHTHOUSE Maintenance",
+            "Return Centre",
+            "No cross-room Service Path",
+          ];
+          if (!roomResponse.ok || requiredText.some(value => !roomHtml.includes(value))) {
+            throw new Error("LIGHTHOUSE_ROOM_RENDER_FAILED");
+          }
+
+          const realityResponse = await fetch(
+            origin + "/hub/api/lighthouse-control-port/owner-state?work_id=" + encodeURIComponent(workId) + "&actor=" + encodeURIComponent(actor),
+            {
+              method:"POST",
+              headers:{ "content-type":"application/json", "x-go-owner-passcode":ownerPasscode },
+              body:"{}",
+            },
+          );
+          const reality = await realityResponse.json().catch(() => null);
+          if (!realityResponse.ok || reality?.ok !== true) {
+            throw new Error("LIGHTHOUSE_OWNER_REALITY_FAILED:" + (reality?.code || realityResponse.status));
+          }
+
+          const returned = await centre({
+            action:"v4_return",
+            workId,
+            actor,
+            status:"CANCEL",
+            result:{ room:"LIGHTHOUSE_CONTROL_ROOM", outcome:"SMOKE_VERIFIED" },
+            evidence:[{ kind:"RUNTIME_SMOKE", reference:"github-actions:" + process.env.GITHUB_RUN_ID }],
+          });
+          if (returned?.work?.status !== "CANCEL" || returned?.work?.holder !== null || returned?.work?.pass?.state !== "CLOSED") {
+            throw new Error("LIGHTHOUSE_RETURN_CENTRE_FAILED");
+          }
+
+          console.log("LIGHTHOUSE Control Room runtime smoke passed.");
+          NODE
+
       - name: Verify deployed LIGHT MCP runtime
         shell: bash
         run: |
