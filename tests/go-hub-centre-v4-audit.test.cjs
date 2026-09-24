@@ -21,6 +21,19 @@ test("V4 create generates persistent checkpoint identity before global audit",as
   assert.equal(events[0].checkpointId,"CP-WORK-V4-AUDIT");
 });
 
+test("V4 create binds nested Work to routing identity and rejects a conflicting identity",async()=>{
+  const {GoHubCentreState}=await import(moduleUrl+"?v4-routing-id="+Date.now());
+  const events=[];
+  const state=new GoHubCentreState({storage:new MemoryStorage()},{GO_HUB_GLOBAL_AUDIT:auditNamespace(events)});
+  const created=await call(state,{action:"v4_create",workId:"WORK-ROUTE",work:{name:"Nested",command:"check",expectedResult:"same identity"}});
+  assert.equal(created.body.work.workId,"WORK-ROUTE");
+  assert.equal(events[0].workId,"WORK-ROUTE");
+  const other=new GoHubCentreState({storage:new MemoryStorage()},{GO_HUB_GLOBAL_AUDIT:auditNamespace([])});
+  const conflict=await call(other,{action:"v4_create",workId:"WORK-ROUTE",work:{workId:"WORK-OTHER",name:"Nested",command:"check",expectedResult:"same identity"}});
+  assert.equal(conflict.status,409);
+  assert.equal(conflict.body.code,"CENTRE_IDENTITY_CONFLICT");
+});
+
 test("V4 load repairs pre-checkpoint Work and pending audit without losing the Work",async()=>{
   const {GoHubCentreState}=await import(moduleUrl+"?v4-audit-repair="+Date.now());
   const events=[];
