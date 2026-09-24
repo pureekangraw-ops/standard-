@@ -45,7 +45,7 @@ function relationView(result={}){
   return{type:result.reason,expected:clone(result.expected),observed:clone(result.observed),...(Array.isArray(result.missing)&&result.missing.length?{missing:clone(result.missing)}:{})};
 }
 async function probePoint(point,readValue,traceId,checkedAt){
-  const base={checkpointId:point.id||null,importantValue:point.importantValue||null,expected:clone(point.expected),source:point.source||null,ownerSource:point.ownerSource||null,traceId,checkedAt};
+  const base={checkpointId:point.id||null,importantValue:point.importantValue||null,expected:clone(point.expected),source:point.source||null,ownerSource:point.ownerSource||null,tags:clone(point.tags||[]),traceId,checkedAt};
   if(!point.id||!point.importantValue||!point.source||!point.probeAction)return{...base,status:"UNKNOWN",reason:"MAP_POINT_INCOMPLETE"};
   if(!SAFE.has(point.mode))return{...base,status:"BLOCKED",reason:"MUTATING_PROBE_FORBIDDEN"};
   try{
@@ -159,8 +159,9 @@ export function createMaintenanceV4({readValue=async()=>({available:false,reason
       if(action==="inspect")return json({status:"MAINTENANCE_READY",...work,projectId:state.projectId,servicePath:"ALL_GO_HUB_OWNED_AREAS",autoRepair:false,owner:"maintenance",mapReady:Boolean(stored?.routes?.length),mapSource:stored?.source||null,mapRoutes:stored?.routes?.length||0,lastProbe:clone(state.lastProbe),revision:Number(state.revision||0)});
 
       if(action==="inspect_map"){
-        if(incoming){state.map=clone(incoming);state.revision=Number(state.revision||0)+1;await storage.put(STATE_KEY,state);}
-        const map=incoming||stored||normalizeMap({});
+        const hasIncoming=Boolean(incoming?.routes?.length);
+        if(hasIncoming){state.map=clone(incoming);state.revision=Number(state.revision||0)+1;await storage.put(STATE_KEY,state);}
+        const map=hasIncoming?incoming:(stored||incoming||normalizeMap({}));
         return json({status:"MAP_READY",...work,projectId:state.projectId,map,revision:Number(state.revision||0),persisted:Boolean(state.map?.routes?.length)});
       }
 
