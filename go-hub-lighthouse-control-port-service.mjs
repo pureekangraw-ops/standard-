@@ -96,10 +96,10 @@ export function lighthouseControlPortOwnerPage() {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LIGHTHOUSE ↔ GO Hub</title>
+<title>LIGHTHOUSE Control Room</title>
 <style>
 :root{color-scheme:dark;font-family:system-ui,sans-serif;background:#0d1016;color:#eef2f7}
-body{margin:0}.wrap{max-width:920px;margin:0 auto;padding:28px 18px 60px}
+body{margin:0}.wrap{max-width:1120px;margin:0 auto;padding:28px 18px 60px}.status-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.status-tile{padding:14px;border:1px solid #343b48;border-radius:12px;background:#10141b}.status-tile span{display:block;font-size:.72rem;opacity:.62}.status-tile strong{display:block;margin-top:6px;overflow-wrap:anywhere}.room-rule{padding:12px 14px;border:1px solid #664;border-radius:12px;background:#1b1910}
 h1{margin:0 0 8px}.muted{opacity:.72}.card{margin-top:18px;padding:18px;border:1px solid #343b48;border-radius:16px;background:#151922}
 form,.grid{display:grid;gap:12px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 label{display:grid;gap:6px;font-size:.82rem}input,select,textarea,button{font:inherit}
@@ -109,12 +109,14 @@ textarea{resize:vertical}button{padding:11px 14px;border:0;border-radius:10px;fo
 .route{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
 .route div{padding:10px;border:1px solid #303745;border-radius:10px;min-width:0}.route span{display:block;font-size:.7rem;opacity:.62}.route strong{display:block;margin-top:4px;overflow-wrap:anywhere}
 .status{min-height:1.4em;margin:10px 0 0}.file{padding:10px;border:1px dashed #424b5b;border-radius:10px}
-@media(max-width:680px){.grid,.route{grid-template-columns:1fr}.buttons button{flex:1 1 100%}}
+@media(max-width:680px){.grid,.route,.status-grid{grid-template-columns:1fr}.buttons button{flex:1 1 100%}}
 </style>
 </head>
 <body><main class="wrap">
-<h1>LIGHTHOUSE ↔ GO Hub</h1>
-<p class="muted">Pair the device once, then use the Transfer Form to route structured data to the correct LIGHTHOUSE capability.</p>
+<h1>LIGHTHOUSE Control Room</h1>
+<p class="muted">Closed app-control room. Inspect LIGHTHOUSE reality, send app data, receive reports, and use LIGHTHOUSE-only diagnostics.</p>
+<p class="room-rule"><strong>Room rule:</strong> LIGHTHOUSE has one exit: Return Centre. External repair work never opens another room from here.</p>
+<section class="card"><h2>Live Reality Board</h2><div class="status-grid"><div class="status-tile"><span>Session</span><strong id="live-session">UNKNOWN</strong></div><div class="status-tile"><span>Revision</span><strong id="live-revision">UNKNOWN</strong></div><div class="status-tile"><span>Last seen</span><strong id="live-seen">UNKNOWN</strong></div><div class="status-tile"><span>Last report</span><strong id="live-report">UNKNOWN</strong></div></div><div class="buttons" style="margin-top:12px"><button class="secondary" id="refresh-reality" type="button">Refresh Reality</button><button class="secondary" id="return-centre" type="button">Return Centre</button></div><p id="reality-status" class="status"></p></section>
 
 <section class="card">
 <h2>Device pairing</h2>
@@ -128,7 +130,7 @@ textarea{resize:vertical}button{padding:11px 14px;border:0;border-radius:10px;fo
 </section>
 
 <section class="card">
-<h2>LIGHTHOUSE Transfer Form</h2>
+<h2>LIGHTHOUSE Transfer Form · Data Drop → LIGHTHOUSE</h2>
 <p class="muted">38 capabilities are shown. Read-only and device-secret capabilities stay visible but cannot be queued. Exported JSON carries the route metadata with the payload.</p>
 <form id="transfer">
 <div class="grid">
@@ -152,7 +154,13 @@ textarea{resize:vertical}button{padding:11px 14px;border:0;border-radius:10px;fo
 </form>
 </section>
 
+<section class="card"><h2>Report Inbox + LIGHTHOUSE Maintenance</h2><p class="muted">Returned app receipts/state belong here. Diagnostics are limited to LIGHTHOUSE: READ / PREFLIGHT / SAFE TEST. No cross-room Service Path and no auto-repair.</p><label>Latest report / diagnostic trace<textarea id="report-inbox" readonly rows="8">Refresh Reality to inspect the latest app state.</textarea></label></section>
+
 <script>
+const realityStatus=document.getElementById('reality-status');
+async function refreshReality(){realityStatus.textContent='Reading owner-source reality…';try{const r=await fetch('/hub/api/lighthouse-control-port/owner-state',{method:'POST',headers:{'content-type':'application/json','x-go-owner-passcode':document.getElementById('passcode')?.value||''},body:'{}'});const raw=await r.text();let b={};try{b=raw?JSON.parse(raw):{};}catch{throw new Error('REALITY_NON_JSON_'+r.status);}if(!r.ok)throw new Error(b.code||'REALITY_READ_FAILED');document.getElementById('live-session').textContent=b.session?.status||b.status||'UNKNOWN';document.getElementById('live-revision').textContent=String(b.board?.revision??b.revision??'UNKNOWN');document.getElementById('live-seen').textContent=b.session?.lastSeenAt||b.lastSeenAt||'UNKNOWN';document.getElementById('live-report').textContent=b.session?.lastReportAt||b.lastReportAt||'UNKNOWN';document.getElementById('report-inbox').value=JSON.stringify(b,null,2);realityStatus.textContent='Reality refreshed.';}catch(err){realityStatus.textContent=err.message||'REALITY_READ_FAILED';}}
+document.getElementById('refresh-reality').addEventListener('click',refreshReality);
+document.getElementById('return-centre').addEventListener('click',()=>{location.href='/hub/api/centre';});
 const TRANSFER_CONTRACT="lighthouse-transfer-v1";
 const catalog=${catalog};
 const pair=document.getElementById('pair'),bootstrap=document.getElementById('bootstrap'),pairStatus=document.getElementById('status');
@@ -268,6 +276,18 @@ export function createLighthouseControlPortHttpService({ namespace, ownerPasscod
       }
 
       if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405, cors || {});
+
+      if (url.pathname === `${LIGHTHOUSE_CONTROL_PORT_API_ROOT}/owner-state`) {
+        const configured = clean(ownerPasscode);
+        const supplied = clean(request.headers.get("x-go-owner-passcode"));
+        if (!configured) return json({ code:"OWNER_AUTH_NOT_CONFIGURED" }, 503);
+        if (!constantTimeEqual(supplied, configured)) return json({ code:"OWNER_AUTH_FAILED" }, 403);
+        try {
+          const latest = await sessions.latest();
+          const board = await sessions.latestBoard();
+          return json({ ok:true, session:latest?.session || latest || null, board:board?.board || null }, 200);
+        } catch (error) { return json({ code:clean(error?.message || "HUB_UNAVAILABLE") }, 503); }
+      }
 
       if (url.pathname === `${LIGHTHOUSE_CONTROL_PORT_API_ROOT}/owner-command`) {
         const configured = clean(ownerPasscode);
