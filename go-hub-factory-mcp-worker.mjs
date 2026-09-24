@@ -682,7 +682,6 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           boardRead:() => lighthouseControlPort.boardRead(),
           globalAudit,
         }),
-        speaker: ({ area, observed }) => broadcast.speaker({ area, observed }),
       });
       const artifactDelivery = createWorkflowArtifactService({ fetchImpl, token: env.GITHUB_TOKEN, drive });
       const runMutation = (env?.GO_HUB_CENTRE_STATE && env?.GO_HUB_GLOBAL_AUDIT)
@@ -832,6 +831,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           listWorkflowArtifacts: input => artifactDelivery.listArtifacts(input),
           archiveWorkflowArtifact: input => runMutation("artifact.archive_workflow", input, () => artifactDelivery.archiveArtifact(input)),
         }),
+        speaker: ({ area, observed }) => broadcast.speaker({ area, observed }),
       });
 
       return createMcpHandler({
