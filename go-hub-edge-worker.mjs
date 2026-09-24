@@ -24,6 +24,7 @@ export { GoHubGlobalAuditLog } from "./go-hub-global-audit.mjs";
 export { GoHubCounterState, GoHubCounterInboxState } from "./go-hub-counter.mjs";
 export { GoHubCounterDispatchState } from "./go-hub-counter-dispatcher.mjs";
 export { GoHubNotionLightState } from "./go-hub-notion-light.mjs";
+export { GoHubMaintenanceState } from "./go-hub-maintenance-state.mjs";
 export { LighthouseControlPortSessionRegistry } from "./go-hub-lighthouse-control-port-session.js";
 
 const CENTRE_API_ROOT = "/hub/api/centre";

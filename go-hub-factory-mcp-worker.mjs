@@ -6,6 +6,8 @@ import { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createFactoryControllerService } from "./go-hub-factory-controller.mjs";
 import { createFactoryActionService, createFactoryAutoService, createFactoryV4Service } from "./go-hub-factory-service.mjs";
 import { createMaintenanceService } from "./go-hub-maintenance.js";
+import { createMaintenanceRealityReader } from "./go-hub-maintenance-reader.mjs";
+import { createMaintenanceDurableStorage } from "./go-hub-maintenance-state.mjs";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { routeReadOnlyFastLane } from "./go-hub-city-route.js";
 import { createLighthouseControlPortMcpService } from "./go-hub-lighthouse-control-port-service.mjs";
@@ -618,19 +620,6 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const factoryV4 = env?.GO_HUB_FACTORY_STATE
         ? createFactoryV4Service({ binding: env.GO_HUB_FACTORY_STATE })
         : async () => json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
-      const maintenance = createMaintenanceService({
-        readValue: async point => {
-          const source = String(point?.source || "").trim();
-          const match = /^binding:(GO_HUB_CENTRE_STATE|GO_HUB_FACTORY_STATE|GO_HUB_COUNTER_STATE)$/.exec(source);
-          if (!match) return { available:false, reason:"MAINTENANCE_READER_UNAVAILABLE" };
-          const binding = match[1];
-          return {
-            available:true,
-            value:Boolean(env?.[binding]),
-            evidenceRef:"worker-binding://" + binding,
-          };
-        },
-      });
       const heimdallPass = async (input = {}) => centreLive.action({
         action: input.action === "open" ? "v4_open_pass" : "v4_return",
         workId: input.workId, checkpointId: input.checkpointId, actor: input.actor || input.holder,
@@ -674,11 +663,28 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         clientId: firstEnv(env, ["GOOGLE_WORKSPACE_CLIENT_ID", "GOOGLE_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_ID"]),
         clientSecret: firstEnv(env, ["GOOGLE_WORKSPACE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET", "GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_DRIVE_CLIENT_SECRET"]),
       });
+      let registry = null;
+      const maintenance = createMaintenanceService({
+        storage:createMaintenanceDurableStorage({ namespace:env?.GO_HUB_MAINTENANCE_STATE }),
+        readValue:createMaintenanceRealityReader({
+          env,
+          lifecycle,
+          registryRef:() => registry,
+          googleWorkspace,
+          drive,
+          linear,
+          observer,
+          lighthouseControlPort,
+          projectStatus,
+          boardRead:() => lighthouseControlPort.boardRead(),
+          globalAudit,
+        }),
+      });
       const artifactDelivery = createWorkflowArtifactService({ fetchImpl, token: env.GITHUB_TOKEN, drive });
       const runMutation = (env?.GO_HUB_CENTRE_STATE && env?.GO_HUB_GLOBAL_AUDIT)
         ? createGovernedMutationRunner({ centreLive, globalAudit })
         : async (_operation, _input, execute) => execute();
-      const registry = createMcpRegistry({
+      registry = createMcpRegistry({
         lifecycle: Object.freeze({
           ...lifecycle,
           createBranch: input => runMutation("github.create_branch", input, () => lifecycle.createBranch(input)),
@@ -726,7 +732,14 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
             if (response.ok) {
               const view = await response.clone().json().catch(() => null);
               if (view?.ok) {
-                try { await lighthouseControlPort.projectCentre(view); } catch {}
+                const projectionView = view?.v4 === true && view?.work?.workId
+                  ? {
+                      ...view,
+                      routingWorkId:String(input?.workId || "").trim() || null,
+                      canonicalWorkId:String(view.work.workId || "").trim() || null,
+                    }
+                  : view;
+                try { await lighthouseControlPort.projectCentre(projectionView); } catch {}
               }
             }
             return response;
