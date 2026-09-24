@@ -32,3 +32,20 @@ test("Maintenance reality reader reports unsupported sources as UNKNOWN-capable 
   assert.equal(result.available,false);
   assert.equal(result.reason,"MAINTENANCE_READER_UNAVAILABLE");
 });
+
+test("Maintenance reality reader can inspect the GO Hub broadcast station without changing the inspection map",async()=>{
+  const {createMaintenanceRealityReader}=await import(url+"?broadcast="+Date.now());
+  const broadcast={
+    current:async()=>response({ok:true,broadcast:{program:"GO_HUB_SYSTEM",version:"V5",hash:"h5",sourceRef:"owner://v5"}}),
+  };
+  const reader=createMaintenanceRealityReader({
+    env:{GO_HUB_BROADCAST_STATE:{}},
+    broadcast,
+  });
+  const binding=await reader({source:"binding:GO_HUB_BROADCAST_STATE",expected:true});
+  assert.equal(binding.value,true);
+  const current=await reader({source:"broadcast:current",expected:"V5"});
+  assert.equal(current.available,true);
+  assert.equal(current.value,"V5");
+  assert.equal(current.evidenceRef,"service://broadcast-current");
+});
