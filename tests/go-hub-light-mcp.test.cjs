@@ -129,6 +129,13 @@ test("LIGHT Centre read tools perform bounded read-only calls", async () => {
       return { fetch: async request => {
         const input = await request.json();
         inspectCalls += 1;
+        if (input.action === "v4_inspect") {
+          assert.deepEqual(input, { action:"v4_inspect", workId, checkpointId, returnAddress:checkpointId });
+          return new Response(JSON.stringify({ code:"unsupported Centre live action" }), {
+            status:400,
+            headers:{ "content-type":"application/json" },
+          });
+        }
         assert.deepEqual(input, { action:"inspect", workId, checkpointId, returnAddress:checkpointId });
         return new Response(JSON.stringify({
           ok:true,
@@ -177,7 +184,7 @@ test("LIGHT Centre read tools perform bounded read-only calls", async () => {
   const inspected = await call(2, "go_hub_centre_inspect", { workId, checkpointId });
   assert.equal(inspected.phase, "AWAY");
   assert.equal(inspected.work.workId, workId);
-  assert.equal(inspectCalls, 1);
+  assert.equal(inspectCalls, 2);
 
   const first = await call(3, "go_hub_centre_audit_history", { workId, afterSequence:0, limit:1 });
   assert.deepEqual(first.events.map(record => record.sequence), [2]);
