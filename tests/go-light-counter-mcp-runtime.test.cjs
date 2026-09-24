@@ -85,6 +85,9 @@ async function runtime() {
     async fetch(request) {
       const input = await request.json();
       centreCalls.push(input);
+      if (input.action === "v4_inspect") return new Response(JSON.stringify({
+        code:"unsupported Centre live action",
+      }), { status:400, headers:{ "content-type":"application/json" } });
       if (input.action === "inspect") return new Response(JSON.stringify({
         ok: true,
         workId: workContext.workId,

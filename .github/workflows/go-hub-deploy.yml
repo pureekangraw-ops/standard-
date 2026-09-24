@@ -211,7 +211,12 @@ jobs:
             name:"LIGHTHOUSE runtime smoke",
             command:"Verify closed LIGHTHOUSE Control Room",
             expectedResult:"Work-bound room and owner-source readback verified",
-            requestedDestinations:["lighthouse"],
+            requestedDestinations:["lighthouse","factory","counter"],
+            projectRefs:{
+              WORK_CENTRE:{ ref:workId, status:"ACTIVE", workspace:"Centre", destination:"destination://centre" },
+              FACTORY:{ ref:"FACTORY-" + workId, status:"ACTIVE", workspace:"Factory", destination:"destination://factory" },
+              MAINTENANCE:{ ref:"MAINTENANCE-" + workId, status:"ACTIVE", workspace:"Maintenance", destination:"destination://maintenance" },
+            },
           });
           if (created?.work?.checkpointId !== "CP-" + workId) {
             throw new Error("LIGHTHOUSE_CENTRE_CHECKPOINT_MISSING");
@@ -278,19 +283,18 @@ jobs:
             throw new Error("LIGHTHOUSE_SAME_WORK_REENTRY_FAILED");
           }
 
-          const cleanup = await centre({
+          const phaseReturn = await centre({
             action:"v4_return",
             workId,
             actor,
-            status:"CANCEL",
-            result:{ room:"LIGHTHOUSE_CONTROL_ROOM", outcome:"SMOKE_VERIFIED_AND_CLEANED" },
-            evidence:[{ kind:"RUNTIME_SMOKE", reference:"github-actions:" + process.env.GITHUB_RUN_ID + ":cleanup" }],
+            status:"OPEN",
+            result:{ room:"LIGHTHOUSE_CONTROL_ROOM", outcome:"LIGHTHOUSE_PHASE_VERIFIED" },
           });
-          if (cleanup?.work?.status !== "CANCEL" || cleanup?.work?.holder !== null || cleanup?.work?.pass?.state !== "CLOSED") {
-            throw new Error("LIGHTHOUSE_SMOKE_CLEANUP_FAILED");
+          if (phaseReturn?.work?.status !== "OPEN" || phaseReturn?.work?.holder !== null || phaseReturn?.work?.pass?.state !== "CLOSED") {
+            throw new Error("LIGHTHOUSE_PHASE_RETURN_OPEN_FAILED");
           }
 
-          console.log("LIGHTHOUSE Control Room runtime smoke passed: entry, reality, Return Centre OPEN, same-Work re-entry, cleanup.");
+          console.log("LIGHTHOUSE Control Room runtime smoke passed: entry, reality, Return Centre OPEN and same-Work re-entry; same Work left OPEN for V4 close-loop smoke.");
           NODE
 
       - name: Verify deployed LIGHT MCP runtime
@@ -365,6 +369,316 @@ jobs:
           console.log("GO Hub LIGHT MCP runtime smoke passed.");
           NODE
 
+
+      - name: Verify deployed GO Hub V4 close-loop runtime
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { createAccessToken } from "./go-hub-oauth.mjs";
+
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const cloudflareToken = process.env.CLOUDFLARE_API_TOKEN;
+          const signingKey = process.env.GOHUB_MASTER_KEY;
+          if (!accountId || !cloudflareToken || !signingKey) {
+            console.error("::error::V4 close-loop runtime smoke prerequisites are missing.");
+            process.exit(1);
+          }
+
+          const subdomainResponse = await fetch(
+            "https://api.cloudflare.com/client/v4/accounts/" + accountId + "/workers/subdomain",
+            { headers:{ authorization:"Bearer " + cloudflareToken } },
+          );
+          const subdomainPayload = await subdomainResponse.json().catch(() => null);
+          const subdomain = String(subdomainPayload?.result?.subdomain || "").trim();
+          if (!subdomainResponse.ok || !subdomain) throw new Error("V4_CLOSE_LOOP_SUBDOMAIN_UNAVAILABLE");
+
+          const origin = "https://go-hub." + subdomain + ".workers.dev";
+          const workId = "SMOKE-LIGHTHOUSE-" + process.env.GITHUB_RUN_ID + "-" + process.env.GITHUB_RUN_ATTEMPT;
+          const checkpointId = "CP-" + workId;
+          const actor = "GO";
+          const counterId = "COUNTER-V4-" + process.env.GITHUB_RUN_ID + "-" + process.env.GITHUB_RUN_ATTEMPT;
+          const ownerToken = await createAccessToken({
+            issuer:origin, signingKey, resource:origin + "/mcp", subject:"big", scope:"go-hub", ttlSeconds:600,
+          });
+          const lightToken = await createAccessToken({
+            issuer:origin, signingKey, resource:origin + "/mcp/light", subject:"light", scope:"go-hub-light", ttlSeconds:600,
+          });
+          const context = destination => ({
+            workId,
+            checkpointId,
+            returnAddress:checkpointId,
+            destination:"destination://" + destination,
+            task:"Verify GO Hub V4 production close-loop",
+            requestedResult:"V4 inspect, all Pass kinds, Factory, Maintenance, Counter/LIGHT, Project Board, Board projection and Return verified",
+            lensReference:"GO_HUB_V4_CUTOVER.json",
+          });
+          let rpcId = 10;
+          const mcp = async (path, token, name, args, { allowToolError=false, notionOrigin=false } = {}) => {
+            const headers = {
+              authorization:"Bearer " + token,
+              "content-type":"application/json",
+              accept:"application/json, text/event-stream",
+            };
+            if (notionOrigin) headers.origin = "https://app.notion.com";
+            const response = await fetch(origin + path, {
+              method:"POST",
+              headers,
+              body:JSON.stringify({
+                jsonrpc:"2.0",
+                id:rpcId++,
+                method:"tools/call",
+                params:{ name, arguments:args },
+              }),
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok || payload?.error) {
+              throw new Error(name + "_RPC_FAILED:" + (payload?.error?.message || response.status));
+            }
+            const tool = payload?.result;
+            const proof = tool?.structuredContent || {};
+            if (tool?.isError && !allowToolError) {
+              throw new Error(name + "_TOOL_FAILED:" + (proof?.code || JSON.stringify(proof)));
+            }
+            return { tool, proof };
+          };
+          const listTools = async () => {
+            const response = await fetch(origin + "/mcp", {
+              method:"POST",
+              headers:{
+                authorization:"Bearer " + ownerToken,
+                "content-type":"application/json",
+                accept:"application/json, text/event-stream",
+              },
+              body:JSON.stringify({ jsonrpc:"2.0", id:rpcId++, method:"tools/list", params:{} }),
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok || payload?.error) throw new Error("V4_TOOL_LIST_FAILED");
+            return (payload?.result?.tools || []).map(tool => tool?.name).filter(Boolean);
+          };
+          const centre = async body => {
+            const response = await fetch(origin + "/hub/api/centre/action", {
+              method:"POST",
+              headers:{ "content-type":"application/json" },
+              body:JSON.stringify(body),
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok || payload?.ok !== true) {
+              throw new Error("CENTRE_V4_CLOSE_LOOP_FAILED:" + (payload?.code || payload?.message || response.status));
+            }
+            return payload;
+          };
+
+          const names = await listTools();
+          const requiredTools = [
+            "go_hub_centre_live_action",
+            "go_hub_heimdall_pass",
+            "go_hub_v4_project_board",
+            "go_hub_factory_v4",
+            "go_hub_maintenance",
+            "go_hub_counter_create",
+            "go_hub_counter_pickup",
+            "go_hub_counter_answer",
+            "go_hub_counter_readback",
+            "go_hub_board_read",
+          ];
+          const legacyFactoryTools = [
+            "go_hub_factory_action",
+            "go_hub_factory_auto",
+            "go_hub_factory_ready_gate",
+            "go_hub_factory_foreman",
+          ];
+          const missing = requiredTools.filter(name => !names.includes(name));
+          const legacyExposed = legacyFactoryTools.filter(name => names.includes(name));
+          if (missing.length || legacyExposed.length) {
+            throw new Error("V4_MCP_SURFACE_MISMATCH missing=" + missing.join(",") + " legacy=" + legacyExposed.join(","));
+          }
+
+          let inspected = await mcp("/mcp", ownerToken, "go_hub_centre_live_action", {
+            action:"v4_inspect", workId, checkpointId,
+          });
+          if (inspected.proof?.work?.status !== "OPEN" || inspected.proof?.work?.workId !== workId) {
+            throw new Error("V4_INSPECT_LIVE_WORK_FAILED");
+          }
+
+          // WORK Pass + Factory V4.
+          await centre({ action:"v4_claim", workId, actor });
+          await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
+            action:"open", workId, checkpointId, actor, kind:"WORK",
+            destinations:["factory"], returnAddress:checkpointId, workContext:context("centre"),
+          });
+          inspected = await mcp("/mcp", ownerToken, "go_hub_centre_live_action", {
+            action:"v4_inspect", workId, checkpointId,
+          });
+          if (inspected.proof?.work?.pass?.kind !== "WORK" || inspected.proof?.work?.pass?.state !== "ACTIVE") {
+            throw new Error("WORK_PASS_RUNTIME_FAILED");
+          }
+          const liveWork = inspected.proof.work;
+          const factoryForm = {
+            projectId:"FACTORY-" + workId,
+            repository:"pureekangraw-ops/standard-",
+            branch:"main",
+            plan:"Verify deployed V4 Factory lifecycle against production runtime",
+            expectedOutput:"Production runtime Factory receipt",
+            outputType:"REF",
+            criticalChecklist:[{ id:"runtime", label:"Production runtime verified" }],
+          };
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", {
+            action:"start", workId, work:liveWork, form:factoryForm, workContext:context("factory"),
+          });
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", {
+            action:"record_reality", workId,
+            reality:{ repository:factoryForm.repository, branch:"main", headSha:process.env.GITHUB_SHA, lastUpdated:new Date().toISOString() },
+            workContext:context("factory"),
+          });
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", workId, workContext:context("factory") });
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", workId, result:{ built:true }, workContext:context("factory") });
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", workId, result:{ assembled:true }, workContext:context("factory") });
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", workId, result:{ deployment:"production" }, workContext:context("factory") });
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", {
+            action:"update_check", workId, checkId:"runtime", status:"PASS",
+            evidence:"github-actions:" + process.env.GITHUB_RUN_ID, workContext:context("factory"),
+          });
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", workId, workContext:context("factory") });
+          const factoryDone = await mcp("/mcp", ownerToken, "go_hub_factory_v4", {
+            action:"finish", workId, ref:"github-actions:" + process.env.GITHUB_RUN_ID + ":factory-v4",
+            summary:"Factory V4 production lifecycle verified", workContext:context("factory"),
+          });
+          if (factoryDone.proof?.task?.output?.type !== "REF" || factoryDone.proof?.task?.projectRef?.status !== "COMPLETE") {
+            throw new Error("FACTORY_V4_PRODUCTION_OUTPUT_FAILED");
+          }
+          const projectBoard = await mcp("/mcp", ownerToken, "go_hub_v4_project_board", { workId, checkpointId });
+          if (!Array.isArray(projectBoard.proof?.board) || !projectBoard.proof.board.some(item => item?.workId === workId)) {
+            throw new Error("V4_PROJECT_BOARD_RUNTIME_FAILED");
+          }
+          await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
+            action:"close", workId, checkpointId, actor, status:"OPEN",
+            result:{ pass:"WORK", factory:"PASS" }, workContext:context("centre"),
+          });
+
+          // READ Pass + GO -> LIGHT -> GO Counter close-loop.
+          await centre({ action:"v4_claim", workId, actor });
+          await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
+            action:"open", workId, checkpointId, actor, kind:"READ",
+            destinations:["counter"], returnAddress:checkpointId, workContext:context("centre"),
+          });
+          await mcp("/mcp", ownerToken, "go_hub_counter_create", {
+            counterId, mode:"HANDOFF",
+            request:"Acknowledge the production Counter/LIGHT close-loop smoke for the same Work.",
+            requestedResult:"LIGHT picks up, answers, and GO records readback on the same Counter ticket.",
+            authority:"READ_ONLY_SMOKE", target:"LIGHT",
+            context:{ source:"GO_HUB_V4_RUNTIME_SMOKE" },
+            workContext:context("counter"),
+          });
+          await mcp("/mcp/light", lightToken, "go_hub_counter_pickup", {
+            counterId, workContext:context("counter"),
+          }, { notionOrigin:true });
+          await mcp("/mcp/light", lightToken, "go_hub_counter_answer", {
+            counterId, status:"ANSWERED", answer:"Counter/LIGHT production close-loop passed.",
+            sources:["production://go-hub/counter"], evidence:[{ ref:"github-actions:" + process.env.GITHUB_RUN_ID + ":counter-light" }],
+            confidence:"HIGH", nextRoute:"GO", workContext:context("counter"),
+          }, { notionOrigin:true });
+          const readback = await mcp("/mcp", ownerToken, "go_hub_counter_readback", {
+            counterId, evidence:{ ref:"github-actions:" + process.env.GITHUB_RUN_ID + ":counter-readback" },
+            close:true, workContext:context("counter"),
+          });
+          if (readback.proof?.counter?.currentState !== "CLOSED") throw new Error("COUNTER_LIGHT_READBACK_NOT_CLOSED");
+          await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
+            action:"close", workId, checkpointId, actor, status:"OPEN",
+            result:{ pass:"READ", counterLight:"PASS" }, workContext:context("centre"),
+          });
+
+          // MAINTENANCE Pass + safe production binding probes.
+          await centre({ action:"v4_claim", workId, actor });
+          await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
+            action:"open", workId, checkpointId, actor, kind:"MAINTENANCE",
+            returnAddress:checkpointId, workContext:context("centre"),
+          });
+          inspected = await mcp("/mcp", ownerToken, "go_hub_centre_live_action", {
+            action:"v4_inspect", workId, checkpointId,
+          });
+          const maintenance = await mcp("/mcp", ownerToken, "go_hub_maintenance", {
+            action:"run_system_check",
+            work:inspected.proof.work,
+            projectId:"MAINTENANCE-" + workId,
+            map:{
+              source:"GO_V4_RUNTIME_CLOSE_LOOP",
+              routes:[{
+                id:"runtime-owner-bindings",
+                from:"go-hub",
+                to:"owner-sources",
+                checkpoints:[
+                  { id:"centre-binding", importantValue:"Centre Durable Store binding present", expected:true, source:"binding:GO_HUB_CENTRE_STATE", probeAction:"read", mode:"READ", ownerSource:"Cloudflare Worker binding" },
+                  { id:"factory-binding", importantValue:"Factory Durable Store binding present", expected:true, source:"binding:GO_HUB_FACTORY_STATE", probeAction:"read", mode:"READ", ownerSource:"Cloudflare Worker binding" },
+                  { id:"counter-binding", importantValue:"Counter Durable Store binding present", expected:true, source:"binding:GO_HUB_COUNTER_STATE", probeAction:"read", mode:"READ", ownerSource:"Cloudflare Worker binding" },
+                ],
+              }],
+            },
+            workContext:context("maintenance"),
+          });
+          if (maintenance.proof?.status !== "MAINTENANCE_CHECK_COMPLETE" ||
+              maintenance.proof?.autoRepair !== false ||
+              !Array.isArray(maintenance.proof?.routes) ||
+              maintenance.proof.routes.some(route => route?.status !== "PASS")) {
+            throw new Error("MAINTENANCE_V4_PRODUCTION_CHECK_FAILED:" + JSON.stringify(maintenance.proof));
+          }
+          await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
+            action:"close", workId, checkpointId, actor, status:"OPEN",
+            result:{ pass:"MAINTENANCE", maintenance:"PASS" }, workContext:context("centre"),
+          });
+
+          // EMERGENCY Pass age: expired must fail, bounded future pass must work.
+          await centre({ action:"v4_claim", workId, actor });
+          const expired = await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
+            action:"open", workId, checkpointId, actor, kind:"EMERGENCY", scope:["factory"],
+            expiresAt:new Date(Date.now() - 60_000).toISOString(),
+            reason:"Production expiry guard smoke", audit:{ source:"GO_V4_RUNTIME_SMOKE" },
+            returnAddress:checkpointId, workContext:context("centre"),
+          }, { allowToolError:true });
+          if (!expired.tool?.isError || !/expired/i.test(JSON.stringify(expired.proof))) {
+            throw new Error("EMERGENCY_EXPIRED_PASS_WAS_NOT_REJECTED:" + JSON.stringify(expired.proof));
+          }
+          const validExpiry = new Date(Date.now() + 5 * 60_000).toISOString();
+          await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
+            action:"open", workId, checkpointId, actor, kind:"EMERGENCY", scope:["factory"],
+            expiresAt:validExpiry, reason:"Bounded production recovery smoke", audit:{ source:"GO_V4_RUNTIME_SMOKE" },
+            returnAddress:checkpointId, workContext:context("centre"),
+          });
+          inspected = await mcp("/mcp", ownerToken, "go_hub_centre_live_action", {
+            action:"v4_inspect", workId, checkpointId,
+          });
+          if (inspected.proof?.work?.pass?.kind !== "EMERGENCY" ||
+              Date.parse(inspected.proof?.work?.pass?.expiresAt || "") <= Date.now()) {
+            throw new Error("EMERGENCY_LIVE_AGE_PROOF_FAILED");
+          }
+          await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
+            action:"close", workId, checkpointId, actor, status:"OPEN",
+            result:{ pass:"EMERGENCY", expiryGuard:"PASS" }, workContext:context("centre"),
+          });
+
+          // Final Return on the same Work, then force Board read-model reconciliation.
+          await centre({ action:"v4_claim", workId, actor });
+          await centre({ action:"v4_open_pass", workId, actor, kind:"WORK", destinations:["lighthouse"] });
+          const cleanup = await centre({
+            action:"v4_return", workId, actor, status:"CANCEL",
+            result:{ outcome:"V4_CLOSE_LOOP_RUNTIME_VERIFIED" },
+            evidence:[{ ref:"github-actions:" + process.env.GITHUB_RUN_ID + ":v4-close-loop" }],
+          });
+          if (cleanup?.work?.status !== "CANCEL" || cleanup?.work?.pass?.state !== "CLOSED") {
+            throw new Error("V4_FINAL_RETURN_CANCEL_FAILED");
+          }
+
+          const board = await mcp("/mcp", ownerToken, "go_hub_board_read", {});
+          const pin = (board.proof?.pins || []).find(item => item?.workId === workId);
+          if (!pin || pin.status !== "ARCHIVED") {
+            throw new Error("V4_BOARD_CANCEL_PROJECTION_FAILED:" + JSON.stringify(pin || null));
+          }
+          for (const staleWorkId of ["SMOKE-LIGHTHOUSE-35946205465-1", "SMOKE-LIGHTHOUSE-35967381162-1"]) {
+            const stale = (board.proof?.pins || []).find(item => item?.workId === staleWorkId);
+            if (stale?.status === "OPEN") throw new Error("STALE_BOARD_PIN_STILL_OPEN:" + staleWorkId);
+          }
+
+          console.log("GO Hub V4 production close-loop passed: v4_inspect, WORK/READ/MAINTENANCE/EMERGENCY Passes, Factory V4, Maintenance, Counter/LIGHT, Project Board, final Return and Centre-backed Board.");
+          NODE
 
       - name: Verify deployed Browser Observer Durable Object binding through MCP
         shell: bash

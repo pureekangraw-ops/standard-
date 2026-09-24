@@ -80,3 +80,23 @@ test("live edge routes Centre API into durable Centre binding", async () => {
   assert.equal(received.action, "inspect");
   assert.equal(delegateCalls, 0);
 });
+
+
+test("legacy direct Factory action route is quarantined instead of invoking old authority", async () => {
+  const { createEdgeWorkerHandler } = await import(edgeUrl + "?factory-quarantine=" + Date.now());
+  const handler = createEdgeWorkerHandler({
+    delegate:{ async fetch(){ return new Response("delegate"); } },
+    factoryMcp:{ async fetch(){ return new Response("mcp"); } },
+  });
+  const response = await handler.fetch(new Request("https://hub.example/hub/api/github-workspace/factory-action", {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    body:JSON.stringify({}),
+  }), {});
+  assert.equal(response.status, 410);
+  assert.deepEqual(await response.json(), {
+    code:"FACTORY_LEGACY_ROUTE_QUARANTINED",
+    compatibility:"SOURCE_ONLY",
+    nextTool:"go_hub_factory_v4",
+  });
+});

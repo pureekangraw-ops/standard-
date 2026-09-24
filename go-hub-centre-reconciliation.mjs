@@ -80,11 +80,19 @@ async function inspectCentre(centreNamespace, workId) {
   if (!stub || typeof stub.fetch !== "function") {
     throw new Error("CENTRE_STATE_NOT_CONFIGURED");
   }
-  return jsonBody(await stub.fetch(new Request("https://centre-state.internal/inspect", {
+  const call = action => stub.fetch(new Request("https://centre-state.internal/inspect", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action: "inspect", workId }),
-  })));
+    body: JSON.stringify({ action, workId }),
+  }));
+  const v4 = await call("v4_inspect");
+  if (v4.ok) return jsonBody(v4);
+  const payload = await v4.clone().json().catch(() => ({}));
+  const code = clean(payload?.code);
+  if (code !== "unsupported Centre live action" && code !== "unsupported Centre V4 action") {
+    return jsonBody(v4);
+  }
+  return jsonBody(await call("inspect"));
 }
 
 export function createCentreReconciliationService({
@@ -94,6 +102,8 @@ export function createCentreReconciliationService({
   projectCentre,
   now = () => Date.now(),
   limit = CENTRE_RECONCILIATION_LIMIT,
+  requireActiveSession = true,
+  seedWorkIds = [],
 } = {}) {
   if (!storage || typeof storage.get !== "function" || typeof storage.put !== "function") {
     throw new TypeError("Centre reconciliation storage required");
@@ -133,7 +143,8 @@ export function createCentreReconciliationService({
     async reconcile() {
       const startedAt = new Date(Number(now())).toISOString();
       const state = await load();
-      if (!sessionIsActive(state, now())) {
+      const active = sessionIsActive(state, now());
+      if (requireActiveSession && !active) {
         return {
           ok: true,
           active: false,
@@ -154,7 +165,10 @@ export function createCentreReconciliationService({
           reconciliation.cursor,
           validCursor(history.lastSequence),
         );
-        const workIds = workIdsFromHistory(history.events);
+        const workIds = [...new Set([
+          ...(Array.isArray(seedWorkIds) ? seedWorkIds.map(clean).filter(Boolean) : []),
+          ...workIdsFromHistory(history.events),
+        ])].slice(0, limit);
         const projected = [];
 
         for (const workId of workIds) {
@@ -184,7 +198,7 @@ export function createCentreReconciliationService({
         await save(next);
         return {
           ok: true,
-          active: true,
+          active,
           cursor: nextCursor,
           processedWorkIds: workIds,
           projected,

@@ -414,23 +414,11 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
         return response;
       }
       if (request.method === "POST" && url.pathname === FACTORY_ACTION_PATH) {
-        if (!env?.GITHUB_TOKEN) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
-        if (!env?.GO_HUB_FACTORY_STATE) return json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
-        try {
-          const body = await request.json().catch(() => null);
-          if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code: "INVALID_JSON" }, 400);
-          assertFactoryWorkContext(body.workContext);
-          const lifecycle = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
-          const factoryAction = createFactoryActionService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE });
-          return factoryAction({
-            taskId: body.taskId,
-            action: body.action,
-            input: body.input || {},
-            expectedRevision: body.expectedRevision,
-          });
-        } catch (error) {
-          return json({ code: error?.message || "FACTORY_ACTION_ERROR" }, error?.status || 400);
-        }
+        return json({
+          code:"FACTORY_LEGACY_ROUTE_QUARANTINED",
+          compatibility:"SOURCE_ONLY",
+          nextTool:"go_hub_factory_v4",
+        }, 410);
       }
       if (!isBrowserApiPath(url.pathname)) {
         return delegate.fetch(request, env);

@@ -92,9 +92,10 @@ function boardStatus(view = {}) {
   const phase = clean(view.phase).toUpperCase();
   const workStatus = clean(view.work?.status).toUpperCase();
   if (phase === "RECOVERY_REQUIRED" || clean(view.interruption?.state).toUpperCase() === "RECOVERY_REQUIRED") return "PENDING_RECOVERY";
-  if (workStatus === "RETURNED" || phase === "RETURNED") return "ARCHIVED";
+  if (["RETURNED", "COMPLETE", "CANCEL"].includes(workStatus) || phase === "RETURNED") return "ARCHIVED";
   if (phase === "VALIDATED" || phase === "REALITY") return "VERIFY";
-  if (workStatus === "AWAY" || phase === "AWAY" || phase === "EXECUTION_RESUME") return "DOING";
+  if (workStatus === "ON PROCESS" || workStatus === "AWAY" || phase === "AWAY" || phase === "EXECUTION_RESUME") return "DOING";
+  if (workStatus === "WAIT CONFIRM") return "WAIT_CONFIRM";
   return "OPEN";
 }
 
@@ -445,10 +446,10 @@ export class LighthouseControlPortSessionRegistry {
     }
   }
 
-  async alarm() {
+  async reconcileCentre({ requireActiveSession = true, seedWorkIds = [] } = {}) {
     const session = this.service();
     const auditNamespace = this.env?.GO_HUB_GLOBAL_AUDIT;
-    const reconciliation = createCentreReconciliationService({
+    return createCentreReconciliationService({
       storage:this.ctx.storage,
       audit:{
         async history(input) {
@@ -474,8 +475,13 @@ export class LighthouseControlPortSessionRegistry {
       },
       centreNamespace:this.env?.GO_HUB_CENTRE_STATE,
       projectCentre:view => session.projectCentre(view),
-    });
-    const result = await reconciliation.reconcile();
+      requireActiveSession,
+      seedWorkIds,
+    }).reconcile();
+  }
+
+  async alarm() {
+    const result = await this.reconcileCentre({ requireActiveSession:true });
     const state = await this.ctx.storage.get("state");
     if (centreSessionIsActive(state, Date.now())) {
       await this.scheduleReconciliation();
@@ -563,7 +569,15 @@ export class LighthouseControlPortSessionRegistry {
     if (url.pathname === "/state") return internalJson(await service.pushState(input));
     if (url.pathname === "/latest") return internalJson(await service.latest());
     if (url.pathname === "/board") return internalJson(await service.board(input));
-    if (url.pathname === "/board/latest") return internalJson(await service.boardLatest());
+    if (url.pathname === "/board/latest") {
+      const current = await service.boardLatest();
+      const seedWorkIds = Array.isArray(current?.board?.pins)
+        ? current.board.pins.map(pin => clean(pin?.workId)).filter(Boolean)
+        : [];
+      const reconciliation = await this.reconcileCentre({ requireActiveSession:false, seedWorkIds });
+      if (!reconciliation?.ok) return internalJson({ ok:false, code:reconciliation?.code || "CENTRE_RECONCILIATION_FAILED" }, 503);
+      return internalJson(await service.boardLatest());
+    }
     if (url.pathname === "/board/project") return internalJson(await service.projectCentre(input.view));
     if (url.pathname === "/stop") return internalJson(await service.stop(input));
     return internalJson({ ok:false, code:"NOT_FOUND" }, 404);

@@ -103,7 +103,7 @@ test("Factory action service prefers Durable Object fetch transport over RPC-sha
   assert.deepEqual(calls, ["GET /load", "POST /save"]);
 });
 
-test("MCP registry publishes strict high-level Factory action", async () => {
+test("MCP registry publishes durable Factory V4 and quarantines legacy Factory mutation tools", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?factory-tool=" + Date.now());
   const calls = [];
   const lifecycle = new Proxy({}, {
@@ -113,21 +113,23 @@ test("MCP registry publishes strict high-level Factory action", async () => {
     },
   });
   const registry = createMcpRegistry({ lifecycle });
-  const tool = registry.listTools().find(item => item.name === "go_hub_factory_action");
+  const tools = registry.listTools();
+  const tool = tools.find(item => item.name === "go_hub_factory_v4");
   assert.ok(tool);
   assert.equal(tool.annotations.readOnlyHint, false);
   assert.equal(tool.annotations.destructiveHint, false);
   assert.deepEqual(tool.inputSchema.properties.action.enum, [
-    "inspect", "create_branch", "write", "delete", "compare", "open_pr", "check_ci", "diagnose_failure",
+    "start", "inspect", "record_reality", "set_plan", "advance", "update_check", "safe_stop", "finish",
   ]);
-  await registry.callTool("go_hub_factory_action", {
-    taskId: "pureekangraw-ops:bridge-1",
-    action: "inspect",
-    input: { repository, intent: "bridge" },
-    expectedRevision: 0,
-    workContext: { workId: "WORK-84", checkpointId: "CENTRE-84", returnAddress: "CENTRE-84", destination: "destination://factory", task: "govern Factory action", requestedResult: "durable task authority", lensReference: "factory://unified" },
+  for (const legacy of ["go_hub_factory_action", "go_hub_factory_auto", "go_hub_factory_ready_gate", "go_hub_factory_foreman"]) {
+    assert.equal(tools.some(item => item.name === legacy), false);
+  }
+  await registry.callTool("go_hub_factory_v4", {
+    workId:"WORK-84",
+    action:"inspect",
+    workContext:{ workId:"WORK-84", checkpointId:"CENTRE-84", returnAddress:"CENTRE-84", destination:"destination://factory", task:"govern Factory V4", requestedResult:"durable V4 project authority", lensReference:"factory://v4" },
   });
-  assert.equal(calls.at(-1).name, "factoryAction");
+  assert.equal(calls.at(-1).name, "factoryV4");
 });
 
 test("browser workspace calls Factory action through same-origin gateway without Authorization", async () => {
@@ -161,14 +163,17 @@ test("browser workspace calls Factory action through same-origin gateway without
   });
 });
 
-test("current edge worker owns the governed Factory action route and durable binding", () => {
+test("current edge quarantines legacy Factory route while V4 keeps the existing durable binding", () => {
   const fs = require("node:fs");
   const edge = fs.readFileSync(path.join(root, "go-hub-edge-worker.mjs"), "utf8");
+  const worker = fs.readFileSync(path.join(root, "go-hub-factory-mcp-worker.mjs"), "utf8");
+  const service = fs.readFileSync(path.join(root, "go-hub-factory-service.mjs"), "utf8");
   const wrangler = fs.readFileSync(path.join(root, "wrangler.go-hub.jsonc"), "utf8");
   assert.match(edge, /FACTORY_ACTION_PATH = "\/hub\/api\/github-workspace\/factory-action"/);
-  assert.match(edge, /assertFactoryWorkContext/);
-  assert.match(edge, /GO_HUB_FACTORY_STATE/);
-  assert.match(edge, /GoHubFactoryState/);
+  assert.match(edge, /FACTORY_LEGACY_ROUTE_QUARANTINED/);
+  assert.match(edge, /nextTool:"go_hub_factory_v4"/);
+  assert.match(worker, /createFactoryV4Service/);
+  assert.match(service, /export function createFactoryV4Service/);
   assert.match(wrangler, /"name": "GO_HUB_FACTORY_STATE"/);
   assert.match(wrangler, /"class_name": "GoHubFactoryState"/);
   assert.match(wrangler, /"tag": "v2-factory-task-state"/);

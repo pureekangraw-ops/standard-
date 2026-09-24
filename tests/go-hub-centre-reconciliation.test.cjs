@@ -95,8 +95,8 @@ test("reconciliation advances cursor, filters CENTRE events, and merges duplicat
   assert.deepEqual(result.processedWorkIds, ["WORK-A", "WORK-B"]);
   assert.deepEqual(projected, ["WORK-A", "WORK-B"]);
   assert.deepEqual(inspected.map(item => item.body), [
-    { action:"inspect", workId:"WORK-A" },
-    { action:"inspect", workId:"WORK-B" },
+    { action:"v4_inspect", workId:"WORK-A" },
+    { action:"v4_inspect", workId:"WORK-B" },
   ]);
   assert.equal((await storage.get("state")).reconciliation.cursor, 9);
 });
@@ -243,4 +243,60 @@ test("deployed service re-arms an active pre-existing LIGHT session without rota
   }));
   assert.equal((await second.json()).ok, true);
   assert.equal(storage.alarms.length, 1);
+});
+
+
+test("reconciliation prefers V4 inspect and falls back only for legacy Centre work", async () => {
+  const { createCentreReconciliationService } = await import(moduleUrl + "?compat=" + Date.now());
+  const storage = new MemoryStorage(activeState(0));
+  const actions = [];
+  const service = createCentreReconciliationService({
+    storage,
+    now:() => 50_000,
+    audit:{ async history(){ return response({ ok:true, lastSequence:1, events:[{ sequence:1, event:{ type:"CENTRE_REVIEW", workId:"WORK-LEGACY" } }] }); } },
+    centreNamespace:{
+      getByName(workId) {
+        return { async fetch(request) {
+          const body = await request.json();
+          actions.push(body.action);
+          if (body.action === "v4_inspect") return response({ code:"unsupported Centre live action" }, 400);
+          return response({ ok:true, workId, checkpointId:"CP-LEGACY", phase:"REVIEW", work:{ workId, status:"READY", task:"Legacy", requestedResult:"Remain readable" } });
+        }};
+      },
+    },
+    projectCentre:async () => ({ ok:true, changed:true }),
+  });
+  const result = await service.reconcile();
+  assert.equal(result.ok, true);
+  assert.deepEqual(actions, ["v4_inspect", "inspect"]);
+});
+
+
+test("Board truth reconciliation can run without an active LIGHT session", async () => {
+  const { createCentreReconciliationService } = await import(moduleUrl + "?board-read=" + Date.now());
+  const state = activeState(0);
+  state.session = { active:false, expiresAt:0 };
+  const storage = new MemoryStorage(state);
+  const projected = [];
+  const service = createCentreReconciliationService({
+    storage,
+    requireActiveSession:false,
+    now:() => 50_000,
+    audit:{ async history(){ return response({ ok:true, lastSequence:7, events:[{ sequence:7, event:{ type:"CENTRE_V4_RETURN", workId:"WORK-CANCELLED" } }] }); } },
+    centreNamespace:{
+      getByName(workId) {
+        return { async fetch(request) {
+          const body = await request.json();
+          assert.equal(body.action, "v4_inspect");
+          return response({ ok:true, v4:true, work:{ workId, checkpointId:"CP-WORK-CANCELLED", name:"done", command:"smoke", expectedResult:"closed", requestedDestinations:["factory"], status:"CANCEL", holder:null, pass:null, createdAt:"2026-09-24T00:00:00Z", lastUpdated:"2026-09-24T00:01:00Z" } });
+        }};
+      },
+    },
+    projectCentre:async view => { projected.push(view.work.status); return { ok:true, changed:true }; },
+  });
+  const result = await service.reconcile();
+  assert.equal(result.ok, true);
+  assert.equal(result.active, false);
+  assert.deepEqual(result.processedWorkIds, ["WORK-CANCELLED"]);
+  assert.deepEqual(projected, ["CANCEL"]);
 });

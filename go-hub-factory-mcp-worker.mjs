@@ -4,7 +4,7 @@ import { createMcpHandler } from "./go-hub-mcp.mjs";
 import { createLinearService } from "./go-hub-linear-service.mjs";
 import { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createFactoryControllerService } from "./go-hub-factory-controller.mjs";
-import { createFactoryActionService, createFactoryAutoService } from "./go-hub-factory-service.mjs";
+import { createFactoryActionService, createFactoryAutoService, createFactoryV4Service } from "./go-hub-factory-service.mjs";
 import { createMaintenanceService } from "./go-hub-maintenance.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { routeReadOnlyFastLane } from "./go-hub-city-route.js";
@@ -118,6 +118,35 @@ function mutationEvent({ correlationId, stage, operation, workContext, result = 
 
 async function responsePayload(response) {
   return response.clone().json().catch(() => ({}));
+}
+
+const CENTRE_INSPECT_FALLBACK_CODES = new Set([
+  "unsupported Centre live action",
+  "unsupported Centre V4 action",
+]);
+
+async function inspectCentreCompat(centreLive, input = {}) {
+  const base = {
+    workId: input.workId,
+    checkpointId: input.checkpointId,
+    returnAddress: input.returnAddress || input.checkpointId,
+  };
+  const v4 = await centreLive.action({ action: "v4_inspect", ...base });
+  if (v4.ok) {
+    const payload = await responsePayload(v4);
+    if (payload?.v4 === true && payload?.work) {
+      return json({
+        ...payload,
+        workId: payload.work.workId,
+        checkpointId: payload.work.checkpointId,
+        returnAddress: payload.work.checkpointId,
+      });
+    }
+    return v4;
+  }
+  const payload = await responsePayload(v4);
+  if (!CENTRE_INSPECT_FALLBACK_CODES.has(workText(payload.code))) return v4;
+  return centreLive.action({ action: "inspect", ...base });
 }
 
 const CENTRE_AUDIT_PAGE_SIZE = 200;
@@ -337,11 +366,7 @@ export function createGovernedMutationRunner({ centreLive, globalAudit } = {}) {
     const workContext = input?.workContext;
     if (!workContext || typeof workContext !== "object") return json({ code: "WORK_CONTEXT_REQUIRED" }, 400);
 
-    const inspected = await centreLive.action({
-      action: "inspect",
-      workId: workContext.workId,
-      checkpointId: workContext.checkpointId,
-    });
+    const inspected = await inspectCentreCompat(centreLive, workContext);
     const centre = await responsePayload(inspected);
     if (!inspected.ok) return json({ code: centre.code || "CENTRE_WORK_UNAVAILABLE" }, inspected.status || 502);
     if (String(centre.checkpointId || "") !== String(workContext.checkpointId || "")) {
@@ -587,15 +612,23 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           }
         : oauthConfig;
       const github = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
-      const factory = createFactoryControllerService({ namespace: env?.HEPHAESTUS });
-      const lifecycle = createFactoryGuardedLifecycle({ lifecycle: github, factory });
-      const factoryAction = env?.GO_HUB_FACTORY_STATE
-        ? createFactoryActionService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE })
+      const lifecycle = github;
+      const factoryV4 = env?.GO_HUB_FACTORY_STATE
+        ? createFactoryV4Service({ binding: env.GO_HUB_FACTORY_STATE })
         : async () => json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
-      const factoryAuto = env?.GO_HUB_FACTORY_STATE
-        ? createFactoryAutoService({ lifecycle, binding: env.GO_HUB_FACTORY_STATE })
-        : async () => json({ code: "FACTORY_STATE_NOT_CONFIGURED" }, 503);
-      const maintenance = createMaintenanceService();
+      const maintenance = createMaintenanceService({
+        readValue: async point => {
+          const source = String(point?.source || "").trim();
+          const match = /^binding:(GO_HUB_CENTRE_STATE|GO_HUB_FACTORY_STATE|GO_HUB_COUNTER_STATE)$/.exec(source);
+          if (!match) return { available:false, reason:"MAINTENANCE_READER_UNAVAILABLE" };
+          const binding = match[1];
+          return {
+            available:true,
+            value:Boolean(env?.[binding]),
+            evidenceRef:"worker-binding://" + binding,
+          };
+        },
+      });
       const heimdallPass = async (input = {}) => centreLive.action({
         action: input.action === "open" ? "v4_open_pass" : "v4_return",
         workId: input.workId, checkpointId: input.checkpointId, actor: input.actor || input.holder,
@@ -652,23 +685,16 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           openPullRequest: input => runMutation("github.open_pull_request", input, () => lifecycle.openPullRequest(input)),
           rerunFailed: input => runMutation("github.rerun_failed", input, () => lifecycle.rerunFailed(input)),
           mergePullRequest: input => runMutation("github.merge_pull_request", input, () => lifecycle.mergePullRequest(input)),
-          factoryForeman: input => input.action === "state"
-            ? lifecycle.factoryForeman(input)
-            : runMutation("factory.foreman." + String(input.action || "unknown"), input, () => lifecycle.factoryForeman(input)),
-          factoryAction: input => runMutation("factory.action." + String(input.action || "unknown"), input, () => factoryAction(input)),
-          factoryAuto: input => runMutation("factory.auto", input, () => factoryAuto(input)),
+          factoryV4: input => input.action === "inspect"
+            ? factoryV4(input)
+            : runMutation("factory.v4." + String(input.action || "unknown"), input, () => factoryV4(input)),
           maintenance: input => input.work ? maintenance.maintenance(input) : json({ code: "MAINTENANCE_V4_WORK_REQUIRED" }, 409),
           heimdallPass: input => runMutation("heimdall.pass." + String(input.action || "unknown"), input, () => heimdallPass(input)),
           v4ProjectBoard: input => v4ProjectBoard(input),
           observerLatest: () => observer.latest(),
           observerScreenshot: input => observer.screenshot(input),
           auditHistory: input => globalAudit.history(input),
-          centreInspect: input => centreLive.action({
-            action: "inspect",
-            workId: input.workId,
-            checkpointId: input.checkpointId,
-            returnAddress: input.checkpointId,
-          }),
+          centreInspect: input => inspectCentreCompat(centreLive, input),
           centreAuditHistory: input => centreAuditHistory(globalAudit, input),
           centreLiveAction: async input => {
             const response = await centreLive.action(input);

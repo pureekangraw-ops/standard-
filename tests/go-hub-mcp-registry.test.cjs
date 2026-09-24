@@ -29,7 +29,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_inspect_repository", "go_hub_list_repositories", "go_hub_read_file",
     "go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file", "go_hub_compare_refs",
     "go_hub_open_pull_request", "go_hub_get_pull_request", "go_hub_get_ci",
-    "go_hub_get_failure_evidence", "go_hub_rerun_failed_jobs", "go_hub_factory_action", "go_hub_factory_auto", "go_hub_factory_ready_gate", "go_hub_factory_foreman",
+    "go_hub_get_failure_evidence", "go_hub_rerun_failed_jobs", "go_hub_factory_v4",
     "go_hub_maintenance", "go_hub_heimdall_pass", "go_hub_v4_project_board", "go_hub_merge_pull_request", "go_hub_get_workflow_runs", "go_hub_list_workflow_artifacts", "go_hub_archive_workflow_artifact", "go_hub_audit_history", "go_hub_centre_inspect", "go_hub_centre_audit_history", "go_hub_centre_live_action", "go_hub_centre_read_only_fast_lane",
     "go_hub_lighthouse_control_port_state", "go_hub_lighthouse_control_port_command", "go_hub_project_status", "go_hub_board_read", "go_hub_board_pin_route",
     "go_hub_counter_create", "go_hub_counter_inbox", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_pickup", "go_hub_counter_answer", "go_hub_counter_readback",
@@ -41,8 +41,9 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
-  assert.equal(tools.find(tool => tool.name === "go_hub_factory_ready_gate").annotations.readOnlyHint, false);
-  assert.equal(tools.find(tool => tool.name === "go_hub_factory_foreman").annotations.readOnlyHint, false);
+  assert.equal(tools.find(tool => tool.name === "go_hub_factory_v4").annotations.readOnlyHint, false);
+  assert.equal(tools.some(tool => tool.name === "go_hub_factory_ready_gate"), false);
+  assert.equal(tools.some(tool => tool.name === "go_hub_factory_foreman"), false);
   assert.equal(tools.find(tool => tool.name === "go_hub_maintenance").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_merge_pull_request").annotations.destructiveHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_list_workflow_artifacts").annotations.readOnlyHint, true);
@@ -79,16 +80,13 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
 
   for (const name of [
     "go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file",
-    "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_factory_action", "go_hub_factory_auto", "go_hub_factory_ready_gate",
+    "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_factory_v4",
     "go_hub_merge_pull_request", "go_hub_counter_create", "go_hub_counter_inbox", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_pickup", "go_hub_counter_answer", "go_hub_counter_readback",
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
     "go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item",
   ]) {
     assert.equal(tools.find(tool => tool.name === name).inputSchema.required.includes("workContext"), true, `${name} must require city work context`);
   }
-  const foremanSchema = tools.find(tool => tool.name === "go_hub_factory_foreman").inputSchema;
-  assert.equal(Object.hasOwn(foremanSchema.properties, "workContext"), true);
-  assert.equal(foremanSchema.required.includes("workContext"), false, "Foreman state inspection remains admin-readable");
   assert.equal(tools.find(tool => tool.name === "go_hub_inspect_repository").inputSchema.required.includes("workContext"), false);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_list_projects").inputSchema.required.includes("workContext"), false);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_get_issue").inputSchema.required.includes("workContext"), false);
@@ -100,9 +98,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_root").inputSchema.required.includes("workContext"), false);
 
   await registry.callTool("go_hub_inspect_repository", { repository: "pureekangraw-ops/standard-", branch: "main" });
-  await registry.callTool("go_hub_factory_foreman", { action: "state", repository: "pureekangraw-ops/standard-" });
   assert.equal(calls[0].name, "inspect");
-  assert.equal(calls[1].name, "factoryForeman");
 
   await registry.callTool("go_hub_counter_create", {
     counterId: "COUNTER-0001", request: "Find GO Hub source", context: {}, workContext: counterWorkContext,
@@ -165,8 +161,8 @@ test("city lifecycle tools require exact Centre identity and correct destination
   await assert.rejects(registry.callTool("go_hub_counter_get", {
     counterId: "COUNTER-0001", workContext: driveWorkContext,
   }), /destination/i);
-  await assert.rejects(registry.callTool("go_hub_factory_foreman", {
-    action: "request", repository: "pureekangraw-ops/standard-", slot: "assembly", goId: "go-a", jobId: "job-a",
+  await assert.rejects(registry.callTool("go_hub_factory_v4", {
+    action: "inspect", workId: "WORK-A",
   }), /workContext/);
   await assert.rejects(registry.callTool("go_hub_linear_create_issue", {
     title: "Wrong route", workContext: factoryWorkContext,
@@ -179,15 +175,17 @@ test("city lifecycle tools require exact Centre identity and correct destination
   assert.deepEqual(calls.at(-1).input.workContext, linearWorkContext);
 });
 
-test("merge schema requires active GO/job identity before work context", async () => {
+test("merge schema uses exact-head GitHub owner truth without Foreman identity", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?merge=" + Date.now());
-  const registry = createMcpRegistry({ lifecycle: { mergePullRequest: async () => new Response("{}") } });
-  await assert.rejects(registry.callTool("go_hub_merge_pull_request", {
-    repository: "pureekangraw-ops/standard-", number: 50, expectedHeadSha: "head-sha",
-  }), /missing required argument: goId/);
-  await assert.rejects(registry.callTool("go_hub_merge_pull_request", {
-    repository: "pureekangraw-ops/standard-", number: 50, expectedHeadSha: "head-sha", goId: "go-a",
-  }), /missing required argument: jobId/);
+  let received = null;
+  const registry = createMcpRegistry({ lifecycle: { mergePullRequest: async input => { received = input; return new Response(JSON.stringify({ ok:true }), { headers:{ "content-type":"application/json" } }); } } });
+  const result = await registry.callTool("go_hub_merge_pull_request", {
+    repository: "pureekangraw-ops/standard-", number: 50, expectedHeadSha: "head-sha", workContext: factoryWorkContext,
+  });
+  assert.equal(result.structuredContent.ok, true);
+  assert.equal(received.number, 50);
+  assert.equal(Object.hasOwn(received, "goId"), false);
+  assert.equal(Object.hasOwn(received, "jobId"), false);
 });
 
 test("registry preserves domain failures and rejects unknown tools", async () => {
