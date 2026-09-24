@@ -113,8 +113,10 @@ textarea{resize:vertical}button{padding:11px 14px;border:0;border-radius:10px;fo
 </style>
 </head>
 <body><main class="wrap">
-<h1>LIGHTHOUSE ↔ GO Hub</h1>
-<p class="muted">Pair the device once, then use the Transfer Form to route structured data to the correct LIGHTHOUSE capability.</p>
+<h1>LIGHTHOUSE Control Room</h1>
+<p class="muted">Closed app-control room. Inspect LIGHTHOUSE reality, send app data, receive reports, and use LIGHTHOUSE-only diagnostics.</p>
+<p class="room-rule"><strong>Room rule:</strong> LIGHTHOUSE has one exit: Return Centre. External repair work never opens another room from here.</p>
+<section class="card"><h2>Live Reality Board</h2><div class="status-grid"><div class="status-tile"><span>Session</span><strong id="live-session">UNKNOWN</strong></div><div class="status-tile"><span>Revision</span><strong id="live-revision">UNKNOWN</strong></div><div class="status-tile"><span>Last seen</span><strong id="live-seen">UNKNOWN</strong></div><div class="status-tile"><span>Last report</span><strong id="live-report">UNKNOWN</strong></div></div><div class="buttons" style="margin-top:12px"><button class="secondary" id="refresh-reality" type="button">Refresh Reality</button><button class="secondary" id="return-centre" type="button">Return Centre</button></div><p id="reality-status" class="status"></p></section>
 
 <section class="card">
 <h2>Device pairing</h2>
@@ -151,6 +153,8 @@ textarea{resize:vertical}button{padding:11px 14px;border:0;border-radius:10px;fo
 <p id="transfer-status" class="status"></p>
 </form>
 </section>
+
+<section class="card"><h2>Report Inbox + LIGHTHOUSE Maintenance</h2><p class="muted">Returned app receipts/state belong here. Diagnostics are limited to LIGHTHOUSE: READ / PREFLIGHT / SAFE TEST. No cross-room Service Path and no auto-repair.</p><label>Latest report / diagnostic trace<textarea id="report-inbox" readonly rows="8">Refresh Reality to inspect the latest app state.</textarea></label></section>
 
 <script>
 const realityStatus=document.getElementById('reality-status');
