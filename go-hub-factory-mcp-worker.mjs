@@ -46,6 +46,8 @@ const LIGHT_CODE_TOOL_NAMES = new Set([
   "go_hub_get_ci",
   "go_hub_get_failure_evidence",
   "go_hub_centre_inspect",
+  "go_hub_v4_project_board",
+  "go_hub_light_centre_v4_action",
   "go_hub_centre_audit_history",
   "go_hub_board_read",
   "go_hub_counter_create",
@@ -691,6 +693,21 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           maintenance: input => input.work ? maintenance.maintenance(input) : json({ code: "MAINTENANCE_V4_WORK_REQUIRED" }, 409),
           heimdallPass: input => runMutation("heimdall.pass." + String(input.action || "unknown"), input, () => heimdallPass(input)),
           v4ProjectBoard: input => v4ProjectBoard(input),
+          lightCentreV4Action: input => {
+            if (!lightMcp || !["v4_inspect", "v4_claim", "v4_wait", "v4_resume"].includes(input?.action)) {
+              return json({ code:"LIGHT_CENTRE_ACTION_NOT_ALLOWED" }, 403);
+            }
+            const routed = {
+              action:input.action,
+              workId:input.workId,
+              checkpointId:input.checkpointId,
+              returnAddress:input.checkpointId,
+              actor:"LIGHT",
+              ...(input.reason ? { reason:input.reason } : {}),
+              ...(input.resumeFrom ? { resumeFrom:input.resumeFrom } : {}),
+            };
+            return centreLive.action(routed);
+          },
           observerLatest: () => observer.latest(),
           observerScreenshot: input => observer.screenshot(input),
           auditHistory: input => globalAudit.history(input),
