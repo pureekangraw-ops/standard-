@@ -102,6 +102,7 @@ export function createCentreReconciliationService({
   projectCentre,
   now = () => Date.now(),
   limit = CENTRE_RECONCILIATION_LIMIT,
+  requireActiveSession = true,
 } = {}) {
   if (!storage || typeof storage.get !== "function" || typeof storage.put !== "function") {
     throw new TypeError("Centre reconciliation storage required");
@@ -141,7 +142,8 @@ export function createCentreReconciliationService({
     async reconcile() {
       const startedAt = new Date(Number(now())).toISOString();
       const state = await load();
-      if (!sessionIsActive(state, now())) {
+      const active = sessionIsActive(state, now());
+      if (requireActiveSession && !active) {
         return {
           ok: true,
           active: false,
@@ -192,7 +194,7 @@ export function createCentreReconciliationService({
         await save(next);
         return {
           ok: true,
-          active: true,
+          active,
           cursor: nextCursor,
           processedWorkIds: workIds,
           projected,
