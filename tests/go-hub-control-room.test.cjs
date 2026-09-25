@@ -33,7 +33,7 @@ test("Control Room proves exact deployment provenance only on an exact SHA match
 
 test("GO Control Room is GO-only and exposes only available controls", async () => {
   const { createGoControlRoom } = await mod();
-  const work = { workId: "W-1", checkpointId: "CP-1", status: "ON PROCESS", holder: "GO", pass: { state: "ACTIVE" } };
+  const work = { workId: "W-1", checkpointId: "CP-1", status: "ON PROCESS", holder: "LIGHT" };
   const room = createGoControlRoom({ work, actor: "GO", capabilities: [
     { id: "read-board", available: true },
     { id: "deploy", available: false },
