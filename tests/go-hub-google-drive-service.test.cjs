@@ -38,7 +38,7 @@ test("Drive service fails closed when auth is missing", async () => {
     configured: false,
     authMode: null,
     rootScopeConfigured: false,
-    operations: ["capabilities", "health", "diagnostics", "root", "get_item", "list_children", "read_document", "create_folder", "move_item", "rename_item", "upload_file_internal", "ensure_folder_path_internal"],
+    operations: ["capabilities", "health", "diagnostics", "root", "get_item", "list_children", "read_document", "create_folder", "move_item", "rename_item", "upload_file_internal", "download_file_internal", "ensure_folder_path_internal"],
     destructiveDeleteExposed: false,
     mutationReadbackRequired: true,
   });
@@ -428,4 +428,27 @@ test("Drive readDocument keeps Docs API as the primary structured source", async
   assert.equal(payload.document.source, "docs_api");
   assert.equal(payload.document.revisionId, "rev-1");
   assert.equal(payload.document.text, "hello");
+});
+
+test("Drive internal binary read returns governed file bytes", async () => {
+  const { createGoogleDriveService } = await load("binary");
+  const requests = [];
+  const fetchImpl = async (url, init = {}) => {
+    const current = String(url); requests.push({ url: current, init });
+    if (current.includes("alt=media")) {
+      assert.equal(init.headers.authorization, "Bearer access-secret");
+      return new Response(new Uint8Array([104, 105]), { headers: { "content-type": "image/png" } });
+    }
+    if (current.includes("/files/file-image?")) {
+      return new Response(JSON.stringify(driveFile({
+        id: "file-image", name: "proof.png", mimeType: "image/png", size: "2", parents: [],
+      })), { headers: { "content-type": "application/json" } });
+    }
+    throw new Error("unexpected " + current);
+  };
+  const service = createGoogleDriveService({ fetchImpl, accessToken: "access-secret" });
+  const result = await service.readFileBytes({ fileId: "file-image", maxBytes: 1024 });
+  assert.equal(result.item.name, "proof.png");
+  assert.deepEqual(Array.from(result.bytes), [104, 105]);
+  assert.equal(requests.length, 2);
 });

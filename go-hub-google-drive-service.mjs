@@ -340,6 +340,53 @@ export function createGoogleDriveService({
     return { item };
   }
 
+  async function downloadFileBytes(input = {}) {
+    const fileId = text(input.fileId);
+    const requestedMax = Number(input.maxBytes ?? 15 * 1024 * 1024);
+    const maxBytes = Number.isSafeInteger(requestedMax) && requestedMax >= 1 && requestedMax <= 20 * 1024 * 1024
+      ? requestedMax
+      : null;
+    if (!fileId || maxBytes == null) return { response: json({ code: "DRIVE_INVALID_INPUT" }, 400) };
+    const scoped = await isWithinScope(fileId);
+    if (!scoped.ok) return { response: scoped.response };
+    const meta = await getRaw(fileId);
+    if (meta.response) return meta;
+    const item = normalizeFile(meta.payload);
+    if (!item.id || item.trashed || item.mimeType === FOLDER_MIME ||
+        String(item.mimeType || "").startsWith("application/vnd.google-apps.")) {
+      return { response: json({ code: "DRIVE_BINARY_FILE_REQUIRED", mimeType: item.mimeType || null }, 409) };
+    }
+    const knownSize = Number(item.size);
+    if (Number.isFinite(knownSize) && knownSize > maxBytes) {
+      return { response: json({ code: "DRIVE_FILE_TOO_LARGE", size: item.size, maxBytes }, 413) };
+    }
+    const auth = await bearerToken();
+    if (auth.response) return { response: auth.response };
+    let upstream;
+    try {
+      upstream = await fetchImpl(
+        DRIVE_API_ROOT + "/files/" + encode(fileId) + "?alt=media&supportsAllDrives=true",
+        { headers: { authorization: "Bearer " + auth.token } },
+      );
+    } catch {
+      return { response: json({ code: "DRIVE_UPSTREAM_ERROR", category: "NETWORK_ERROR" }, 502) };
+    }
+    if (!upstream.ok) {
+      const payload = await upstream.json().catch(() => null);
+      return {
+        response: json({
+          code: "DRIVE_UPSTREAM_ERROR",
+          category: errorCategory(payload, upstream.status),
+        }, upstream.status === 401 || upstream.status === 403 ? 403 : 502),
+      };
+    }
+    const bytes = new Uint8Array(await upstream.arrayBuffer());
+    if (!bytes.byteLength || bytes.byteLength > maxBytes) {
+      return { response: json({ code: "DRIVE_FILE_TOO_LARGE", size: String(bytes.byteLength), maxBytes }, 413) };
+    }
+    return { item, bytes };
+  }
+
   async function uploadFileBytes(input = {}) {
     const parentId = text(input.parentId);
     const name = text(input.name);
@@ -427,6 +474,7 @@ export function createGoogleDriveService({
           "move_item",
           "rename_item",
           "upload_file_internal",
+          "download_file_internal",
           "ensure_folder_path_internal",
         ],
         destructiveDeleteExposed: false,
@@ -569,6 +617,8 @@ export function createGoogleDriveService({
     },
 
     async uploadFileBytes(input = {}) { return uploadFileBytes(input); },
+
+    async readFileBytes(input = {}) { return downloadFileBytes(input); },
 
     async ensureFolderPath(input = {}) {
       const result = await ensureFolderPath(input.path);

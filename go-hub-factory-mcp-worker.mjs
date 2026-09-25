@@ -644,6 +644,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         refreshToken: firstEnv(env, ["GOOGLE_WORKSPACE_REFRESH_TOKEN", "GOOGLE_REFRESH_TOKEN", "GOOGLE_OAUTH_REFRESH_TOKEN", "GOOGLE_DRIVE_REFRESH_TOKEN"]),
         clientId: firstEnv(env, ["GOOGLE_WORKSPACE_CLIENT_ID", "GOOGLE_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_ID"]),
         clientSecret: firstEnv(env, ["GOOGLE_WORKSPACE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET", "GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_DRIVE_CLIENT_SECRET"]),
+        driveService: drive,
       });
       let registry = null;
       const maintenance = createMaintenanceService({

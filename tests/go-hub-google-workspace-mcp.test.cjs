@@ -10,6 +10,7 @@ test("registry publishes governed Gmail and Calendar tools",async()=>{
  for(const name of ["go_hub_gmail_profile","go_hub_gmail_search","go_hub_gmail_get_message","go_hub_gmail_send_message","go_hub_calendar_list","go_hub_calendar_events","go_hub_calendar_create_event"]) assert.ok(names.includes(name),name);
  const gmailSend=tools.find(x=>x.name==="go_hub_gmail_send_message");
  assert.equal(gmailSend.inputSchema.properties.attachments.maxItems,5);
+ assert.equal(gmailSend.inputSchema.properties.driveAttachments.maxItems,5);
  assert.ok(gmailSend.inputSchema.properties.threadId);
  await assert.rejects(registry.callTool("go_hub_gmail_send_message",{to:"a@example.com",subject:"s",body:"b",workContext:{workId:"W",checkpointId:"C",returnAddress:"C",destination:"destination://factory",task:"t",requestedResult:"r",lensReference:"l"}}),/destination/i);
 });
@@ -31,18 +32,21 @@ test("gmail send and calendar create use expected Google endpoints",async()=>{
   if(String(url).includes("/calendar/v3/calendars/primary/events")) return new Response(JSON.stringify({id:"e1",summary:"Run"}),{headers:{"content-type":"application/json"}});
   throw new Error("unexpected "+url);
  };
- const svc=createGoogleWorkspaceService({fetchImpl,accessToken:"access-secret"});
+ const driveService={readFileBytes:async({fileId})=>({item:{id:fileId,name:"drive-proof.png",mimeType:"image/png"},bytes:new Uint8Array([104,105])})};
+ const svc=createGoogleWorkspaceService({fetchImpl,accessToken:"access-secret",driveService});
  const sent=await (await svc.gmailSendMessage({
   to:"a@example.com",subject:"Re: Hi",body:"Body",threadId:"thread-support",
   inReplyTo:"<latest@example.com>",references:"<older@example.com> <latest@example.com>",
   attachments:[{filename:"proof.jpg",mimeType:"image/jpeg",contentBase64:"aGVsbG8="}],
+  driveAttachments:[{fileId:"drive-1"}],
  })).json();
- assert.equal(sent.message.id,"m1"); assert.equal(sent.attachmentCount,1); assert.equal(sent.attachmentBytes,5);
+ assert.equal(sent.message.id,"m1"); assert.equal(sent.attachmentCount,2); assert.equal(sent.driveAttachmentCount,1); assert.equal(sent.attachmentBytes,7);
  const gmailPayload=JSON.parse(calls[0].init.body); assert.equal(gmailPayload.threadId,"thread-support");
  const padded=gmailPayload.raw.replace(/-/g,"+").replace(/_/g,"/") + "=".repeat((4-gmailPayload.raw.length%4)%4);
  const mime=Buffer.from(padded,"base64").toString("utf8");
  assert.match(mime,/Content-Type: multipart\/mixed/); assert.match(mime,/In-Reply-To: <latest@example\.com>/);
  assert.match(mime,/Content-Disposition: attachment; filename="proof\.jpg"/); assert.match(mime,/aGVsbG8=/);
+ assert.match(mime,/Content-Disposition: attachment; filename="drive-proof\.png"/); assert.match(mime,/aGk=/);
  assert.equal((await (await svc.calendarCreateEvent({summary:"Run",start:{dateTime:"2026-09-23T09:00:00+07:00"},end:{dateTime:"2026-09-23T10:00:00+07:00"}})).json()).event.id,"e1");
  assert.equal(calls.length,2); for(const call of calls) assert.equal(call.init.headers.authorization,"Bearer access-secret");
 });

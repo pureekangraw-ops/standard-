@@ -29,6 +29,12 @@ const gmailAttachment = {
   required: ["filename", "mimeType", "contentBase64"],
   additionalProperties: false,
 };
+const gmailDriveAttachment = {
+  type: "object",
+  properties: { fileId: str, filename: str, mimeType: str },
+  required: ["fileId"],
+  additionalProperties: false,
+};
 const schema = (properties, required = []) => ({ type: "object", properties, required, additionalProperties: false });
 const ann = (readOnlyHint, destructiveHint = false) => ({ readOnlyHint, destructiveHint });
 const def = (name, description, operation, inputSchema, annotations) => ({
@@ -88,7 +94,7 @@ const definitions = [
   def("go_hub_gmail_profile", "Read Gmail profile metadata.", "gmailProfile", schema({}), ann(true)),
   def("go_hub_gmail_search", "Search Gmail messages using Gmail query syntax.", "gmailSearch", schema({ query: { type: "string" }, maxResults: { type: "integer", minimum: 1, maximum: 100 }, pageToken: str }), ann(true)),
   def("go_hub_gmail_get_message", "Read one Gmail message.", "gmailGetMessage", schema({ messageId: str, format: { type: "string", enum: ["minimal","full","metadata"] } }, ["messageId"]), ann(true)),
-  def("go_hub_gmail_send_message", "Send one Gmail message, optionally as a threaded reply with bounded attachments, through governed mutation.", "gmailSendMessage", schema({ to: str, subject: str, body: str, threadId: str, inReplyTo: str, references: str, attachments: { type: "array", maxItems: 5, items: gmailAttachment }, workContext }, ["to","subject","body","workContext"]), ann(false)),
+  def("go_hub_gmail_send_message", "Send one Gmail message, optionally as a threaded reply with bounded attachments, through governed mutation.", "gmailSendMessage", schema({ to: str, subject: str, body: str, threadId: str, inReplyTo: str, references: str, attachments: { type: "array", maxItems: 5, items: gmailAttachment }, driveAttachments: { type: "array", maxItems: 5, items: gmailDriveAttachment }, workContext }, ["to","subject","body","workContext"]), ann(false)),
   def("go_hub_calendar_capabilities", "Inspect governed Google Calendar bridge configuration.", "calendarCapabilities", schema({}), ann(true)),
   def("go_hub_calendar_diagnostics", "Read sanitized Calendar OAuth diagnostics.", "calendarDiagnostics", schema({}), ann(true)),
   def("go_hub_calendar_list", "List visible Google calendars.", "calendarList", schema({ maxResults: { type: "integer", minimum: 1, maximum: 250 }, pageToken: str }), ann(true)),
