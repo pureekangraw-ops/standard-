@@ -77,6 +77,31 @@
       <div class="go-workbench__item"><span>Evidence</span><strong data-workbench-evidence>—</strong></div>
       <div class="go-workbench__item"><span>Next</span><strong data-workbench-next>—</strong></div>
     </section>
+    <section class="hub-panel control-room" data-control-room aria-labelledby="control-room-title">
+      <div class="operator-heading">
+        <div>
+          <p class="hub-kicker">GO-ONLY LIVE OBSERVATION</p>
+          <h2 id="control-room-title">GO Control Room</h2>
+        </div>
+        <strong data-control-room-status>UNKNOWN</strong>
+      </div>
+      <p>อ่านความจริงจาก Centre, Project, Factory, Board และ runtime โดยใช้ authority เดิม — ไม่มี permission layer ใหม่ และไม่เดาเมื่อหลักฐานไม่ครบ</p>
+      <dl class="operator-grid">
+        <div><dt>Work</dt><dd data-control-room-work>UNKNOWN</dd></div>
+        <div><dt>Checkpoint</dt><dd data-control-room-checkpoint>UNKNOWN</dd></div>
+        <div><dt>Centre</dt><dd data-control-room-centre>UNKNOWN</dd></div>
+        <div><dt>Project</dt><dd data-control-room-project>UNKNOWN</dd></div>
+        <div><dt>Factory V4</dt><dd data-control-room-factory>UNKNOWN</dd></div>
+        <div><dt>Board</dt><dd data-control-room-board>UNKNOWN</dd></div>
+        <div><dt>Cloudflare</dt><dd data-control-room-cloudflare>UNKNOWN</dd></div>
+        <div><dt>SHA provenance</dt><dd data-control-room-provenance>UNKNOWN</dd></div>
+      </dl>
+      <p class="counter-hint">Signals</p>
+      <ul class="hub-capabilities" data-control-room-signals><li>UNKNOWN: waiting for live observation</li></ul>
+      <p class="centre-error" data-control-room-error role="alert"></p>
+      <button type="button" data-control-room-refresh>Refresh observations</button>
+      <p class="counter-hint">Last observed: <span data-control-room-updated>UNKNOWN</span> · auto-refresh 30s</p>
+    </section>
     <section class="hub-panel code-operator" data-code-operator aria-labelledby="code-operator-title">
       <div class="operator-heading">
         <div>
