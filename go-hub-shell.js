@@ -42,20 +42,9 @@ const centreForm = document.querySelector("[data-centre-form]");
 const centreAction = document.querySelector("[data-centre-action]");
 const centreError = document.querySelector("[data-centre-error]");
 const centreTarget = document.querySelector("[data-centre-target]");
-const counterForm = document.querySelector("[data-counter-form]");
-const counterAskLight = document.querySelector("[data-counter-ask-light]");
-const counterResult = document.querySelector("[data-counter-result]");
-const counterState = document.querySelector("[data-counter-state]");
-const counterInboxRefresh = document.querySelector("[data-counter-inbox-refresh]");
-const counterInboxEmpty = document.querySelector("[data-counter-inbox-empty]");
-const counterInboxList = document.querySelector("[data-counter-inbox-list]");
 
 function field(name) {
   return centreForm?.elements.namedItem(name) || null;
-}
-
-function counterField(name) {
-  return counterForm?.elements.namedItem(name) || null;
 }
 
 function activeTarget() {
@@ -314,86 +303,6 @@ function renderCentre() {
   centreAction.disabled = centreWork.status === CENTRE_STATES.RETURNED;
 }
 
-function renderCounter() {
-  const workNode = document.querySelector("[data-counter-work]");
-  const checkpointNode = document.querySelector("[data-counter-checkpoint]");
-  const available = Boolean(centreWork?.workId && centreWork?.checkpointId);
-
-  if (workNode) workNode.textContent = centreWork?.workId || "—";
-  if (checkpointNode) checkpointNode.textContent = centreWork?.checkpointId || "—";
-  if (counterState) counterState.textContent = available ? "READY" : "UNAVAILABLE";
-  if (counterAskLight) counterAskLight.disabled = !available;
-  if (counterInboxRefresh) counterInboxRefresh.disabled = !available;
-}
-
-function renderCounterInbox(inbox = {}) {
-  if (!counterInboxList || !counterInboxEmpty) return;
-  const tickets = Array.isArray(inbox?.tickets) ? inbox.tickets : [];
-  counterInboxEmpty.hidden = tickets.length > 0;
-  counterInboxEmpty.textContent = tickets.length > 0 ? "" : "ไม่มีสายเข้าจาก LIGHT";
-
-  counterInboxList.replaceChildren(...tickets.map(ticket => {
-    const item = document.createElement("li");
-    item.className = "counter-inbox-ticket";
-
-    const summary = document.createElement("div");
-    const request = document.createElement("p");
-    request.textContent = ticket.request || ticket.counterId || "Incoming Counter";
-    const meta = document.createElement("small");
-    meta.textContent = `${ticket.counterId || "Counter"} · ${ticket.from || "LIGHT"} → ${ticket.to || "GO"}`;
-    summary.append(request, meta);
-
-    const pickup = document.createElement("button");
-    pickup.type = "button";
-    pickup.dataset.counterPickup = ticket.counterId || "";
-    pickup.textContent = "📞 รับสาย";
-    pickup.disabled = !ticket.counterId;
-
-    item.append(summary, pickup);
-    return item;
-  }));
-}
-
-async function refreshCounterInbox() {
-  if (!counterInboxEmpty || !counterInboxList) return;
-  if (!centreWork?.workId || !centreWork?.checkpointId) {
-    counterInboxList.replaceChildren();
-    counterInboxEmpty.hidden = false;
-    counterInboxEmpty.textContent = "Counter unavailable";
-    return;
-  }
-  if (counterInboxRefresh) counterInboxRefresh.disabled = true;
-  counterInboxEmpty.hidden = false;
-  counterInboxEmpty.textContent = "กำลังเช็กสายเข้า…";
-  try {
-    const body = await postCounterAction("/hub/api/counter/inbox", {
-      workId:centreWork.workId,
-      checkpointId:centreWork.checkpointId,
-      limit:10,
-    });
-    renderCounterInbox(body?.inbox || {});
-  } catch (error) {
-    counterInboxList.replaceChildren();
-    counterInboxEmpty.hidden = false;
-    counterInboxEmpty.textContent = error instanceof Error ? error.message : String(error);
-  } finally {
-    if (counterInboxRefresh) counterInboxRefresh.disabled = !centreWork?.workId;
-  }
-}
-
-async function postCounterAction(path, payload) {
-  const response = await fetch(path, {
-    method:"POST",
-    headers:{ "content-type":"application/json" },
-    body:JSON.stringify(payload),
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || body?.ok === false) {
-    throw new Error(body?.code || "COUNTER_ACTION_FAILED");
-  }
-  return body;
-}
-
 function render() {
   syncFactoryAccess();
   const capabilities = runtime.list();
@@ -419,71 +328,9 @@ function render() {
     }),
   );
   renderCentre();
-  renderCounter();
   renderWorkbench(taskSnapshot());
   renderOperator(taskSnapshot());
 }
-
-counterForm?.addEventListener("submit", async event => {
-  event.preventDefault();
-  if (!centreWork?.workId || !centreWork?.checkpointId) {
-    if (counterResult) counterResult.textContent = "COUNTER_WORK_UNAVAILABLE";
-    return;
-  }
-  if (counterResult) counterResult.textContent = "กำลังถาม LIGHT…";
-  if (counterState) counterState.textContent = "ASKING";
-  if (counterAskLight) counterAskLight.disabled = true;
-  try {
-    const body = await postCounterAction("/hub/api/counter/ask", {
-      workId:centreWork.workId,
-      checkpointId:centreWork.checkpointId,
-      request:counterField("counterRequest")?.value,
-      requestedResult:counterField("counterRequestedResult")?.value,
-      authority:centreWork.authority || "BIG",
-      projectRef:centreWork.targetId || "GO Hub",
-    });
-    const counterId = body?.counter?.counterId || "Counter";
-    const state = body?.counter?.currentState || body?.dispatch?.legs?.LIGHT?.status || "QUEUED";
-    const answer = String(body?.counter?.answer || "").trim();
-    if (counterResult) counterResult.textContent = answer ? `${counterId} · ${answer}` : `${counterId} · ${state}`;
-    if (counterState) counterState.textContent = state;
-  } catch (error) {
-    if (counterResult) counterResult.textContent = error instanceof Error ? error.message : String(error);
-    if (counterState) counterState.textContent = "ERROR";
-  } finally {
-    if (counterAskLight) counterAskLight.disabled = !centreWork?.workId;
-  }
-});
-
-counterInboxRefresh?.addEventListener("click", () => {
-  void refreshCounterInbox();
-});
-
-counterInboxList?.addEventListener("click", async event => {
-  const target = event.target instanceof Element ? event.target.closest("[data-counter-pickup]") : null;
-  if (!target) return;
-  const counterId = String(target.dataset.counterPickup || "").trim();
-  if (!counterId || !centreWork?.workId || !centreWork?.checkpointId) return;
-
-  target.disabled = true;
-  if (counterResult) counterResult.textContent = `📞 รับสาย ${counterId}…`;
-  if (counterState) counterState.textContent = "PICKING_UP";
-  try {
-    const body = await postCounterAction("/hub/api/counter/pickup", {
-      workId:centreWork.workId,
-      checkpointId:centreWork.checkpointId,
-      counterId,
-    });
-    const state = body?.counter?.currentState || "SEEN";
-    if (counterResult) counterResult.textContent = `📞 ${counterId} · รับสายแล้ว (${state})`;
-    if (counterState) counterState.textContent = "PICKED_UP";
-    await refreshCounterInbox();
-  } catch (error) {
-    target.disabled = false;
-    if (counterResult) counterResult.textContent = error instanceof Error ? error.message : String(error);
-    if (counterState) counterState.textContent = "ERROR";
-  }
-});
 
 centreForm?.addEventListener("submit", async event => {
   event.preventDefault();
@@ -542,4 +389,3 @@ centreForm?.addEventListener("submit", async event => {
 });
 
 render();
-void refreshCounterInbox();
