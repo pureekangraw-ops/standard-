@@ -85,6 +85,8 @@ function oauthClients(config) {
     clientSecret: String(client?.clientSecret || ""),
     redirectUris: [...new Set((Array.isArray(client?.redirectUris) ? client.redirectUris : [])
       .map(value => String(value || "").trim()).filter(Boolean))],
+    resources: [...new Set((Array.isArray(client?.resources) ? client.resources : [])
+      .map(value => String(value || "").trim()).filter(Boolean))],
     subject: String(client?.subject || "big"),
     scope: String(client?.scope || "go-hub"),
   })).filter(client => client.clientId && client.clientSecret && client.redirectUris.length);
@@ -111,6 +113,29 @@ function refreshTokenTtlSeconds(config) {
     : REFRESH_TOKEN_TTL_SECONDS;
 }
 
+function defaultResource(config) {
+  return String(config.resource || (config.issuer + "/mcp"));
+}
+
+function allowedClientResources(config, client) {
+  const resources = Array.isArray(client?.resources) ? client.resources.filter(Boolean) : [];
+  return resources.length ? resources : [defaultResource(config)];
+}
+
+function resolveClientResource(config, client, value) {
+  const fallback = defaultResource(config);
+  const resource = String(value || "").trim() || fallback;
+  if (!allowedClientResources(config, client).includes(resource)) throw new Error("invalid resource");
+  return resource;
+}
+
+function protectedResourceForMetadata(config, path) {
+  if (path === "/.well-known/oauth-protected-resource/mcp/light") {
+    return config.issuer + "/mcp/light";
+  }
+  return defaultResource(config);
+}
+
 function validateAuthorize(input, config) {
   if (input.get("response_type") !== "code") throw new Error("unsupported response type");
   const client = clientById(config, input.get("client_id"));
@@ -120,9 +145,7 @@ function validateAuthorize(input, config) {
   if (input.get("code_challenge_method") !== "S256") throw new Error("S256 PKCE is required");
   const challenge = String(input.get("code_challenge") || "");
   if (!/^[A-Za-z0-9_-]{43,128}$/.test(challenge)) throw new Error("invalid code challenge");
-  const expectedResource = config.issuer + "/mcp";
-  const resource = String(input.get("resource") || "").trim() || expectedResource;
-  if (resource !== expectedResource) throw new Error("invalid resource");
+  const resource = resolveClientResource(config, client, input.get("resource"));
   return {
     client,
     state: String(input.get("state") || ""),
@@ -188,9 +211,12 @@ export async function verifyAccessToken(request, config = {}) {
   if (!authorization.startsWith("Bearer ")) throw new Error("missing bearer token");
   const payload = await verifyEnvelope(authorization.slice(7), config.signingKey);
   const expectedResource = config.resource || config.issuer + "/mcp";
-  const acceptedIdentities = Array.isArray(config.clients) && config.clients.length
-    ? oauthClients(config).map(client => client.subject + "\u0000" + client.scope)
-    : [(config.subject || "big") + "\u0000" + (config.scope || "go-hub")];
+  const acceptedIdentities = Array.isArray(config.acceptedIdentities) && config.acceptedIdentities.length
+    ? config.acceptedIdentities.map(identity =>
+        String(identity?.subject || "") + "\u0000" + String(identity?.scope || ""))
+    : Array.isArray(config.clients) && config.clients.length
+      ? oauthClients(config).map(client => client.subject + "\u0000" + client.scope)
+      : [(config.subject || "big") + "\u0000" + (config.scope || "go-hub")];
   if (payload.type !== "access" || payload.iss !== config.issuer || payload.aud !== expectedResource ||
       !acceptedIdentities.includes(String(payload.sub) + "\u0000" + String(payload.scope))) {
     throw new Error("invalid access token");
@@ -212,10 +238,11 @@ function metadata(config, path) {
       authorization_response_iss_parameter_supported: true,
     });
   }
+  const resource = protectedResourceForMetadata(config, path);
   return json({
-    resource: config.issuer + "/mcp",
+    resource,
     authorization_servers: [config.issuer],
-    scopes_supported: ["go-hub"],
+    scopes_supported: resource.endsWith("/mcp/light") ? ["go-hub", "go-hub-light"] : ["go-hub"],
     bearer_methods_supported: ["header"],
   });
 }
@@ -259,6 +286,7 @@ export function createOAuthHandler(config = {}) {
     if (request.method === "GET" && [
       "/.well-known/oauth-authorization-server",
       "/.well-known/oauth-protected-resource",
+      "/.well-known/oauth-protected-resource/mcp/light",
     ].includes(url.pathname)) return metadata(config, url.pathname);
 
     try {
@@ -308,10 +336,13 @@ export function createOAuthHandler(config = {}) {
         }
 
         const form = await request.formData();
-        const expectedResource = config.issuer + "/mcp";
-        const resource = String(form.get("resource") || "").trim() || expectedResource;
+        let resource;
+        try {
+          resource = resolveClientResource(config, client, form.get("resource"));
+        } catch {
+          return json({ error: "invalid_grant" }, 400);
+        }
         const grantType = String(form.get("grant_type") || "");
-        if (resource !== expectedResource) return json({ error: "invalid_grant" }, 400);
 
         if (grantType === "refresh_token") {
           const refreshToken = String(form.get("refresh_token") || "");
