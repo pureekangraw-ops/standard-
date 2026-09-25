@@ -180,7 +180,7 @@ test("owner must choose a Work Target explicitly and LIGHTHOUSE is available wit
 });
 
 
-test("Counter surface is only handoff guidance, Ask LIGHT conversation, and Notion entry", () => {
+test("Counter surface is only handoff guidance, Notion AI catalog search, and Notion entry", () => {
   const source = read("go-hub-shell.js");
   for (const html of [read("index.html"), read("go-hub.html")]) {
     const start = html.indexOf('<section class="counter-panel"');
@@ -190,6 +190,7 @@ test("Counter surface is only handoff guidance, Ask LIGHT conversation, and Noti
     assert.match(counter, /data-counter-conversation/);
     assert.match(counter, /data-counter-ask-form/);
     assert.match(counter, /data-counter-question/);
+    assert.match(counter, /NOTION AI SEARCH — ค้นของในคลังเท่านั้น · ไม่ใช่ LIGHT/);
     assert.match(counter, /Enter = ถาม/);
     assert.match(counter, /เปิด GO × LIGHT ใน Notion/);
     assert.doesNotMatch(counter, /<button|data-counter-inbox|data-counter-pickup|Work<\/dt>|Checkpoint<\/dt>|🔔|🪞|Mirror/);
