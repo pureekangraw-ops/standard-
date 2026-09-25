@@ -273,6 +273,7 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
         const result = await notionLight.callback({
           code:url.searchParams.get("code"),
           state:url.searchParams.get("state"),
+          iss:url.searchParams.get("iss"),
           error:url.searchParams.get("error"),
           error_description:url.searchParams.get("error_description"),
         });
