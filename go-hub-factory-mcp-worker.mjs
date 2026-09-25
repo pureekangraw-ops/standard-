@@ -2,7 +2,7 @@ import { verifyAccessToken } from "./go-hub-oauth.mjs";
 import { createMcpRegistry } from "./go-hub-mcp-registry.mjs";
 import { createMcpHandler } from "./go-hub-mcp.mjs";
 import { createLinearService } from "./go-hub-linear-service.mjs";
-import { createCloudflareService } from "./go-hub-cloudflare-service.mjs";
+import { createCloudflareService } from "./go-hub-cloudflare-service.mjs";\nimport { createBridgeRegistry } from "./go-hub-bridge-registry.mjs";
 import { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createFactoryControllerService } from "./go-hub-factory-controller.mjs";
 import { createFactoryActionService, createFactoryAutoService, createFactoryV4Service } from "./go-hub-factory-service.mjs";
@@ -679,6 +679,19 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         token: env?.CLOUDFLARE_RUNTIME_API_TOKEN,
         accountId: env?.CLOUDFLARE_ACCOUNT_ID,
       });
+      const bridges = createBridgeRegistry({
+        providers:[{
+          id:"cloudflare",
+          label:"Cloudflare",
+          reads:{
+            capabilities: input => cloudflare.capabilities(input),
+            health: input => cloudflare.health(input),
+            list_workers: input => cloudflare.listWorkers(input),
+            inspect_worker: input => cloudflare.inspectWorker(input),
+          },
+          actions:{},
+        }],
+      });
       const observer = createObserverEvidenceService({ namespace: env?.OBSERVER_SESSIONS });
       const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
       const broadcast = createBroadcastService({ namespace: env?.GO_HUB_BROADCAST_STATE });
@@ -874,6 +887,13 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           linearGetIssue: input => linear.getIssue(input),
           linearCreateIssue: input => runMutation("linear.create_issue", input, () => linear.createIssue(input)),
           linearUpdateIssue: input => runMutation("linear.update_issue", input, () => linear.updateIssue(input)),
+          bridgeCatalog: () => bridges.catalog(),
+          bridgeRead: input => bridges.read(input),
+          bridgeAction: input => runMutation(
+            "bridge.action." + String(input?.bridgeId || "unknown") + "." + String(input?.operation || "unknown"),
+            input,
+            () => bridges.action(input),
+          ),
           cloudflareCapabilities: () => cloudflare.capabilities(),
           cloudflareHealth: () => cloudflare.health(),
           cloudflareListWorkers: () => cloudflare.listWorkers(),
