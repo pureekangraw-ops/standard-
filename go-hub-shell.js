@@ -42,11 +42,6 @@ const centreForm = document.querySelector("[data-centre-form]");
 const centreAction = document.querySelector("[data-centre-action]");
 const centreError = document.querySelector("[data-centre-error]");
 const centreTarget = document.querySelector("[data-centre-target]");
-const counterAskForm = document.querySelector("[data-counter-ask-form]");
-const counterQuestion = document.querySelector("[data-counter-question]");
-const counterConversation = document.querySelector("[data-counter-conversation]");
-const counterChatEmpty = document.querySelector("[data-counter-chat-empty]");
-const counterResult = document.querySelector("[data-counter-result]");
 
 function field(name) {
   return centreForm?.elements.namedItem(name) || null;
@@ -308,58 +303,6 @@ function renderCentre() {
   centreAction.disabled = centreWork.status === CENTRE_STATES.RETURNED;
 }
 
-function appendCounterMessage(actor, message) {
-  if (!counterConversation) return;
-  if (counterChatEmpty) counterChatEmpty.hidden = true;
-  const item = document.createElement("p");
-  item.className = "counter-message";
-  item.dataset.actor = actor;
-  const name = document.createElement("strong");
-  name.textContent = actor === "GO" ? "GO" : "LIGHT";
-  const body = document.createElement("span");
-  body.textContent = message;
-  item.append(name, body);
-  counterConversation.append(item);
-  counterConversation.scrollTop = counterConversation.scrollHeight;
-}
-
-async function askLight(question) {
-  const value = String(question || "").trim();
-  if (!value || !counterQuestion) return;
-  appendCounterMessage("GO", value);
-  counterQuestion.value = "";
-  counterQuestion.disabled = true;
-  if (counterResult) counterResult.textContent = "LIGHT กำลังค้นใน Notion…";
-  try {
-    const body = await postCounterAction("/hub/api/counter/ask", { question:value });
-    appendCounterMessage("LIGHT", String(body?.answer || "UNKNOWN"));
-    if (counterResult) {
-      const count = Number(body?.resultCount || body?.evidence?.length || 0);
-      counterResult.textContent = count > 0 ? `Notion AI · ${count} results` : String(body?.status || "UNKNOWN");
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    appendCounterMessage("LIGHT", "UNKNOWN — " + message);
-    if (counterResult) counterResult.textContent = message;
-  } finally {
-    counterQuestion.disabled = false;
-    counterQuestion.focus();
-  }
-}
-
-async function postCounterAction(path, payload) {
-  const response = await fetch(path, {
-    method:"POST",
-    headers:{ "content-type":"application/json" },
-    body:JSON.stringify(payload),
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || body?.ok === false) {
-    throw new Error(body?.code || "COUNTER_ACTION_FAILED");
-  }
-  return body;
-}
-
 function render() {
   syncFactoryAccess();
   const capabilities = runtime.list();
@@ -388,17 +331,6 @@ function render() {
   renderWorkbench(taskSnapshot());
   renderOperator(taskSnapshot());
 }
-
-counterAskForm?.addEventListener("submit", event => {
-  event.preventDefault();
-  void askLight(counterQuestion?.value);
-});
-
-counterQuestion?.addEventListener("keydown", event => {
-  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
-  event.preventDefault();
-  void askLight(counterQuestion.value);
-});
 
 centreForm?.addEventListener("submit", async event => {
   event.preventDefault();
