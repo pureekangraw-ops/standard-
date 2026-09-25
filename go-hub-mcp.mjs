@@ -20,7 +20,7 @@ function validMessage(message) {
     message.jsonrpc === "2.0" && typeof message.method === "string";
 }
 
-export function createMcpHandler({ registry, authenticate, issuer, allowedOrigins = [] } = {}) {
+export function createMcpHandler({ registry, authenticate, issuer, allowedOrigins = [], resourceMetadataUrl = null } = {}) {
   if (!registry || typeof authenticate !== "function" || !issuer) {
     throw new Error("MCP handler requires registry, authenticate, and issuer");
   }
@@ -42,8 +42,9 @@ export function createMcpHandler({ registry, authenticate, issuer, allowedOrigin
     try {
       await authenticate(request);
     } catch {
+      const metadataUrl = String(resourceMetadataUrl || (issuer + "/.well-known/oauth-protected-resource"));
       return json({ code: "UNAUTHORIZED" }, 401, {
-        "www-authenticate": `Bearer resource_metadata="${issuer}/.well-known/oauth-protected-resource"`,
+        "www-authenticate": `Bearer resource_metadata="${metadataUrl}"`,
       });
     }
 
