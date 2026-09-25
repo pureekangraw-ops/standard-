@@ -64,11 +64,84 @@ function base64Url(value) {
   let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
+const MAX_GMAIL_ATTACHMENTS = 5;
+const MAX_GMAIL_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+function safeHeader(value) {
+  const v = text(value);
+  return v && !/[\r\n]/.test(v) ? v : "";
+}
+function quotedHeaderValue(value) {
+  return String(value || "").replace(/[\\"]/g, "_").replace(/[\r\n]/g, "");
+}
+function attachmentBytes(base64) {
+  const compact = String(base64 || "").replace(/\s+/g, "");
+  if (!compact || !/^[A-Za-z0-9+/]*={0,2}$/.test(compact) || compact.length % 4 === 1) return null;
+  const padding = compact.endsWith("==") ? 2 : compact.endsWith("=") ? 1 : 0;
+  return { base64: compact, bytes: Math.floor(compact.length * 3 / 4) - padding };
+}
+function wrapBase64(value) {
+  return String(value || "").match(/.{1,76}/g)?.join("\r\n") || "";
+}
+function prepareAttachments(value) {
+  if (value == null) return { attachments: [], totalBytes: 0 };
+  if (!Array.isArray(value) || value.length > MAX_GMAIL_ATTACHMENTS) return null;
+  const attachments = [];
+  let totalBytes = 0;
+  for (const item of value) {
+    const filename = safeHeader(item?.filename);
+    const mimeType = safeHeader(item?.mimeType);
+    const encoded = attachmentBytes(item?.contentBase64);
+    if (!filename || !/^[A-Za-z0-9!#function base64Url(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}^_.+\/-]+\/[A-Za-z0-9!#function base64Url(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}^_.+\/-]+$/.test(mimeType) || !encoded) return null;
+    totalBytes += encoded.bytes;
+    if (totalBytes > MAX_GMAIL_ATTACHMENT_BYTES) return null;
+    attachments.push({ filename, mimeType, contentBase64: encoded.base64 });
+  }
+  return { attachments, totalBytes };
+}
+function buildRawEmail({ to, subject, body, attachments = [], inReplyTo = "", references = "" }) {
+  const headers = ["To: " + to, "Subject: " + subject, "MIME-Version: 1.0"];
+  if (inReplyTo) headers.push("In-Reply-To: " + inReplyTo);
+  if (references) headers.push("References: " + references);
+  if (!attachments.length) {
+    headers.push("Content-Type: text/plain; charset=UTF-8");
+    return headers.join("\r\n") + "\r\n\r\n" + body;
+  }
+  const boundary = "go-hub-" + crypto.randomUUID();
+  headers.push('Content-Type: multipart/mixed; boundary="' + boundary + '"');
+  const parts = [
+    "--" + boundary,
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    body,
+  ];
+  for (const attachment of attachments) {
+    const filename = quotedHeaderValue(attachment.filename);
+    parts.push(
+      "--" + boundary,
+      'Content-Type: ' + attachment.mimeType + '; name="' + filename + '"',
+      'Content-Disposition: attachment; filename="' + filename + '"',
+      "Content-Transfer-Encoding: base64",
+      "",
+      wrapBase64(attachment.contentBase64),
+    );
+  }
+  parts.push("--" + boundary + "--", "");
+  return headers.join("\r\n") + "\r\n\r\n" + parts.join("\r\n");
+}
 export function createGoogleWorkspaceService({ fetchImpl = fetch, accessToken, refreshToken, clientId, clientSecret } = {}) {
   const auth = createGoogleAuth({ fetchImpl, accessToken, refreshToken, clientId, clientSecret });
   return Object.freeze({
     async capabilities() {
-      return json({ configured: Boolean(auth.mode()), authMode: auth.mode(), gmail: ["profile","search","get_message","send_message"], calendar: ["list_calendars","list_events","create_event"], destructiveDeleteExposed: false });
+      return json({ configured: Boolean(auth.mode()), authMode: auth.mode(), gmail: ["profile","search","get_message","send_message","send_message_with_attachments"], gmailAttachmentLimits: { maxFiles: MAX_GMAIL_ATTACHMENTS, maxDecodedBytes: MAX_GMAIL_ATTACHMENT_BYTES }, calendar: ["list_calendars","list_events","create_event"], destructiveDeleteExposed: false });
     },
     async diagnostics() {
       return json({ configured: Boolean(auth.mode()), authMode: auth.mode(), scopes: auth.scopes(), scopeSource: auth.scopes().length ? "refresh_response" : "unavailable" });
@@ -90,11 +163,25 @@ export function createGoogleWorkspaceService({ fetchImpl = fetch, accessToken, r
       return json({ message: r.payload });
     },
     async gmailSendMessage(input = {}) {
-      const to = text(input.to), subject = text(input.subject), body = String(input.body || "");
-      if (!to || !subject || !body) return json({ code: "GMAIL_INVALID_INPUT" }, 400);
-      const raw = base64Url("To: " + to + "\r\nSubject: " + subject + "\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" + body);
-      const r = await request(fetchImpl, auth, GMAIL_ROOT, "/users/me/messages/send", { method: "POST", body: JSON.stringify({ raw }) }); if (r.response) return r.response;
-      return json({ message: { id: r.payload?.id || null, threadId: r.payload?.threadId || null }, readback: "ACCEPTED_BY_GMAIL" });
+      const to = safeHeader(input.to), subject = safeHeader(input.subject), body = String(input.body || "");
+      const threadId = safeHeader(input.threadId), inReplyTo = safeHeader(input.inReplyTo), references = safeHeader(input.references);
+      const prepared = prepareAttachments(input.attachments);
+      if (!to || !subject || !body || !prepared ||
+          (input.threadId != null && !threadId) ||
+          (input.inReplyTo != null && !inReplyTo) ||
+          (input.references != null && !references)) {
+        return json({ code: "GMAIL_INVALID_INPUT" }, 400);
+      }
+      const raw = base64Url(buildRawEmail({ to, subject, body, attachments: prepared.attachments, inReplyTo, references }));
+      const payload = { raw };
+      if (threadId) payload.threadId = threadId;
+      const r = await request(fetchImpl, auth, GMAIL_ROOT, "/users/me/messages/send", { method: "POST", body: JSON.stringify(payload) }); if (r.response) return r.response;
+      return json({
+        message: { id: r.payload?.id || null, threadId: r.payload?.threadId || null },
+        attachmentCount: prepared.attachments.length,
+        attachmentBytes: prepared.totalBytes,
+        readback: "ACCEPTED_BY_GMAIL",
+      });
     },
     async calendarList(input = {}) {
       const p = new URLSearchParams({ maxResults: String(Math.min(Math.max(Number(input.maxResults || 100),1),250)) }); if (text(input.pageToken)) p.set("pageToken", text(input.pageToken));
