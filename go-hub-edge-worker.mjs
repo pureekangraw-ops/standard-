@@ -361,7 +361,8 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
           namespace:env?.GO_HUB_COUNTER_DISPATCH_STATE,
           hubOrigin:url.origin,
         });
-        const lifecycle = createCounterDispatchLifecycle({ counter, dispatch });
+        const notionLight = createNotionLightService({ namespace:env?.GO_HUB_NOTION_LIGHT_STATE });
+        const lifecycle = createCounterDispatchLifecycle({ counter, dispatch, notionLight, hubOrigin:url.origin });
         const counterId = String(body.counterId || "").trim() || ("COUNTER-WEB-" + crypto.randomUUID());
         const ownership = centre.ownership && typeof centre.ownership === "object" ? centre.ownership : {};
         const workContext = {

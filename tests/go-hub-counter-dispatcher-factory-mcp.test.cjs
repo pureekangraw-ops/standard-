@@ -69,6 +69,90 @@ test("Factory MCP counter create surfaces Notion OAuth URL while LIGHT waits for
   assert.equal(payload.lightAuthorizationUrl, "https://notion.example/oauth");
 });
 
+test("Factory MCP lifecycle prepares Notion OAuth when Dispatcher only reports WAITING_AUTH", async () => {
+  const { createCounterDispatchLifecycle } = await import(moduleUrl + "?auth-fallback=" + Date.now());
+  const prepareCalls = [];
+  const lifecycle = createCounterDispatchLifecycle({
+    counter:{
+      create:async () => response({ ok:true, counter:counterState(), created:true }),
+      get:async () => response({ ok:true, counter:counterState() }),
+      seen:async () => response({ code:"unused" }, 500),
+      answer:async () => response({ code:"unused" }, 500),
+    },
+    dispatch:{
+      async open(input) {
+        return response({
+          ok:true,
+          dispatch:{
+            counterId:input.counterId,
+            workId:input.workId,
+            checkpointId:input.checkpointId,
+            legs:{ LIGHT:{ status:"WAITING_AUTH" }, GO:{ status:"IDLE" } },
+          },
+          authRequired:true,
+          authorizationUrl:null,
+        });
+      },
+      async get() { return response({ code:"DISPATCH_NOT_FOUND" }, 404); },
+      async answer() { return response({ code:"unused" }, 500); },
+    },
+    notionLight:{
+      async prepare(input) {
+        prepareCalls.push(input);
+        return response({ ok:true, authorizationUrl:"https://mcp.notion.com/authorize?state=fresh" });
+      },
+    },
+    hubOrigin:"https://go-hub.example",
+  });
+  const result = await lifecycle.create({});
+  const payload = await result.json();
+  assert.equal(result.status, 200);
+  assert.equal(payload.lightAuthRequired, true);
+  assert.equal(payload.lightAuthorizationUrl, "https://mcp.notion.com/authorize?state=fresh");
+  assert.deepEqual(prepareCalls, [{ hubOrigin:"https://go-hub.example" }]);
+});
+
+test("Factory MCP lifecycle surfaces Notion OAuth prepare failure instead of null-only auth", async () => {
+  const { createCounterDispatchLifecycle } = await import(moduleUrl + "?auth-fallback-error=" + Date.now());
+  const lifecycle = createCounterDispatchLifecycle({
+    counter:{
+      create:async () => response({ ok:true, counter:counterState(), created:true }),
+      get:async () => response({ ok:true, counter:counterState() }),
+      seen:async () => response({ code:"unused" }, 500),
+      answer:async () => response({ code:"unused" }, 500),
+    },
+    dispatch:{
+      async open(input) {
+        return response({
+          ok:true,
+          dispatch:{
+            counterId:input.counterId,
+            workId:input.workId,
+            checkpointId:input.checkpointId,
+            legs:{ LIGHT:{ status:"WAITING_AUTH" }, GO:{ status:"IDLE" } },
+          },
+          authRequired:true,
+        });
+      },
+      async get() { return response({ code:"DISPATCH_NOT_FOUND" }, 404); },
+      async answer() { return response({ code:"unused" }, 500); },
+    },
+    notionLight:{
+      async prepare() {
+        return response({ ok:false, code:"NOTION_MCP_CLIENT_REGISTRATION_FAILED" }, 502);
+      },
+    },
+    hubOrigin:"https://go-hub.example",
+  });
+  const result = await lifecycle.create({});
+  const payload = await result.json();
+  assert.equal(result.status, 200);
+  assert.equal(payload.lightAuthRequired, true);
+  assert.equal(payload.lightAuthorizationUrl, null);
+  assert.equal(payload.lightAuthPrepareCode, "NOTION_MCP_CLIENT_REGISTRATION_FAILED");
+  assert.equal(payload.lightAuthPrepareStatus, 502);
+});
+
 test("Factory MCP writes SEEN and ANSWERED when Dispatcher returns Notion AI Search result", async () => {
   const { createCounterDispatchLifecycle } = await import(moduleUrl + "?answer=" + Date.now());
   const calls = [];

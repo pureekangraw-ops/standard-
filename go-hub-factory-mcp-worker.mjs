@@ -20,6 +20,7 @@ import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
 import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
 import { createCounterService } from "./go-hub-counter.mjs";
 import { createCounterDispatchService } from "./go-hub-counter-dispatcher.mjs";
+import { createNotionLightService } from "./go-hub-notion-light.mjs";
 import { sealReadyGate } from "./go-hub-ready-gate.js";
 
 function json(payload, status = 200) {
@@ -195,7 +196,7 @@ async function centreAuditHistory(globalAudit, input = {}) {
   });
 }
 
-export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
+export function createCounterDispatchLifecycle({ counter, dispatch, notionLight = null, hubOrigin = null } = {}) {
   if (!counter || !dispatch) throw new Error("Counter and dispatch services are required");
 
   async function parsed(response) {
@@ -228,8 +229,32 @@ export function createCounterDispatchLifecycle({ counter, dispatch } = {}) {
       let dispatchPayload = await parsed(dispatchResponse);
       let dispatchCode = dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_FAILED");
 
+      const dispatchMode = String(state.mode || input.mode || "SEARCH").toUpperCase();
+      const lightState = dispatchPayload.dispatch?.legs?.LIGHT?.status || null;
+      const waitingForLightAuth =
+        dispatchMode === "SEARCH" &&
+        (dispatchPayload.authRequired === true || lightState === "WAITING_AUTH");
+      if (waitingForLightAuth && !dispatchPayload.authorizationUrl && notionLight && typeof notionLight.prepare === "function" && hubOrigin) {
+        const prepareResponse = await notionLight.prepare({ hubOrigin });
+        const prepared = await parsed(prepareResponse);
+        if (prepareResponse.ok && prepared?.authorizationUrl) {
+          dispatchPayload = {
+            ...dispatchPayload,
+            authRequired:true,
+            authorizationUrl:prepared.authorizationUrl,
+          };
+        } else {
+          dispatchPayload = {
+            ...dispatchPayload,
+            authRequired:true,
+            authPrepareCode:prepared?.code || "NOTION_LIGHT_OAUTH_PREPARE_FAILED",
+            authPrepareStatus:prepareResponse.status,
+          };
+        }
+      }
+
       let finalPayload = payload;
-      const mode = String(state.mode || input.mode || "SEARCH").toUpperCase();
+      const mode = dispatchMode;
       const lightAnswer = dispatchPayload.lightAnswer || dispatchPayload.dispatch?.lightResult || null;
       if (lightAnswer && mode === "SEARCH") {
         const identity = {
@@ -630,7 +655,8 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         namespace: env?.GO_HUB_COUNTER_DISPATCH_STATE,
         hubOrigin: url.origin,
       });
-      const counterDispatch = createCounterDispatchLifecycle({ counter, dispatch });
+      const notionLight = createNotionLightService({ namespace:env?.GO_HUB_NOTION_LIGHT_STATE });
+      const counterDispatch = createCounterDispatchLifecycle({ counter, dispatch, notionLight, hubOrigin:url.origin });
       const lighthouseControlPort = createLighthouseControlPortMcpService({ namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS });
       const projectStatus = createProjectStatusReadService({ lifecycle, factoryBinding:env?.GO_HUB_FACTORY_STATE });
       const boardPinRoute = createBoardPinRouteReadService();
