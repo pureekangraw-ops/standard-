@@ -329,7 +329,7 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
         if (!counterId) return json({ code:"COUNTER_ID_REQUIRED" }, 400);
         return counter.seen({ counterId, actor:"GO", workContext });
       }
-      if (url.pathname === `${COUNTER_API_ROOT}/handoff` || url.pathname === `${COUNTER_API_ROOT}/mirror`) {
+      if (url.pathname === `${COUNTER_API_ROOT}/ask` || url.pathname === `${COUNTER_API_ROOT}/handoff`) {
         if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405);
         const body = await request.json().catch(() => null);
         if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code:"INVALID_JSON" }, 400);
@@ -345,15 +345,6 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
         const centre = await inspected.clone().json().catch(() => ({}));
         if (String(centre?.work?.workId || "") !== workId) {
           return json({ code:"COUNTER_CENTRE_IDENTITY_MISMATCH" }, 409);
-        }
-
-        if (url.pathname === `${COUNTER_API_ROOT}/mirror`) {
-          return createNotionLightService({ namespace:env?.GO_HUB_NOTION_LIGHT_STATE }).ring({
-            bellType:"MIRROR_REFRESH",
-            pageId:env?.LIGHT_BELL_PAGE_ID,
-            workId,
-            checkpointId,
-          });
         }
 
         const requestText = String(body.request || "").trim();
@@ -382,7 +373,7 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
         };
         return lifecycle.create({
           counterId,
-          mode:"HANDOFF",
+          mode:url.pathname === `${COUNTER_API_ROOT}/ask` ? "SEARCH" : "HANDOFF",
           fromActor:"GO",
           toActor:"LIGHT",
           request:requestText,

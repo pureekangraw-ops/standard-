@@ -448,90 +448,13 @@ export class GoHubCounterDispatchState {
     let state = current;
 
     if ((state.mode || "SEARCH") === "HANDOFF" && !state.answer && target === actor(state.toActor, "LIGHT")) {
-      const config = endpoint(this.env, target);
-      if (!config.url) {
-        const namespace = target === "LIGHT" ? this.env?.GO_HUB_NOTION_LIGHT_STATE : null;
-        const bellPageId = target === "LIGHT" ? String(this.env?.LIGHT_BELL_PAGE_ID || "").trim() : "";
-        const notion = namespace && typeof namespace.getByName === "function"
-          ? namespace.getByName("notion-light-primary")
-          : null;
-        if (notion && typeof notion.fetch === "function" && bellPageId) {
-          if (state.bell?.status === "DELIVERED") {
-            return publicState(state, { targetConfigured:true, handoff:true, bell:true, idempotent:true });
-          }
-          const attempt = this.core.beginBellAttempt({ target }, state);
-          state = attempt.dispatch;
-          if (attempt.idempotent) return publicState(state, { handoff:true, bell:true });
-          await this.save(state);
-          try {
-            const response = await notion.fetch(new Request("https://notion-light.internal/ring", {
-              method:"POST",
-              headers:{ "content-type":"application/json" },
-              body:JSON.stringify({
-                action:"ring",
-                bellType:"LIGHT_HANDOFF",
-                pageId:bellPageId,
-                counterId:state.counterId,
-                workId:state.workId,
-                checkpointId:state.checkpointId,
-                originActor:state.fromActor,
-                targetActor:state.toActor,
-                requestedResult:state.requestedResult || "",
-                command:state.request,
-                returnAddress:state.workContext?.returnAddress || state.checkpointId,
-                evidence:"GO Hub Counter dispatch " + state.counterId,
-              }),
-            }));
-            const body = await response.json().catch(() => ({}));
-            if (!response.ok || body?.ok !== true) throw new Error(body?.code || "NOTION_LIGHT_BELL_FAILED");
-            const receipt = {
-              httpStatus:Number(response.status || 0),
-              receiptId:body.receiptId == null ? null : String(body.receiptId).slice(0, 160),
-              adapter:body.tool === "notion-create-pages" ? "notion-light-bell-inbox" : "notion-light-counter-bell",
-              mode:"HANDOFF",
-              pageId:body.pageId || null,
-              dataSourceId:body.dataSourceId || null,
-              signal:body.signal || null,
-            };
-            const deliveredBell = this.core.bellDelivered({ target, receipt }, state);
-            const waiting = this.core.rung({ target, receipt }, deliveredBell.dispatch);
-            await this.save(waiting.dispatch);
-            return publicState(waiting.dispatch, { targetConfigured:true, handoff:true, bell:true });
-          } catch (error) {
-            const bellFailure = this.core.bellFailed({ target, error:error?.message || "LIGHT_BELL_FAILED" }, state);
-            const waiting = this.core.waitingPickup({ target }, bellFailure.dispatch);
-            const next = waiting.dispatch;
-            next.legs[target].lastError = null;
-            await this.save(next);
-            await this.schedule(next.bell?.nextAttemptAt);
-            return publicState(next, { targetConfigured:true, handoff:true, bell:true, bellFailed:true });
-          }
-        }
-        const result = this.core.waitingPickup({ target }, state);
-        if (!result.idempotent) await this.save(result.dispatch);
-        return publicState(result.dispatch, { targetConfigured:false, handoff:true });
-      }
-      const attempt = this.core.beginAttempt({ target }, state);
-      state = attempt.dispatch;
-      if (attempt.idempotent) return publicState(state, { handoff:true });
-      await this.save(state);
-      try {
-        const response = await fetch(config.url, {
-          method:"POST",
-          headers:{ "content-type":"application/json", ...(config.bearer ? { authorization:"Bearer " + config.bearer } : {}) },
-          body:JSON.stringify(wakePayload(state, target)),
-        });
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error("WAKE_HTTP_" + response.status);
-        const delivered = this.core.delivered({ target, receipt:{ ...publicReceipt(response, body), adapter:target.toLowerCase() + "-counter-handoff-wake", mode:"HANDOFF" } }, state);
-        await this.save(delivered.dispatch);
-        return publicState(delivered.dispatch, { targetConfigured:true, handoff:true });
-      } catch (error) {
-        const result = this.core.failed({ target, error:error?.message || target + "_HANDOFF_WAKE_FAILED" }, state);
-        await this.save(result.dispatch);
-        await this.schedule(result.dispatch.legs[target].nextAttemptAt);
-        return publicState(result.dispatch, { handoff:true });
-      }
+      const result = this.core.waitingPickup({ target }, state);
+      if (!result.idempotent) await this.save(result.dispatch);
+      return publicState(result.dispatch, {
+        targetConfigured:true,
+        handoff:true,
+        triggerRequired:target === "LIGHT",
+      });
     }
 
     if (target === "LIGHT" && (state.mode || "SEARCH") === "MONITOR") {
