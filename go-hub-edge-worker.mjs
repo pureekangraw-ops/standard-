@@ -1,14 +1,12 @@
 import githubWorker, { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createBrowserInterface } from "./go-hub-browser-interface.js";
-import { createFactoryMcpWorker, createCounterDispatchLifecycle } from "./go-hub-factory-mcp-worker.mjs";
+import { createFactoryMcpWorker } from "./go-hub-factory-mcp-worker.mjs";
 import { createFactoryActionService } from "./go-hub-factory-service.mjs";
 import { createAccessToken } from "./go-hub-oauth.mjs";
 import { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
 import { createBroadcastService } from "./go-hub-broadcast-state.mjs";
 import { createNotionLightService } from "./go-hub-notion-light.mjs";
-import { createCounterService } from "./go-hub-counter.mjs";
-import { createCounterDispatchService } from "./go-hub-counter-dispatcher.mjs";
 import { createGoHubV4, CUTOVER_CONTRACT } from "./go-hub-v4-cutover.mjs";
 import {
   createLighthouseControlPortHttpService,
@@ -30,7 +28,6 @@ export { GoHubBroadcastState } from "./go-hub-broadcast-state.mjs";
 export { LighthouseControlPortSessionRegistry } from "./go-hub-lighthouse-control-port-session.js";
 
 const CENTRE_API_ROOT = "/hub/api/centre";
-const COUNTER_API_ROOT = "/hub/api/counter";
 const BROWSER_API_ROOT = "/hub/api/browser";
 const OBSERVER_API_ROOT = `${BROWSER_API_ROOT}/observer`;
 const FACTORY_ACTION_PATH = "/hub/api/github-workspace/factory-action";
@@ -280,114 +277,14 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
         const payload = await result.json().catch(() => ({}));
         if (!result.ok || payload?.ok !== true) {
           return new Response(
-            `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Notion connection failed</title></head><body><h1>Notion connection failed</h1><p>${String(payload?.code || "NOTION_LIGHT_OAUTH_FAILED")}</p><p>Return to ChatGPT and retry the same Counter ticket.</p></body></html>`,
+            `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Notion connection failed</title></head><body><h1>Notion connection failed</h1><p>${String(payload?.code || "NOTION_LIGHT_OAUTH_FAILED")}</p><p>Return to ChatGPT and continue the same Work.</p></body></html>`,
             { status:result.status || 400, headers:{ "content-type":"text/html; charset=utf-8", "cache-control":"no-store" } },
           );
         }
         return new Response(
-          `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Notion connected</title></head><body><h1>Notion connected ✅</h1><p>LIGHT is now connected to your Notion workspace.</p><p>You can return to ChatGPT. GO can retry the same Counter ticket.</p></body></html>`,
+          `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Notion connected</title></head><body><h1>Notion connected ✅</h1><p>LIGHT is now connected to your Notion workspace.</p><p>You can return to ChatGPT. GO can continue the same Work.</p></body></html>`,
           { status:200, headers:{ "content-type":"text/html; charset=utf-8", "cache-control":"no-store" } },
         );
-      }
-      if (url.pathname === `${COUNTER_API_ROOT}/inbox` || url.pathname === `${COUNTER_API_ROOT}/pickup`) {
-        if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405);
-        const body = await request.json().catch(() => null);
-        if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code:"INVALID_JSON" }, 400);
-
-        const workId = String(body.workId || "").trim();
-        const checkpointId = String(body.checkpointId || "").trim();
-        if (!workId) return json({ code:"COUNTER_WORK_REQUIRED" }, 400);
-        if (!checkpointId) return json({ code:"COUNTER_CHECKPOINT_REQUIRED" }, 400);
-
-        const centreLive = createCentreLiveService({ namespace:env?.GO_HUB_CENTRE_STATE });
-        const inspected = await centreLive.action({ action:"v4_inspect", workId });
-        if (!inspected.ok) return inspected;
-        const centre = await inspected.clone().json().catch(() => ({}));
-        if (String(centre?.work?.workId || "") !== workId) {
-          return json({ code:"COUNTER_CENTRE_IDENTITY_MISMATCH" }, 409);
-        }
-
-        const ownership = centre.ownership && typeof centre.ownership === "object" ? centre.ownership : {};
-        const workContext = {
-          workId,
-          checkpointId,
-          returnAddress:checkpointId,
-          ...(ownership.ownerId ? { ownerId:String(ownership.ownerId) } : {}),
-          ...(ownership.leaseId ? { leaseId:String(ownership.leaseId) } : {}),
-          ...(Number.isSafeInteger(ownership.revision) ? { ownershipRevision:ownership.revision } : {}),
-        };
-        const counter = createCounterService({
-          namespace:env?.GO_HUB_COUNTER_STATE,
-          inboxNamespace:env?.GO_HUB_COUNTER_INBOX,
-        });
-
-        if (url.pathname === `${COUNTER_API_ROOT}/inbox`) {
-          const limit = Math.min(Math.max(Number(body.limit || 10), 1), 50);
-          return counter.inbox({ actor:"GO", workContext, limit });
-        }
-
-        const counterId = String(body.counterId || "").trim();
-        if (!counterId) return json({ code:"COUNTER_ID_REQUIRED" }, 400);
-        return counter.seen({ counterId, actor:"GO", workContext });
-      }
-      if (url.pathname === `${COUNTER_API_ROOT}/ask` || url.pathname === `${COUNTER_API_ROOT}/handoff`) {
-        if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405);
-        const body = await request.json().catch(() => null);
-        if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code:"INVALID_JSON" }, 400);
-
-        const workId = String(body.workId || "").trim();
-        const checkpointId = String(body.checkpointId || "").trim();
-        if (!workId) return json({ code:"COUNTER_WORK_REQUIRED" }, 400);
-        if (!checkpointId) return json({ code:"COUNTER_CHECKPOINT_REQUIRED" }, 400);
-
-        const centreLive = createCentreLiveService({ namespace:env?.GO_HUB_CENTRE_STATE });
-        const inspected = await centreLive.action({ action:"v4_inspect", workId });
-        if (!inspected.ok) return inspected;
-        const centre = await inspected.clone().json().catch(() => ({}));
-        if (String(centre?.work?.workId || "") !== workId) {
-          return json({ code:"COUNTER_CENTRE_IDENTITY_MISMATCH" }, 409);
-        }
-
-        const requestText = String(body.request || "").trim();
-        const requestedResult = String(body.requestedResult || "").trim();
-        if (!requestText) return json({ code:"COUNTER_REQUEST_REQUIRED" }, 400);
-        if (!requestedResult) return json({ code:"COUNTER_REQUESTED_RESULT_REQUIRED" }, 400);
-
-        const counter = createCounterService({
-          namespace:env?.GO_HUB_COUNTER_STATE,
-          inboxNamespace:env?.GO_HUB_COUNTER_INBOX,
-        });
-        const dispatch = createCounterDispatchService({
-          namespace:env?.GO_HUB_COUNTER_DISPATCH_STATE,
-          hubOrigin:url.origin,
-        });
-        const notionLight = createNotionLightService({ namespace:env?.GO_HUB_NOTION_LIGHT_STATE });
-        const lifecycle = createCounterDispatchLifecycle({ counter, dispatch, notionLight, hubOrigin:url.origin });
-        const counterId = String(body.counterId || "").trim() || ("COUNTER-WEB-" + crypto.randomUUID());
-        const ownership = centre.ownership && typeof centre.ownership === "object" ? centre.ownership : {};
-        const workContext = {
-          workId,
-          checkpointId,
-          returnAddress:checkpointId,
-          ...(ownership.ownerId ? { ownerId:String(ownership.ownerId) } : {}),
-          ...(ownership.leaseId ? { leaseId:String(ownership.leaseId) } : {}),
-          ...(Number.isSafeInteger(ownership.revision) ? { ownershipRevision:ownership.revision } : {}),
-        };
-        return lifecycle.create({
-          counterId,
-          mode:url.pathname === `${COUNTER_API_ROOT}/ask` ? "SEARCH" : "HANDOFF",
-          fromActor:"GO",
-          toActor:"LIGHT",
-          request:requestText,
-          requestedResult,
-          authority:String(body.authority || "BIG"),
-          target:body.target == null ? null : String(body.target),
-          projectRef:body.projectRef == null ? "GO Hub" : String(body.projectRef),
-          workContext,
-          context:{ source:"GO Hub Counter panel" },
-          sourceHints:Array.isArray(body.sourceHints) ? body.sourceHints.map(String) : [],
-          doNotChange:["Do not create a new Work or Checkpoint"],
-        });
       }
       if (request.method === "GET" && url.pathname === "/hub/observer") {
         return observerOwnerPage();
