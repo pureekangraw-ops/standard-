@@ -12,7 +12,6 @@ const MAINTENANCE = "destination://maintenance";
 const DRIVE = "destination://drive";
 const GMAIL = "destination://gmail";
 const CALENDAR = "destination://calendar";
-const COUNTER = "destination://counter";
 const workContext = {
   type: "object",
   properties: {
@@ -76,13 +75,6 @@ const definitions = [
   def("go_hub_project_status", "Read normalized Project Status from current GitHub truth and optional Factory task truth.", "projectStatus", schema({ targetId: str, factoryTaskId: str }, ["targetId"]), ann(true)),
   def("go_hub_board_read", "Read authoritative GO Hub Board truth without mutation.", "boardRead", schema({}), ann(true)),
   def("go_hub_board_pin_route", "Resolve first-command Pin identity routing without mutating the Board.", "boardPinRoute", schema({ firstCommand: str, pin: obj }, ["firstCommand"]), ann(true)),
-  def("go_hub_counter_create", "Create one governed GO↔LIGHT Counter ticket. Authenticated MCP identity determines the sender; LIGHT creation is HANDOFF-only.", "counterCreate", schema({ counterId: str, mode: { type: "string", enum: ["SEARCH", "HANDOFF", "MONITOR"] }, request: str, requestedResult: str, authority: str, target: str, projectRef: str, context: obj, sourceHints: { type: "array", items: str }, doNotChange: { type: "array", items: str }, workContext }, ["counterId", "request", "workContext"]), ann(false)),
-  def("go_hub_counter_inbox", "List bounded pending HANDOFF Counter tickets addressed to the authenticated actor for the same WorkContext.", "counterInbox", schema({ limit: { type: "integer", minimum: 1, maximum: 50 }, workContext }, ["workContext"]), ann(true)),
-  def("go_hub_counter_get", "Read the current GO↔LIGHT Counter ticket and append-only event history.", "counterGet", schema({ counterId: str, workContext }, ["counterId", "workContext"]), ann(true)),
-  def("go_hub_counter_seen", "Mark one Counter ticket as seen by its authenticated recipient.", "counterSeen", schema({ counterId: str, workContext }, ["counterId", "workContext"]), ann(false)),
-  def("go_hub_counter_pickup", "Explicitly accept one incoming HANDOFF Counter ticket as its authenticated recipient. This is the user-facing pickup alias for the existing SEEN transition.", "counterPickup", schema({ counterId: str, workContext }, ["counterId", "workContext"]), ann(false)),
-  def("go_hub_counter_answer", "Write the authenticated recipient's bounded answer back to the same Counter ticket.", "counterAnswer", schema({ counterId: str, status: { type: "string", enum: ["ANSWERED", "WAIT", "UNKNOWN", "NEEDS_INPUT", "FAILED", "EXPIRED"] }, answer: str, sources: { type: "array", items: str }, evidence: { type: "array", items: obj }, confidence: { type: "string" }, nextRoute: { type: "string" }, workContext }, ["counterId", "status", "answer", "workContext"]), ann(false)),
-  def("go_hub_counter_readback", "Record the authenticated originator's readback on the same Counter ticket and close it by default.", "counterReadback", schema({ counterId: str, evidence: obj, close: { type: "boolean" }, workContext }, ["counterId", "evidence", "workContext"]), ann(false)),
   def("go_hub_observer_latest", "Read latest sanitized Browser Observer evidence.", "observerLatest", schema({}), ann(true)),
   def("go_hub_observer_screenshot", "Read one consented Browser Observer screenshot by ref.", "observerScreenshot", schema({ screenshotRef: str }, ["screenshotRef"]), ann(true)),
   def("go_hub_linear_list_projects", "List projects scoped to the configured Linear team.", "linearListProjects", schema({}), ann(true)),
@@ -119,7 +111,6 @@ const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linea
 const gmailMutationTools = new Set(["go_hub_gmail_send_message"]);
 const calendarMutationTools = new Set(["go_hub_calendar_create_event"]);
 const driveMutationTools = new Set(["go_hub_drive_create_folder", "go_hub_drive_upload_file", "go_hub_drive_move_item", "go_hub_drive_rename_item", "go_hub_archive_workflow_artifact"]);
-const counterTools = new Set(["go_hub_counter_create", "go_hub_counter_inbox", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_answer", "go_hub_counter_readback"]);
 
 function assertArgs(definition, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("invalid MCP tool arguments");
@@ -142,7 +133,7 @@ function assertWork(value, destination, { ownershipRequired = false } = {}) {
   if (String(value.checkpointId) !== String(value.returnAddress)) throw new Error("workContext Return Address must match Checkpoint ID");
   if (String(value.destination) !== destination) throw new Error("workContext destination must be " + destination);
   if (ownershipRequired && (!String(value.ownerId || "").trim() || !String(value.leaseId || "").trim() || !Number.isSafeInteger(value.ownershipRevision))) {
-    throw new Error("workContext ownership fields are required for Counter operations");
+    throw new Error("workContext ownership fields are required");
   }
 }
 
@@ -153,7 +144,6 @@ function assertLifecycle(name, args) {
   if (driveMutationTools.has(name)) assertWork(args.workContext, DRIVE);
   if (gmailMutationTools.has(name)) assertWork(args.workContext, GMAIL);
   if (calendarMutationTools.has(name)) assertWork(args.workContext, CALENDAR);
-  if (counterTools.has(name)) assertWork(args.workContext, COUNTER);
 }
 
 async function toolResult(response, broadcastReadback = null) {
