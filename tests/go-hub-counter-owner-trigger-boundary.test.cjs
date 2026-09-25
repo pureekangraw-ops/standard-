@@ -3,20 +3,33 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 
-test("Counter UI exposes Ask LIGHT without fake Bell or Mirror controls", () => {
+test("Counter UI is a thin Ask LIGHT conversation with no Bell, Mirror, inbox, pickup, or buttons", () => {
   const html = fs.readFileSync("go-hub.html", "utf8");
   const shell = fs.readFileSync("go-hub-shell.js", "utf8");
-  assert.match(html, /data-counter-ask-light/);
-  assert.match(html, />ถาม LIGHT</);
-  assert.doesNotMatch(html, /data-counter-light-bell|data-counter-mirror-bell|Magnificent Architect|อัพเดท Mirror|🔔|🪞/);
+  const start = html.indexOf('<section class="counter-panel"');
+  const end = html.indexOf('<section class="go-workbench"', start);
+  const counter = html.slice(start, end);
+
+  assert.match(counter, /SEND WORK TO LIGHT/);
+  assert.match(counter, /data-counter-conversation/);
+  assert.match(counter, /data-counter-question/);
+  assert.match(counter, /เปิด GO × LIGHT ใน Notion/);
+  assert.doesNotMatch(counter, /<button|data-counter-inbox|data-counter-pickup|data-counter-work|data-counter-checkpoint|🔔|🪞|Mirror/);
+
   assert.match(shell, /\/hub\/api\/counter\/ask/);
-  assert.doesNotMatch(shell, /\/hub\/api\/counter\/mirror|counterMirrorBell|counterLightBell|🔔|🪞/);
+  assert.match(shell, /event\.key !== "Enter"/);
+  assert.doesNotMatch(shell, /\/hub\/api\/counter\/mirror|counterMirrorBell|counterLightBell|refreshCounterInbox|counterInbox|🔔|🪞/);
 });
 
-test("Counter HTTP surface maps Ask to SEARCH and exposes no Mirror endpoint", () => {
+test("Counter Ask routes straight to Notion AI and does not enter Counter SEARCH state", () => {
   const edge = fs.readFileSync("go-hub-edge-worker.mjs", "utf8");
-  assert.match(edge, /COUNTER_API_ROOT}\/ask/);
-  assert.match(edge, /mode:url\.pathname === `\$\{COUNTER_API_ROOT\}\/ask` \? "SEARCH" : "HANDOFF"/);
+  const askStart = edge.indexOf('url.pathname === `${COUNTER_API_ROOT}\/ask`');
+  const handoffStart = edge.indexOf('url.pathname === `${COUNTER_API_ROOT}\/handoff`');
+  assert.ok(askStart >= 0 && handoffStart > askStart);
+  const ask = edge.slice(askStart, handoffStart);
+  assert.match(ask, /createNotionLightService/);
+  assert.match(ask, /\.search\(\{ query:question \}\)/);
+  assert.doesNotMatch(ask, /mode:"SEARCH"|v4_inspect|workId|checkpointId/);
   assert.doesNotMatch(edge, /COUNTER_API_ROOT}\/mirror/);
 });
 
