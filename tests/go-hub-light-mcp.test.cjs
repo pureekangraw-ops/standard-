@@ -495,3 +495,55 @@ test("LIGHT Cloudflare mirror is read-only and never exposes runtime secrets", a
   ]);
   assert.equal(inspected.secretValuesExposed, false);
 });
+
+
+test("LIGHT MCP advertises its own OAuth metadata and accepts Notion OAuth identity without widening tools", async () => {
+  const { createAccessToken } = await import(oauthUrl + "?light-notion-oauth-token=" + Date.now());
+  const { createFactoryMcpWorker } = await import(factoryUrl + "?light-notion-oauth=" + Date.now());
+  const worker = createFactoryMcpWorker({
+    fetchImpl: async () => { throw new Error("network should not be used for tools/list"); },
+  });
+  const env = {
+    GITHUB_TOKEN:"github-token",
+    GOHUB_MASTER_KEY:"master-secret",
+    GOHUB_OWNER_PASSCODE:"owner-passcode",
+    GOHUB_NOTION_CLIENT_SECRET:"notion-client-secret",
+  };
+
+  const unauthorized = await worker.fetch(new Request("https://hub.example/mcp/light", {
+    method:"POST",
+    headers:{ "content-type":"application/json", origin:"https://www.notion.so" },
+    body:JSON.stringify({ jsonrpc:"2.0", id:40, method:"tools/list", params:{} }),
+  }), env);
+  assert.equal(unauthorized.status, 401);
+  assert.equal(
+    unauthorized.headers.get("www-authenticate"),
+    'Bearer resource_metadata="https://hub.example/.well-known/oauth-protected-resource/mcp/light"',
+  );
+
+  const token = await createAccessToken({
+    issuer:"https://hub.example",
+    signingKey:"master-secret",
+    resource:"https://hub.example/mcp/light",
+    subject:"notion",
+    scope:"go-hub",
+    ttlSeconds:3600,
+  });
+  const response = await worker.fetch(new Request("https://hub.example/mcp/light", {
+    method:"POST",
+    headers:{
+      authorization:"Bearer " + token,
+      "content-type":"application/json",
+      origin:"https://www.notion.so",
+    },
+    body:JSON.stringify({ jsonrpc:"2.0", id:41, method:"tools/list", params:{} }),
+  }), env);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  const names = payload.result.tools.map(tool => tool.name);
+  assert.ok(names.includes("go_hub_centre_inspect"));
+  assert.ok(names.includes("go_hub_put_file"));
+  assert.equal(names.includes("go_hub_merge_pull_request"), false);
+  assert.equal(names.includes("go_hub_centre_live_action"), false);
+  assert.equal(names.includes("go_hub_maintenance"), false);
+});
