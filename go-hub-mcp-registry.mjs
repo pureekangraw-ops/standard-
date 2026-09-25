@@ -149,18 +149,29 @@ function speakerError(result) {
   return new Response(JSON.stringify(result), { status: 409, headers: { "content-type": "application/json; charset=utf-8" } });
 }
 
-export function createMcpRegistry({ lifecycle, speaker = null } = {}) {
+function withoutWorkContext(definition) {
+  const copy = structuredClone(definition);
+  if (!copy.inputSchema?.properties?.workContext) return copy;
+  delete copy.inputSchema.properties.workContext;
+  copy.inputSchema.required = (copy.inputSchema.required || []).filter(field => field !== "workContext");
+  return copy;
+}
+
+export function createMcpRegistry({ lifecycle, speaker = null, workContextOptionalTools = [] } = {}) {
   if (!lifecycle) throw new Error("lifecycle service is required");
-  const byName = new Map(definitions.map(item => [item.name, item]));
+  const optionalWorkContext = new Set(workContextOptionalTools);
+  const publishedDefinitions = definitions.map(item =>
+    optionalWorkContext.has(item.name) ? withoutWorkContext(item) : item);
+  const byName = new Map(publishedDefinitions.map(item => [item.name, item]));
   return Object.freeze({
     listTools() {
-      return definitions.map(({ operation, ...tool }) => structuredClone(tool));
+      return publishedDefinitions.map(({ operation, ...tool }) => structuredClone(tool));
     },
     async callTool(name, args = {}) {
       const definition = byName.get(name);
       if (!definition) throw new Error("unknown MCP tool: " + name);
       assertArgs(definition, args);
-      assertLifecycle(name, args);
+      if (!optionalWorkContext.has(name)) assertLifecycle(name, args);
       let broadcastReadback = null;
       if (typeof speaker === "function" && name !== "go_hub_broadcast_activate") {
         const heard = await speaker({ area: definition.operation, observed: args.broadcast || null });
