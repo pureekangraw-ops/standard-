@@ -180,25 +180,10 @@ test("owner must choose a Work Target explicitly and LIGHTHOUSE is available wit
 });
 
 
-test("Counter surface is only handoff guidance, Ask LIGHT conversation, and Notion entry", () => {
+test("Counter handoff surface is retired from both shell entry points", () => {
   const source = read("go-hub-shell.js");
   for (const html of [read("index.html"), read("go-hub.html")]) {
-    const start = html.indexOf('<section class="counter-panel"');
-    const end = html.indexOf('<section class="go-workbench"', start);
-    const counter = html.slice(start, end);
-    assert.match(counter, /SEND WORK TO LIGHT/);
-    assert.match(counter, /data-counter-conversation/);
-    assert.match(counter, /data-counter-ask-form/);
-    assert.match(counter, /data-counter-question/);
-    assert.match(counter, /Enter = ถาม/);
-    assert.match(counter, /เปิด GO × LIGHT ใน Notion/);
-    assert.doesNotMatch(counter, /<button|data-counter-inbox|data-counter-pickup|Work<\/dt>|Checkpoint<\/dt>|🔔|🪞|Mirror/);
+    assert.doesNotMatch(html, /data-counter|counterQuestion|SHARED COUNTER|SEND WORK TO LIGHT|ถาม LIGHT/);
   }
-  const start = source.indexOf('const counterAskForm');
-  const end = source.indexOf('centreForm?.addEventListener', start);
-  const counter = source.slice(start, end);
-  assert.match(counter, /\/hub\/api\/counter\/ask/);
-  assert.match(counter, /event\.key !== "Enter"/);
-  assert.match(counter, /event\.shiftKey/);
-  assert.doesNotMatch(counter, /\/hub\/api\/counter\/inbox|\/hub\/api\/counter\/pickup|refreshCounterInbox|counterInbox|centreWork\?\.workId/);
+  assert.doesNotMatch(source, /data-counter-|\/hub\/api\/counter|counterAskForm|counterQuestion|appendCounterMessage/);
 });
