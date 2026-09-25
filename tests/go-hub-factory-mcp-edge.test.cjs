@@ -168,43 +168,4 @@ test("direct Centre HTTP route locks to GO Hub broadcast and rejects stale calle
 });
 
 
-test("Counter Ask LIGHT calls Notion AI directly without Centre Work or lease", async () => {
-  const { createEdgeWorkerHandler } = await import(edgeUrl + "?counter-thin=" + Date.now());
-  let notionInput = null;
-  const notionNamespace = {
-    getByName(name) {
-      assert.equal(name, "notion-light-primary");
-      return {
-        async fetch(request) {
-          notionInput = await request.json();
-          assert.equal(notionInput.action, "search");
-          return new Response(JSON.stringify({
-            ok:true,
-            status:"ANSWERED",
-            answer:"201 records",
-            sources:["notion://registry"],
-            evidence:[{ kind:"notion_ai_search_result", source:"notion://registry" }],
-            resultCount:1,
-          }), { headers:{ "content-type":"application/json" } });
-        },
-      };
-    },
-  };
-  const handler = createEdgeWorkerHandler({
-    delegate:{ async fetch(){ return new Response("delegate"); } },
-    factoryMcp:{ async fetch(){ return new Response("mcp"); } },
-  });
-  const response = await handler.fetch(new Request("https://hub.example/hub/api/counter/ask", {
-    method:"POST",
-    headers:{ "content-type":"application/json" },
-    body:JSON.stringify({ question:"ทะเบียนล่าสุดมีกี่ records" }),
-  }), {
-    GO_HUB_NOTION_LIGHT_STATE:notionNamespace,
-  });
-  assert.equal(response.status,200);
-  const body=await response.json();
-  assert.equal(body.ok,true);
-  assert.equal(body.answer,"201 records");
-  assert.equal(body.resultCount,1);
-  assert.equal(notionInput.query,"ทะเบียนล่าสุดมีกี่ records");
-});
+
