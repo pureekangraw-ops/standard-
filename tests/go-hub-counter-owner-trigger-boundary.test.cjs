@@ -23,10 +23,12 @@ test("Counter UI is a thin Ask LIGHT conversation with no Bell, Mirror, inbox, p
 
 test("Counter Ask routes straight to Notion AI and does not enter Counter SEARCH state", () => {
   const edge = fs.readFileSync("go-hub-edge-worker.mjs", "utf8");
-  const askStart = edge.indexOf('url.pathname === `${COUNTER_API_ROOT}\/ask`');
-  const handoffStart = edge.indexOf('url.pathname === `${COUNTER_API_ROOT}\/handoff`');
-  assert.ok(askStart >= 0 && handoffStart > askStart);
-  const ask = edge.slice(askStart, handoffStart);
+  const askStart = edge.indexOf('url.pathname === `${COUNTER_API_ROOT}/ask`');
+  const inboxStart = edge.indexOf('url.pathname === `${COUNTER_API_ROOT}/inbox`', askStart);
+  const handoffStart = edge.indexOf('url.pathname === `${COUNTER_API_ROOT}/handoff`');
+  assert.ok(askStart >= 0 && inboxStart > askStart && handoffStart > inboxStart);
+
+  const ask = edge.slice(askStart, inboxStart);
   assert.match(ask, /createNotionLightService/);
   assert.match(ask, /\.search\(\{ query:question \}\)/);
   assert.doesNotMatch(ask, /mode:"SEARCH"|v4_inspect|workId|checkpointId/);
