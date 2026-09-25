@@ -52,6 +52,28 @@ function encode(value) {
   return encodeURIComponent(String(value));
 }
 
+const MAX_PUBLIC_UPLOAD_BYTES = 8 * 1024 * 1024;
+
+function decodeBase64(value) {
+  const compact = String(value || "").replace(/\s+/g, "");
+  if (!compact || !/^[A-Za-z0-9+/]*={0,2}$/.test(compact) || compact.length % 4 === 1) return null;
+  let binary;
+  try { binary = atob(compact); } catch { return null; }
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+async function sha256Hex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function validMimeType(value) {
+  const current = text(value);
+  return !current || /^[A-Za-z0-9][A-Za-z0-9.+_-]*\/[A-Za-z0-9][A-Za-z0-9.+_-]*$/.test(current);
+}
+
 function collectDocumentParagraphs(elements, paragraphs, tabId = null) {
   for (const element of Array.isArray(elements) ? elements : []) {
     if (element?.paragraph) {
@@ -473,6 +495,7 @@ export function createGoogleDriveService({
           "create_folder",
           "move_item",
           "rename_item",
+          "upload_file",
           "upload_file_internal",
           "download_file_internal",
           "ensure_folder_path_internal",
@@ -612,6 +635,37 @@ export function createGoogleDriveService({
           truncated,
           totalChars:fullText.length,
           source:"docs_api",
+        },
+      });
+    },
+
+    async uploadFile(input = {}) {
+      const parentId = text(input.parentId);
+      const name = text(input.name);
+      const mimeType = text(input.mimeType) || "application/octet-stream";
+      const declaredSha256 = text(input.sha256).toLowerCase();
+      const bytes = decodeBase64(input.contentBase64);
+      if (!parentId || !name || !validMimeType(mimeType) || !bytes || bytes.byteLength < 1 ||
+          bytes.byteLength > MAX_PUBLIC_UPLOAD_BYTES || !/^[a-f0-9]{64}$/.test(declaredSha256)) {
+        return json({ code: "DRIVE_UPLOAD_INVALID_INPUT" }, 400);
+      }
+      if (input.size != null && (!Number.isSafeInteger(Number(input.size)) || Number(input.size) !== bytes.byteLength)) {
+        return json({ code: "DRIVE_UPLOAD_SIZE_MISMATCH", actualSize: bytes.byteLength }, 409);
+      }
+      const actualSha256 = await sha256Hex(bytes);
+      if (actualSha256 !== declaredSha256) {
+        return json({ code: "DRIVE_UPLOAD_SHA256_MISMATCH", actualSha256 }, 409);
+      }
+      return uploadFileBytes({
+        parentId,
+        name,
+        mimeType,
+        bytes,
+        sha256: actualSha256,
+        appProperties: {
+          goHubSource: "mcp-upload",
+          goHubWorkId: text(input.workContext?.workId) || "unbound",
+          sha256: actualSha256,
         },
       });
     },

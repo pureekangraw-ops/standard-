@@ -37,7 +37,7 @@ function rpc(token, name, args = {}) {
   });
 }
 
-test("registry publishes ten governed Drive bridge tools", async () => {
+test("registry publishes eleven governed Drive bridge tools", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?drive-tools=" + Date.now());
   const lifecycle = new Proxy({}, {
     get: (_, name) => async input => new Response(JSON.stringify({ operation: name, input }), {
@@ -55,16 +55,28 @@ test("registry publishes ten governed Drive bridge tools", async () => {
     "go_hub_drive_list_children",
     "go_hub_drive_read_document",
     "go_hub_drive_create_folder",
+    "go_hub_drive_upload_file",
     "go_hub_drive_move_item",
     "go_hub_drive_rename_item",
   ]);
-  assert.deepEqual(tools.map(tool => tool.annotations.readOnlyHint), [true, true, true, true, true, true, true, false, false, false]);
+  assert.deepEqual(tools.map(tool => tool.annotations.readOnlyHint), [true, true, true, true, true, true, true, false, false, false, false]);
 
   await registry.callTool("go_hub_drive_move_item", {
     fileId: "file-a",
     destinationFolderId: "folder-b",
     workContext: driveWorkContext,
   });
+
+  const uploadResult = await registry.callTool("go_hub_drive_upload_file", {
+    parentId: "folder-b",
+    name: "pixie.zip",
+    mimeType: "application/zip",
+    contentBase64: "cGl4aWU=",
+    size: 5,
+    sha256: "0".repeat(64),
+    workContext: { ...driveWorkContext, task: "Upload Pixie staging artifact" },
+  });
+  assert.equal(uploadResult.structuredContent.operation, "driveUploadFile");
 
   await assert.rejects(registry.callTool("go_hub_drive_move_item", {
     fileId: "file-a",

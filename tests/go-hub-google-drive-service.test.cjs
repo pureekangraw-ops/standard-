@@ -38,7 +38,7 @@ test("Drive service fails closed when auth is missing", async () => {
     configured: false,
     authMode: null,
     rootScopeConfigured: false,
-    operations: ["capabilities", "health", "diagnostics", "root", "get_item", "list_children", "read_document", "create_folder", "move_item", "rename_item", "upload_file_internal", "download_file_internal", "ensure_folder_path_internal"],
+    operations: ["capabilities", "health", "diagnostics", "root", "get_item", "list_children", "read_document", "create_folder", "move_item", "rename_item", "upload_file", "upload_file_internal", "download_file_internal", "ensure_folder_path_internal"],
     destructiveDeleteExposed: false,
     mutationReadbackRequired: true,
   });
@@ -451,4 +451,51 @@ test("Drive internal binary read returns governed file bytes", async () => {
   assert.equal(result.item.name, "proof.png");
   assert.deepEqual(Array.from(result.bytes), [104, 105]);
   assert.equal(requests.length, 2);
+});
+
+
+test("Drive public upload validates base64, size, and SHA-256 before mutation", async () => {
+  const { createGoogleDriveService } = await load("public-upload-validation");
+  let calls = 0;
+  const service = createGoogleDriveService({
+    accessToken: "token-a",
+    rootFolderId: "root-governed",
+    fetchImpl: async () => { calls += 1; throw new Error("validation must fail before upstream"); },
+  });
+
+  const badBase64 = await service.uploadFile({
+    parentId: "root-governed",
+    name: "artifact.zip",
+    mimeType: "application/zip",
+    contentBase64: "***",
+    sha256: "0".repeat(64),
+  });
+  assert.equal(badBase64.status, 400);
+  assert.deepEqual(await badBase64.json(), { code: "DRIVE_UPLOAD_INVALID_INPUT" });
+
+  const encoded = btoa("pixie");
+  const sizeMismatch = await service.uploadFile({
+    parentId: "root-governed",
+    name: "artifact.zip",
+    mimeType: "application/zip",
+    contentBase64: encoded,
+    size: 99,
+    sha256: "0".repeat(64),
+  });
+  assert.equal(sizeMismatch.status, 409);
+  assert.deepEqual(await sizeMismatch.json(), { code: "DRIVE_UPLOAD_SIZE_MISMATCH", actualSize: 5 });
+
+  const shaMismatch = await service.uploadFile({
+    parentId: "root-governed",
+    name: "artifact.zip",
+    mimeType: "application/zip",
+    contentBase64: encoded,
+    size: 5,
+    sha256: "0".repeat(64),
+  });
+  assert.equal(shaMismatch.status, 409);
+  const mismatchPayload = await shaMismatch.json();
+  assert.equal(mismatchPayload.code, "DRIVE_UPLOAD_SHA256_MISMATCH");
+  assert.match(mismatchPayload.actualSha256, /^[a-f0-9]{64}$/);
+  assert.equal(calls, 0);
 });

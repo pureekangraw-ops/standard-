@@ -50,6 +50,7 @@ const LIGHT_MUTATION_TOOL_NAMES = new Set([
   "go_hub_gmail_send_message",
   "go_hub_calendar_create_event",
   "go_hub_drive_create_folder",
+  "go_hub_drive_upload_file",
   "go_hub_drive_move_item",
   "go_hub_drive_rename_item",
 ]);
@@ -808,6 +809,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           driveListChildren: input => drive.listChildren(input),
           driveReadDocument: input => drive.readDocument(input),
           driveCreateFolder: input => runMutation("drive.create_folder", input, () => drive.createFolder(input)),
+          driveUploadFile: input => runMutation("drive.upload_file", input, () => drive.uploadFile(input)),
           driveMoveItem: input => runMutation("drive.move_item", input, () => drive.moveItem(input)),
           driveRenameItem: input => runMutation("drive.rename_item", input, () => drive.renameItem(input)),
           listWorkflowArtifacts: input => artifactDelivery.listArtifacts(input),
