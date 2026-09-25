@@ -214,6 +214,19 @@ jobs:
               if (response.ok && payload?.ok === true) return payload;
               const reason = String(payload?.code || payload?.message || response.status);
               const resetting = /Durable Object reset because its code was updated/i.test(reason);
+              if (body?.action === "v4_create" && reason === "CENTRE_WORK_ALREADY_EXISTS") {
+                const inspectResponse = await fetch(origin + "/hub/api/centre/action", {
+                  method:"POST",
+                  headers:{ "content-type":"application/json" },
+                  body:JSON.stringify({ action:"v4_inspect", workId:body.workId }),
+                });
+                const existing = await inspectResponse.json().catch(() => null);
+                if (inspectResponse.ok && existing?.ok === true &&
+                    existing?.work?.workId === body.workId &&
+                    existing?.work?.checkpointId === "CP-" + body.workId) {
+                  return existing;
+                }
+              }
               if ((resetting || retryableStatus(response.status)) && attempt < 8) {
                 await delay(attempt);
                 continue;
