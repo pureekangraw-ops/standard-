@@ -2,6 +2,9 @@ import githubWorker, { createGithubLifecycleService } from "./go-hub-worker.mjs"
 import { createBrowserInterface } from "./go-hub-browser-interface.js";
 import { createFactoryMcpWorker, createCounterDispatchLifecycle } from "./go-hub-factory-mcp-worker.mjs";
 import { createFactoryActionService, createFactoryV4Service } from "./go-hub-factory-service.mjs";
+import { createCloudflareService } from "./go-hub-cloudflare-service.mjs";
+import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
+import { correlateControlRoomTruth } from "./go-hub-control-room.js";
 import { createAccessToken } from "./go-hub-oauth.mjs";
 import { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
