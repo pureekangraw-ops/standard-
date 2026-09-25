@@ -44,6 +44,7 @@ const LIGHT_MUTATION_TOOL_NAMES = new Set([
   "go_hub_put_file",
   "go_hub_open_pull_request",
   "go_hub_light_centre_v4_action",
+  "go_hub_light_factory_v4_action",
   "go_hub_counter_create",
   "go_hub_counter_seen",
   "go_hub_counter_pickup",
@@ -794,7 +795,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           },
           v4ProjectBoard: input => v4ProjectBoard(input),
           lightCentreV4Action: async input => {
-            if (!lightMcp || !["v4_inspect", "v4_claim", "v4_wait", "v4_resume"].includes(input?.action)) {
+            if (!lightMcp || !["v4_inspect", "v4_claim", "v4_wait", "v4_resume", "v4_open_pass"].includes(input?.action)) {
               return json({ code:"LIGHT_CENTRE_ACTION_NOT_ALLOWED" }, 403);
             }
             const routed = {
@@ -806,15 +807,52 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
               ...(input.reason ? { reason:input.reason } : {}),
               ...(input.resumeFrom ? { resumeFrom:input.resumeFrom } : {}),
             };
-            if (input.action === "v4_wait") {
+            if (input.action === "v4_wait" || input.action === "v4_open_pass") {
               const inspected = await centreLive.action({ action:"v4_inspect", workId:input.workId });
               if (!inspected.ok) return inspected;
               const view = await responsePayload(inspected);
               if (view?.work?.checkpointId !== input.checkpointId || view?.work?.holder !== "LIGHT") {
                 return json({ code:"LIGHT_CENTRE_HOLDER_REQUIRED" }, 403);
               }
+              if (input.action === "v4_open_pass") {
+                if (view?.work?.status !== "ON PROCESS") return json({ code:"LIGHT_CENTRE_ACTIVE_WORK_REQUIRED" }, 409);
+                routed.kind = "WORK";
+                routed.destinations = ["factory"];
+                routed.scope = ["factory"];
+                routed.closeCondition = "RETURN";
+              }
             }
             return centreLive.action(routed);
+          },
+          lightFactoryV4Action: async input => {
+            if (!lightMcp) return json({ code:"LIGHT_FACTORY_ACTION_NOT_ALLOWED" }, 403);
+            const action = String(input?.action || "").trim().toLowerCase();
+            if (!["start", "inspect", "record_reality", "set_plan", "advance", "update_check", "safe_stop", "finish"].includes(action)) {
+              return json({ code:"LIGHT_FACTORY_ACTION_NOT_ALLOWED" }, 403);
+            }
+            const workId = String(input?.workContext?.workId || "").trim();
+            const checkpointId = String(input?.workContext?.checkpointId || "").trim();
+            if (!workId || !checkpointId) return json({ code:"WORK_IDENTITY_REQUIRED" }, 400);
+            const inspected = await centreLive.action({ action:"v4_inspect", workId });
+            if (!inspected.ok) return inspected;
+            const centre = await responsePayload(inspected);
+            const work = centre?.work;
+            if (!work || work.checkpointId !== checkpointId || work.holder !== "LIGHT") {
+              return json({ code:"LIGHT_FACTORY_HOLDER_REQUIRED" }, 403);
+            }
+            if (action !== "inspect") {
+              const allowed = Array.isArray(work?.pass?.allowedDestinations) ? work.pass.allowedDestinations : [];
+              if (work.status !== "ON PROCESS" || work.pass?.state !== "ACTIVE" ||
+                  (!allowed.includes("factory") && !allowed.includes("destination://factory"))) {
+                return json({ code:"LIGHT_FACTORY_PASS_REQUIRED" }, 403);
+              }
+            }
+            const routed = { ...input, action, workId };
+            if (action === "inspect") return factoryV4(routed);
+            return runMutation("factory.v4.light." + action, routed, async resolvedInput => {
+              if (action === "start") resolvedInput.work = work;
+              return factoryV4(resolvedInput);
+            });
           },
           observerLatest: () => observer.latest(),
           observerScreenshot: input => observer.screenshot(input),

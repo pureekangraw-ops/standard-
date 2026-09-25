@@ -10,6 +10,7 @@ import { fitWork } from "./go-hub-optician.js";
 import { CENTRE_STATES, admitDestination } from "./go-hub-centre.js";
 import { createCentreLiveClient } from "./go-hub-centre-client.js";
 import { getWorkTarget } from "./go-hub-work-targets.js";
+import { correlateControlRoomTruth } from "./go-hub-control-room.js";
 
 const FACTORY_DESTINATION = "destination://factory";
 const cityRoute = createCityRoute();
@@ -42,6 +43,69 @@ const centreForm = document.querySelector("[data-centre-form]");
 const centreAction = document.querySelector("[data-centre-action]");
 const centreError = document.querySelector("[data-centre-error]");
 const centreTarget = document.querySelector("[data-centre-target]");
+const controlRoomPanel = document.querySelector("[data-control-room]");
+const controlRoomRefresh = document.querySelector("[data-control-room-refresh]");
+const controlRoomError = document.querySelector("[data-control-room-error]");
+
+function controlRoomText(selector, value) {
+  const node = document.querySelector(selector);
+  if (node) node.textContent = value == null || value === "" ? "UNKNOWN" : String(value);
+}
+
+function renderControlRoom(payload = {}) {
+  const observations = payload.observations || correlateControlRoomTruth({
+    centre: payload.centre || centreWork || {},
+    projectStatus: payload.projectStatus || {},
+    factory: payload.factory || {},
+    board: payload.board || {},
+    github: payload.github || {},
+    cloudflare: payload.cloudflare || {},
+    capabilities: payload.capabilities || [],
+    autoRefresh: true,
+  });
+  controlRoomText("[data-control-room-status]", observations.overall);
+  controlRoomText("[data-control-room-work]", payload.workId || centreWork?.workId);
+  controlRoomText("[data-control-room-checkpoint]", payload.checkpointId || centreWork?.checkpointId);
+  controlRoomText("[data-control-room-centre]", observations.sourceStatus?.centre);
+  controlRoomText("[data-control-room-project]", observations.sourceStatus?.project);
+  controlRoomText("[data-control-room-factory]", observations.sourceStatus?.factory);
+  controlRoomText("[data-control-room-board]", observations.board?.status);
+  controlRoomText("[data-control-room-cloudflare]", observations.sourceStatus?.cloudflare);
+  controlRoomText("[data-control-room-provenance]", observations.deploymentProvenance?.status);
+  controlRoomText("[data-control-room-updated]", payload.observedAt || payload.checkedAt || "UNKNOWN");
+  const signals = [
+    observations.centreProject,
+    observations.board,
+    observations.deploymentProvenance,
+  ].filter(item => item && item.status !== "PASS" && item.status !== "VERIFIED");
+  const list = document.querySelector("[data-control-room-signals]");
+  if (list) {
+    list.replaceChildren(...(signals.length ? signals : [{ status: "PASS", reason: "NO_CORRELATION_CONFLICT" }]).map(item => {
+      const li = document.createElement("li");
+      li.textContent = `${item.status}: ${item.reason || "—"}`;
+      return li;
+    }));
+  }
+}
+
+async function refreshControlRoom() {
+  if (!controlRoomPanel || !centreWork?.workId) return;
+  try {
+    const params = new URLSearchParams({
+      workId: String(centreWork.workId),
+      checkpointId: String(centreWork.checkpointId || ""),
+    });
+    const response = await fetch(`/hub/api/centre/control-room?${params}`);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body?.code || "CONTROL_ROOM_READ_FAILED");
+    renderControlRoom(body);
+    if (controlRoomError) controlRoomError.textContent = "";
+  } catch (error) {
+    renderControlRoom({ workId: centreWork.workId, checkpointId: centreWork.checkpointId });
+    if (controlRoomError) controlRoomError.textContent = error instanceof Error ? error.message : String(error);
+  }
+}
+
 const counterAskForm = document.querySelector("[data-counter-ask-form]");
 const counterQuestion = document.querySelector("[data-counter-question]");
 const counterConversation = document.querySelector("[data-counter-conversation]");
@@ -389,6 +453,8 @@ function render() {
   renderOperator(taskSnapshot());
 }
 
+controlRoomRefresh?.addEventListener("click", () => { void refreshControlRoom(); });
+
 counterAskForm?.addEventListener("submit", event => {
   event.preventDefault();
   void askLight(counterQuestion?.value);
@@ -457,3 +523,5 @@ centreForm?.addEventListener("submit", async event => {
 });
 
 render();
+void refreshControlRoom();
+setInterval(() => { void refreshControlRoom(); }, 30_000);
