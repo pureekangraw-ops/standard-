@@ -97,6 +97,7 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.ok(names.includes("go_hub_drive_list_children"));
   assert.ok(names.includes("go_hub_drive_read_document"));
   assert.ok(names.includes("go_hub_drive_create_folder"));
+  assert.ok(names.includes("go_hub_drive_upload_file"));
   assert.ok(names.includes("go_hub_drive_move_item"));
   assert.ok(names.includes("go_hub_drive_rename_item"));
   for (const name of [
@@ -126,6 +127,61 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
     "go_hub_rerun_failed_jobs",
   ]) assert.equal(names.includes(name), false, "LIGHT should not inherit mutation " + name);
   assert.equal(payload.result.tools.some(tool => Object.hasOwn(tool, "securitySchemes")), false);
+});
+
+test("LIGHT Drive upload is exposed as bounded mutation and rejects bad SHA before upstream", async () => {
+  const { createAccessToken } = await import(oauthUrl + "?light-upload-token=" + Date.now());
+  const { createFactoryMcpWorker } = await import(factoryUrl + "?light-upload=" + Date.now());
+  const token = await createAccessToken({
+    issuer:"https://hub.example",
+    signingKey:"master-secret",
+    resource:"https://hub.example/mcp/light",
+    subject:"light",
+    scope:"go-hub-light",
+    ttlSeconds:3600,
+  });
+  let calls = 0;
+  const worker = createFactoryMcpWorker({
+    fetchImpl: async () => { calls += 1; throw new Error("bad SHA must fail before upstream"); },
+  });
+  const response = await worker.fetch(new Request("https://hub.example/mcp/light", {
+    method:"POST",
+    headers:{ authorization:"Bearer " + token, "content-type":"application/json", origin:"https://www.notion.so" },
+    body:JSON.stringify({
+      jsonrpc:"2.0",
+      id:2,
+      method:"tools/call",
+      params:{
+        name:"go_hub_drive_upload_file",
+        arguments:{
+          parentId:"governed-root",
+          name:"pixie.zip",
+          mimeType:"application/zip",
+          contentBase64:"cGl4aWU=",
+          size:5,
+          sha256:"0".repeat(64),
+          workContext:{
+            workId:"WORK-LIGHT-UPLOAD-1",
+            checkpointId:"CP-LIGHT-UPLOAD-1",
+            returnAddress:"CP-LIGHT-UPLOAD-1",
+            destination:"destination://drive",
+            task:"Upload staging artifact",
+            requestedResult:"Drive readback PASS",
+            lensReference:"role://light-staging-upload",
+          },
+        },
+      },
+    }),
+  }), {
+    GITHUB_TOKEN:"github-token",
+    GOHUB_MASTER_KEY:"master-secret",
+    GOHUB_OWNER_PASSCODE:"owner-passcode",
+  });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.result.isError, true);
+  assert.equal(payload.result.structuredContent.code, "DRIVE_UPLOAD_SHA256_MISMATCH");
+  assert.equal(calls, 0);
 });
 
 
