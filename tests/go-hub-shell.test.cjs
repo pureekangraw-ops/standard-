@@ -180,22 +180,20 @@ test("owner must choose a Work Target explicitly and LIGHTHOUSE is available wit
 });
 
 
-test("Counter surface keeps one form and exposes two distinct bells on both shell entry points", () => {
+test("Counter surface exposes Ask LIGHT on both shell entry points without fake Bell or Mirror triggers", () => {
   const source = read("go-hub-shell.js");
   for (const html of [read("index.html"), read("go-hub.html")]) {
     assert.match(html, /data-counter-form/);
     assert.match(html, /name="counterRequest"/);
     assert.match(html, /name="counterRequestedResult"/);
-    assert.match(html, /data-counter-light-bell/);
-    assert.match(html, /data-counter-mirror-bell/);
+    assert.match(html, /data-counter-ask-light/);
+    assert.doesNotMatch(html, /data-counter-light-bell|data-counter-mirror-bell|Magnificent Architect|อัพเดท มิเร่อ|🔔|🪞/);
     assert.match(html, /data-counter-inbox-refresh/);
     assert.match(html, /data-counter-inbox-list/);
     assert.match(html, /สายเข้าจาก LIGHT/);
-    assert.match(html, /Magnificent Architect/);
-    assert.match(html, /อัพเดท มิเร่อ/);
   }
-  assert.match(source, /\/hub\/api\/counter\/handoff/);
-  assert.match(source, /\/hub\/api\/counter\/mirror/);
+  assert.match(source, /\/hub\/api\/counter\/ask/);
+  assert.doesNotMatch(source, /\/hub\/api\/counter\/mirror/);
   assert.match(source, /\/hub\/api\/counter\/inbox/);
   assert.match(source, /\/hub\/api\/counter\/pickup/);
   assert.match(source, /📞 รับสาย/);
