@@ -56,87 +56,41 @@ test("HANDOFF with no callable LIGHT target stays WAITING_PICKUP and never calls
   assert.equal(stateStorage.alarms.length, 0);
 });
 
-test("HANDOFF creates a Notion LIGHT Bell Inbox record and remains waiting for pickup", async () => {
-  const { GoHubCounterDispatchState } = await import(dispatcherUrl + "?handoff-bell=" + Date.now());
+test("HANDOFF ignores legacy Notion bell configuration and waits for explicit pickup", async () => {
+  const { GoHubCounterDispatchState } = await import(dispatcherUrl + "?handoff-no-bell=" + Date.now());
   const calls = [];
   const dispatch = new GoHubCounterDispatchState({ storage: storage() }, {
-    LIGHT_BELL_PAGE_ID: "88970e1da0a64ceebaa1ac1928361911",
+    LIGHT_BELL_PAGE_ID: "legacy-bell-page",
     GO_HUB_NOTION_LIGHT_STATE: {
       getByName() {
-        return {
-          fetch: async request => {
-            calls.push(JSON.parse(await request.text()));
-            return new Response(JSON.stringify({ ok:true, tool:"notion-create-pages", signal:"LIGHT_BELL_INBOX_RECORD_CREATED", dataSourceId:"2d3b7c19-f429-4d72-92d0-9022d772f8a1", receiptId:"bell-page-1" }), {
-              status:200,
-              headers:{ "content-type":"application/json" },
-            });
-          },
-        };
+        return { fetch: async () => { calls.push("notion"); throw new Error("HANDOFF must not ring Notion"); } };
       },
     },
   });
   const result = await dispatch.enqueueOpen(handoffInput());
   assert.equal(result.dispatch.legs.LIGHT.status, "WAITING_PICKUP");
-  assert.equal(result.dispatch.legs.LIGHT.lastError, null);
-  assert.equal(result.dispatch.legs.LIGHT.receipt.adapter, "notion-light-bell-inbox");
-  assert.equal(result.dispatch.legs.LIGHT.receipt.receiptId, "bell-page-1");
-  assert.equal(result.dispatch.events.at(-1).type, "RUNG");
-  assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0], {
-    action:"ring",
-    bellType:"LIGHT_HANDOFF",
-    pageId:"88970e1da0a64ceebaa1ac1928361911",
-    counterId:"COUNTER-HANDOFF-001",
-    workId:workContext.workId,
-    checkpointId:workContext.checkpointId,
-    originActor:"GO",
-    targetActor:"LIGHT",
-    requestedResult:handoffInput().requestedResult,
-    command:handoffInput().request,
-    returnAddress:workContext.checkpointId,
-    evidence:"GO Hub Counter dispatch COUNTER-HANDOFF-001",
-  });
+  assert.equal(result.dispatch.legs.LIGHT.attempts, 0);
+  assert.equal(result.triggerRequired, true);
+  assert.deepEqual(calls, []);
 });
 
-test("HANDOFF wake receives the complete envelope and receipt names the handoff adapter", async () => {
-  const { GoHubCounterDispatchState } = await import(dispatcherUrl + "?handoff-wake=" + Date.now());
+test("HANDOFF ignores LIGHT_WAKE_URL until an explicit owner trigger exists", async () => {
+  const { GoHubCounterDispatchState } = await import(dispatcherUrl + "?handoff-no-wake=" + Date.now());
   const outgoing = [];
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (url, init) => {
-    outgoing.push({ url: String(url), body: JSON.parse(init.body) });
-    return new Response(JSON.stringify({ receiptId: "light-wake-1" }), {
-      status: 202,
-      headers: { "content-type": "application/json" },
-    });
+  globalThis.fetch = async (...args) => {
+    outgoing.push(args);
+    throw new Error("HANDOFF must not wake LIGHT automatically");
   };
   try {
     const dispatch = new GoHubCounterDispatchState({ storage: storage() }, {
       LIGHT_WAKE_URL: "https://light.example/wake",
     });
     const result = await dispatch.enqueueOpen(handoffInput());
-    assert.equal(result.dispatch.legs.LIGHT.status, "DELIVERED");
-    assert.equal(result.dispatch.legs.LIGHT.receipt.adapter, "light-counter-handoff-wake");
-    assert.equal(result.dispatch.legs.LIGHT.receipt.mode, "HANDOFF");
-    assert.equal(outgoing.length, 1);
-    assert.deepEqual(outgoing[0].body, {
-      type: "NEW_COUNTER_TICKET",
-      target: "LIGHT",
-      from: "GO",
-      to: "LIGHT",
-      counterId: "COUNTER-HANDOFF-001",
-      workId: workContext.workId,
-      checkpointId: workContext.checkpointId,
-      mode: "HANDOFF",
-      request: handoffInput().request,
-      requestedResult: handoffInput().requestedResult,
-      authority: handoffInput().authority,
-      targetReference: handoffInput().target,
-      projectRef: handoffInput().projectRef,
-      workContext,
-      context: handoffInput().context,
-      sourceHints: handoffInput().sourceHints,
-      doNotChange: handoffInput().doNotChange,
-    });
+    assert.equal(result.dispatch.legs.LIGHT.status, "WAITING_PICKUP");
+    assert.equal(result.dispatch.legs.LIGHT.attempts, 0);
+    assert.equal(result.triggerRequired, true);
+    assert.deepEqual(outgoing, []);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -232,10 +186,10 @@ test("HANDOFF answer is queued to origin GO inbox and readback clears the pendin
     counterId:"COUNTER-RETURN-INBOX-1",
     mode:"HANDOFF",
     request:"LIGHT, do the task.",
-    requestedResult:"Return MIRROR_RING_OK with evidence.",
+    requestedResult:"Return HANDOFF_OK with evidence.",
     authority:"OWNER",
     target:"LIGHT",
-    projectRef:"GO HUB BOARD — LIGHT MIRROR",
+    projectRef:"GO Hub Counter",
     fromActor:"GO",
     toActor:"LIGHT",
     context:{ purpose:"return-inbox-test" },
@@ -256,7 +210,7 @@ test("HANDOFF answer is queued to origin GO inbox and readback clears the pendin
     counterId:"COUNTER-RETURN-INBOX-1",
     actor:"LIGHT",
     status:"ANSWERED",
-    answer:"MIRROR_RING_OK",
+    answer:"HANDOFF_OK",
     sources:["counter://COUNTER-RETURN-INBOX-1"],
     evidence:[{ kind:"LIGHT_PICKUP" }],
     confidence:"high",
@@ -272,12 +226,12 @@ test("HANDOFF answer is queued to origin GO inbox and readback clears the pendin
   assert.equal(goInbox.inbox.tickets[0].from, "LIGHT");
   assert.equal(goInbox.inbox.tickets[0].to, "GO");
   assert.equal(goInbox.inbox.tickets[0].context.kind, "COUNTER_ANSWER_READY");
-  assert.equal(goInbox.inbox.tickets[0].context.answer.answer, "MIRROR_RING_OK");
+  assert.equal(goInbox.inbox.tickets[0].context.answer.answer, "HANDOFF_OK");
 
   const readbackResponse = await service.readback({
     counterId:"COUNTER-RETURN-INBOX-1",
     actor:"GO",
-    evidence:{ observedAnswer:"MIRROR_RING_OK" },
+    evidence:{ observedAnswer:"HANDOFF_OK" },
     close:true,
     workContext,
   });
