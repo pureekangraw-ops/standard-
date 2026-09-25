@@ -1,4 +1,5 @@
 import { planCloseout } from "./go-hub-housekeeper.js";
+import { correlateControlRoomTruth } from "./go-hub-control-room.js";
 
 function json(payload,status=200){return new Response(JSON.stringify(payload),{status,headers:{"content-type":"application/json; charset=utf-8"}});}
 const SAFE=new Set(["READ","PREFLIGHT","SAFE_TEST"]);
@@ -65,10 +66,12 @@ async function probePoint(point,readValue,traceId,checkedAt){
   }
 }
 async function probeRoute(route,readValue,traceId,checkedAt){
-  const checkpoints=[];let stop=false;
+  const checkpoints=[];
   for(const p of route.checkpoints){
-    if(stop){checkpoints.push({checkpointId:p.id,importantValue:p.importantValue||null,expected:clone(p.expected),source:p.source||null,ownerSource:p.ownerSource||null,status:"NOT_CHECKED",reason:"DOWNSTREAM_OF_FIRST_BREAK",traceId,checkedAt});continue;}
-    const r=await probePoint(p,readValue,traceId,checkedAt);checkpoints.push(r);if(BREAKING.has(r.status))stop=true;
+    // Keep the first-break diagnosis, but continue observing downstream points.
+    // A later mismatch is evidence, not permission to hide the rest of the system.
+    const r=await probePoint(p,readValue,traceId,checkedAt);
+    checkpoints.push(r);
   }
   const first=checkpoints.find(x=>BREAKING.has(x.status));
   const reached=[...checkpoints].reverse().find(x=>x.status!=="NOT_CHECKED")||null;
@@ -127,7 +130,7 @@ function detectiveView(routes=[]){
   }
   return{causalLeads,commonCauseCandidates:[...cluster.entries()].filter(([,items])=>items.length>1).map(([key,items])=>({signature:key,occurrences:items,classification:"COMMON_CAUSE_CANDIDATE_NOT_VERDICT"})),uncertainty,hardLock:"READ_ONLY_ZERO_MUTATION"};
 }
-function reportFor(map,routes,traceId,checkedAt){
+function reportFor(map,routes,traceId,checkedAt,controlRoomTruth={}){
   const checkpoints=routes.flatMap(r=>r.checkpoints||[]);
   const routeCounts=statusCounts(routes),checkpointCounts=statusCounts(checkpoints);
   const firstBreaks=routes.filter(r=>r.firstBreak).map(r=>({routeId:r.routeId,firstBreak:r.firstBreak,reachedUntil:r.reachedUntil,firstBadValue:clone(r.firstBadValue)}));
@@ -139,7 +142,9 @@ function reportFor(map,routes,traceId,checkedAt){
   return{
     reportVersion:2,mapSource:map.source,traceId,checkedAt,
     coverage:{routes:{total:routes.length,...routeCounts},checkpoints:{total:checkpoints.length,...checkpointCounts},observed:checkpointCounts.PASS+checkpointCounts.FAIL+checkpointCounts.BLOCKED+checkpointCounts.WAIT,unknown:checkpointCounts.UNKNOWN,notChecked:checkpointCounts.NOT_CHECKED},
-    firstBreaks,unknowns,decisionPoints,views,safety:{autoRepair:false,mutationPerformed:false,probeModes:[...SAFE]},
+    firstBreaks,unknowns,decisionPoints,views,
+    controlRoom:correlateControlRoomTruth(controlRoomTruth),
+    safety:{autoRepair:false,mutationPerformed:false,probeModes:[...SAFE]},
   };
 }
 function memoryStorage(){const values=new Map();return{async get(k){return clone(values.get(k));},async put(k,v){values.set(k,clone(v));}};}
@@ -173,7 +178,7 @@ export function createMaintenanceV4({readValue=async()=>({available:false,reason
         if(!routes.length)return json({code:"ROUTE_NOT_FOUND"},404);
         const checkedAt=now(),trace=traceId(),results=[];
         for(const route of routes)results.push(await probeRoute(route,readValue,trace,checkedAt));
-        const report=reportFor(map,results,trace,checkedAt);
+        const report=reportFor(map,results,trace,checkedAt,input.controlRoomTruth??input.liveTruth??input.truth??{});
         const attention=results.some(r=>["FAIL","BLOCKED","WAIT"].includes(r.status));
         state.lastProbe={traceId:trace,checkedAt,routes:clone(results),report:clone(report)};
         state.revision=Number(state.revision||0)+1;await storage.put(STATE_KEY,state);
