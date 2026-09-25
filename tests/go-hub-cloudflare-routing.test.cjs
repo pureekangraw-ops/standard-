@@ -20,7 +20,6 @@ test("GO Hub API routes run the edge Worker before SPA asset fallback", () => {
   });
   assert.deepEqual(config.assets?.run_worker_first, [
     "/hub/api/centre/*",
-    "/hub/api/counter/*",
     "/hub/api/lighthouse-control-port/*",
     "/hub/lighthouse",
     "/hub/api/browser/*",
@@ -36,14 +35,7 @@ test("GO Hub API routes run the edge Worker before SPA asset fallback", () => {
 });
 
 
-test("Counter HTTP surface keeps Centre identity while separating Ask from owner-triggered HANDOFF", () => {
-  const source = require("node:fs").readFileSync(require("node:path").resolve(__dirname, "../go-hub-edge-worker.mjs"), "utf8");
-  assert.match(source, /COUNTER_API_ROOT = "\/hub\/api\/counter"/);
-  assert.match(source, /COUNTER_API_ROOT}\/ask/);
-  assert.match(source, /COUNTER_API_ROOT}\/handoff/);
-  assert.doesNotMatch(source, /COUNTER_API_ROOT}\/mirror/);
-  assert.match(source, /action:"v4_inspect", workId/);
-  assert.match(source, /createCounterDispatchLifecycle/);
-  assert.match(source, /mode:url\.pathname === `\$\{COUNTER_API_ROOT\}\/ask` \? "SEARCH" : "HANDOFF"/);
-  assert.doesNotMatch(source, /bellType:"MIRROR_REFRESH"/);
+test("Counter HTTP surface is retired from the edge Worker", () => {
+  const source = fs.readFileSync(path.resolve(__dirname, "../go-hub-edge-worker.mjs"), "utf8");
+  assert.doesNotMatch(source, /COUNTER_API_ROOT|\/hub\/api\/counter|createCounterDispatchLifecycle/);
 });
