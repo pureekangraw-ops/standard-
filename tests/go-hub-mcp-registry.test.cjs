@@ -122,6 +122,14 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(calls.at(-1).name, "centreAuditHistory");
   await registry.callTool("go_hub_centre_live_action", { action: "inspect", workId: "WORK-LIVE" });
   assert.equal(calls.at(-1).name, "centreLiveAction");
+  await registry.callTool("go_hub_centre_live_action", {
+    action:"v4_return",
+    workId:"WORK-LIVE",
+    actor:"GO",
+    status:"COMPLETE",
+    evidence:[{ ref:"runtime://proof" }],
+  });
+  assert.equal(calls.at(-1).name, "centreLiveAction");
   await registry.callTool("go_hub_centre_read_only_fast_lane", { purpose: "READ_TELL", operations: ["READ"] });
   assert.equal(calls.at(-1).name, "centreReadOnlyFastLane");
   await registry.callTool("go_hub_drive_download_file", { fileId:"zip-a", maxBytes:1024 });
