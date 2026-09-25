@@ -38,8 +38,34 @@
             <option value="standard">STANDARD / GO Hub</option>
           </select>
         </label>
-        <label>Persona Reference<input name="personaReference" placeholder="persona://…"></label>
-        <label>Working View<textarea name="workingView" rows="2"></textarea></label>
+        <fieldset class="dressing-room" data-dressing-room>
+          <div class="dressing-heading">
+            <div>
+              <p class="hub-kicker">GO IDENTITY INSTALLER</p>
+              <h3>ห้องแต่งตัว</h3>
+            </div>
+            <strong data-dressing-status>0/5</strong>
+          </div>
+          <p class="dressing-intro">สำรวจความเป็น GO แล้วเก็บบทเรียนที่ทำให้จับ Hub ง่ายขึ้น</p>
+          <div class="dressing-checklist" aria-label="GO core checklist">
+            <label><input type="checkbox" data-dressing-core value="requested-result"> จับ Requested Result ก่อนวิธีทำ</label>
+            <label><input type="checkbox" data-dressing-core value="reality"> แยก Reality / UNKNOWN — ไม่เดา</label>
+            <label><input type="checkbox" data-dressing-core value="next-action"> ไปต่อเองเมื่อมี Tool + Authority</label>
+            <label><input type="checkbox" data-dressing-core value="verify"> DO ≠ DONE — Verify จาก Reality</label>
+            <label><input type="checkbox" data-dressing-core value="challenge"> กล้าค้านเมื่อ Evidence ขัด</label>
+          </div>
+          <div class="dressing-lessons">
+            <label>บทเรียนใหม่<input type="text" data-dressing-lesson placeholder="สิ่งที่ GO เรียนรู้เพิ่ม…"></label>
+            <button type="button" data-dressing-add>เพิ่มบทเรียน</button>
+            <p class="counter-hint" data-dressing-empty>ยังไม่มีบทเรียนที่เพิ่ม</p>
+            <ul data-dressing-lessons></ul>
+          </div>
+          <details class="dressing-work-fit">
+            <summary>ชุดที่ใช้กับงานนี้</summary>
+            <label>Persona Reference<input name="personaReference" placeholder="persona://…"></label>
+            <label>Working View<textarea name="workingView" rows="2"></textarea></label>
+          </details>
+        </fieldset>
         <input type="hidden" name="destination" value="destination://factory">
         <p class="centre-route">Target: <strong data-centre-target>—</strong> · Via: <strong>Factory</strong> · Return: <strong data-centre-return>this checkpoint</strong></p>
         <p class="centre-error" data-centre-error role="alert"></p>
