@@ -1,7 +1,7 @@
 import githubWorker, { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createBrowserInterface } from "./go-hub-browser-interface.js";
 import { createFactoryMcpWorker, createCounterDispatchLifecycle } from "./go-hub-factory-mcp-worker.mjs";
-import { createFactoryActionService } from "./go-hub-factory-service.mjs";
+import { createFactoryActionService, createFactoryV4Service } from "./go-hub-factory-service.mjs";
 import { createAccessToken } from "./go-hub-oauth.mjs";
 import { ObserverSessionRegistry } from "./go-hub-browser-observer-session.js";
 import { createCentreLiveService } from "./go-hub-centre-live.mjs";
@@ -34,6 +34,7 @@ const COUNTER_API_ROOT = "/hub/api/counter";
 const BROWSER_API_ROOT = "/hub/api/browser";
 const OBSERVER_API_ROOT = `${BROWSER_API_ROOT}/observer`;
 const FACTORY_ACTION_PATH = "/hub/api/github-workspace/factory-action";
+const CONTROL_ROOM_PATH = "/hub/api/control-room";
 const LIGHT_MCP_OWNER_PATH = "/hub/light-mcp";
 const LIGHT_MCP_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 const encoder = new TextEncoder();
@@ -229,6 +230,82 @@ function observerOwnerPage() {
   });
 }
 
+async function controlRoomRead({ request, env, fetchImpl }) {
+  const url = new URL(request.url);
+  const workId = String(url.searchParams.get("workId") || "").trim();
+  const checkpointId = String(url.searchParams.get("checkpointId") || "").trim();
+  if (!workId || !checkpointId) return json({ code:"CONTROL_ROOM_WORK_CONTEXT_REQUIRED" }, 400);
+
+  const centreResponse = await createCentreLiveService({ namespace:env?.GO_HUB_CENTRE_STATE }).action({
+    action:"v4_inspect",
+    workId,
+    checkpointId,
+  });
+  const centre = await centreResponse.clone().json().catch(() => ({}));
+  if (!centreResponse.ok || !centre?.work) return json({ code:centre?.code || "CONTROL_ROOM_CENTRE_UNAVAILABLE" }, centreResponse.status || 503);
+
+  let projectStatus = { status:"UNKNOWN", reason:"PROJECT_STATUS_UNAVAILABLE" };
+  let github = { status:"UNKNOWN", reason:"GITHUB_READER_UNAVAILABLE" };
+  if (env?.GITHUB_TOKEN) {
+    try {
+      const lifecycle = createGithubLifecycleService({ fetchImpl, token:env.GITHUB_TOKEN });
+      projectStatus = await createProjectStatusReadService({
+        lifecycle,
+        factoryBinding:env?.GO_HUB_FACTORY_STATE,
+      }).read({ targetId:"standard" });
+      const source = projectStatus.sources?.find(item => item.source === "github");
+      github = source?.detail ? {
+        status:source.freshness || "LIVE",
+        repository:source.detail.repo,
+        branch:source.detail.branch,
+        headSha:source.detail.sha,
+        evidenceRef:`github://${source.detail.repo}@${source.detail.branch}#${source.detail.sha}`,
+      } : github;
+    } catch (error) {
+      projectStatus = { status:"UNKNOWN", reason:error?.message || "PROJECT_STATUS_READ_FAILED" };
+    }
+  }
+
+  let factory = { status:"UNKNOWN", reason:"FACTORY_V4_NOT_FOUND" };
+  try {
+    const response = await createFactoryV4Service({ binding:env?.GO_HUB_FACTORY_STATE })({ action:"inspect", workId });
+    const payload = await response.json().catch(() => ({}));
+    factory = response.ok ? payload : { status:"UNKNOWN", reason:payload?.code || "FACTORY_V4_READ_FAILED" };
+  } catch (error) {
+    factory = { status:"UNKNOWN", reason:error?.message || "FACTORY_V4_READ_FAILED" };
+  }
+
+  let cloudflare = { status:"UNKNOWN", reason:"CLOUDFLARE_RUNTIME_READER_UNAVAILABLE" };
+  const cfToken = env?.CLOUDFLARE_API_TOKEN || env?.CLOUDFLARE_TOKEN;
+  const cfAccount = env?.CLOUDFLARE_ACCOUNT_ID || env?.CF_ACCOUNT_ID;
+  if (cfToken && cfAccount) {
+    try {
+      const response = await createCloudflareService({ fetchImpl, token:cfToken, accountId:cfAccount }).health();
+      const payload = await response.json().catch(() => ({}));
+      cloudflare = response.ok ? { status:payload?.upstream === "PASS" ? "LIVE" : "UNKNOWN", health:payload } : { status:"UNKNOWN", reason:payload?.code || "CLOUDFLARE_HEALTH_FAILED" };
+    } catch (error) {
+      cloudflare = { status:"UNKNOWN", reason:error?.message || "CLOUDFLARE_HEALTH_FAILED" };
+    }
+  }
+
+  // Board runtime is intentionally not inferred from Centre projection.
+  const board = { status:"UNKNOWN", reason:"BOARD_RUNTIME_READ_NOT_CONFIGURED" };
+  const observations = correlateControlRoomTruth({
+    centre:{ status:centre.work.status, workStatus:centre.work.status },
+    projectStatus,
+    factory:{ status:factory.status || "UNKNOWN" },
+    board, github, cloudflare,
+    capabilities:[],
+    autoRefresh:true,
+  });
+  return json({
+    ok:true, room:"GO_CONTROL_ROOM", entryAuthority:"GO", mode:"LIVE_OBSERVATION_AND_AVAILABLE_CONTROLS",
+    workId, checkpointId, observedAt:new Date().toISOString(),
+    centre:centre.work, projectStatus, factory, board, github, cloudflare,
+    observations, controls:[],
+  });
+}
+
 export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = createFactoryMcpWorker(), fetchImpl = fetch, observerSessions = null } = {}) {
   if (!delegate || typeof delegate.fetch !== "function") {
     throw new Error("edge delegate fetch is required");
@@ -413,6 +490,9 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
           namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS,
           ownerPasscode:env?.GOHUB_OWNER_PASSCODE,
         }).fetch(request);
+      }
+      if (request.method === "GET" && url.pathname === CONTROL_ROOM_PATH) {
+        return controlRoomRead({ request, env, fetchImpl });
       }
       if (url.pathname === `${CENTRE_API_ROOT}/action`) {
         if (request.method !== "POST") return json({ code: "METHOD_NOT_ALLOWED" }, 405);
