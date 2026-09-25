@@ -640,6 +640,7 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
       const oauthPaths = new Set([
         "/.well-known/oauth-authorization-server",
         "/.well-known/oauth-protected-resource",
+        "/.well-known/oauth-protected-resource/mcp/light",
         "/oauth/authorize",
         "/oauth/token",
       ]);
@@ -659,6 +660,7 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
             clientId: "go-hub-notion",
             clientSecret: env.GOHUB_NOTION_CLIENT_SECRET,
             redirectUris: ["https://app.notion.com/workflows/mcp/oauth/callback"],
+            resources: [url.origin + "/mcp", url.origin + "/mcp/light"],
             subject: "notion",
             scope: "go-hub",
           }] : []),
