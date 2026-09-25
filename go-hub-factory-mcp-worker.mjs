@@ -43,6 +43,8 @@ const LIGHT_MUTATION_TOOL_NAMES = new Set([
   "go_hub_create_branch",
   "go_hub_put_file",
   "go_hub_open_pull_request",
+  "go_hub_heimdall_pass",
+  "go_hub_factory_v4",
   "go_hub_light_centre_v4_action",
   "go_hub_counter_create",
   "go_hub_counter_seen",
