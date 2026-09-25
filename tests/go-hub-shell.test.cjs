@@ -180,23 +180,25 @@ test("owner must choose a Work Target explicitly and LIGHTHOUSE is available wit
 });
 
 
-test("Counter surface exposes Ask LIGHT on both shell entry points without fake Bell or Mirror triggers", () => {
+test("Counter surface is only handoff guidance, Ask LIGHT conversation, and Notion entry", () => {
   const source = read("go-hub-shell.js");
   for (const html of [read("index.html"), read("go-hub.html")]) {
-    assert.match(html, /data-counter-form/);
-    assert.match(html, /name="counterRequest"/);
-    assert.match(html, /name="counterRequestedResult"/);
-    assert.match(html, /data-counter-ask-light/);
-    assert.doesNotMatch(html, /data-counter-light-bell|data-counter-mirror-bell|Magnificent Architect|อัพเดท มิเร่อ|🔔|🪞/);
-    assert.match(html, /data-counter-inbox-refresh/);
-    assert.match(html, /data-counter-inbox-list/);
-    assert.match(html, /สายเข้าจาก LIGHT/);
+    const start = html.indexOf('<section class="counter-panel"');
+    const end = html.indexOf('<section class="go-workbench"', start);
+    const counter = html.slice(start, end);
+    assert.match(counter, /SEND WORK TO LIGHT/);
+    assert.match(counter, /data-counter-conversation/);
+    assert.match(counter, /data-counter-ask-form/);
+    assert.match(counter, /data-counter-question/);
+    assert.match(counter, /Enter = ถาม/);
+    assert.match(counter, /เปิด GO × LIGHT ใน Notion/);
+    assert.doesNotMatch(counter, /<button|data-counter-inbox|data-counter-pickup|Work<\/dt>|Checkpoint<\/dt>|🔔|🪞|Mirror/);
   }
-  assert.match(source, /\/hub\/api\/counter\/ask/);
-  assert.doesNotMatch(source, /\/hub\/api\/counter\/mirror/);
-  assert.match(source, /\/hub\/api\/counter\/inbox/);
-  assert.match(source, /\/hub\/api\/counter\/pickup/);
-  assert.match(source, /📞 รับสาย/);
-  assert.match(source, /centreWork\.workId/);
-  assert.match(source, /centreWork\.checkpointId/);
+  const start = source.indexOf('const counterAskForm');
+  const end = source.indexOf('centreForm?.addEventListener', start);
+  const counter = source.slice(start, end);
+  assert.match(counter, /\/hub\/api\/counter\/ask/);
+  assert.match(counter, /event\.key !== "Enter"/);
+  assert.match(counter, /event\.shiftKey/);
+  assert.doesNotMatch(counter, /\/hub\/api\/counter\/inbox|\/hub\/api\/counter\/pickup|refreshCounterInbox|counterInbox|centreWork\?\.workId/);
 });
