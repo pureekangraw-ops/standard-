@@ -43,8 +43,7 @@ const centreAction = document.querySelector("[data-centre-action]");
 const centreError = document.querySelector("[data-centre-error]");
 const centreTarget = document.querySelector("[data-centre-target]");
 const counterForm = document.querySelector("[data-counter-form]");
-const counterLightBell = document.querySelector("[data-counter-light-bell]");
-const counterMirrorBell = document.querySelector("[data-counter-mirror-bell]");
+const counterAskLight = document.querySelector("[data-counter-ask-light]");
 const counterResult = document.querySelector("[data-counter-result]");
 const counterState = document.querySelector("[data-counter-state]");
 const counterInboxRefresh = document.querySelector("[data-counter-inbox-refresh]");
@@ -323,8 +322,7 @@ function renderCounter() {
   if (workNode) workNode.textContent = centreWork?.workId || "—";
   if (checkpointNode) checkpointNode.textContent = centreWork?.checkpointId || "—";
   if (counterState) counterState.textContent = available ? "READY" : "UNAVAILABLE";
-  if (counterLightBell) counterLightBell.disabled = !available;
-  if (counterMirrorBell) counterMirrorBell.disabled = !available;
+  if (counterAskLight) counterAskLight.disabled = !available;
   if (counterInboxRefresh) counterInboxRefresh.disabled = !available;
 }
 
@@ -432,11 +430,11 @@ counterForm?.addEventListener("submit", async event => {
     if (counterResult) counterResult.textContent = "COUNTER_WORK_UNAVAILABLE";
     return;
   }
-  if (counterResult) counterResult.textContent = "🔔 Ringing…";
-  if (counterState) counterState.textContent = "RINGING";
-  if (counterLightBell) counterLightBell.disabled = true;
+  if (counterResult) counterResult.textContent = "กำลังถาม LIGHT…";
+  if (counterState) counterState.textContent = "ASKING";
+  if (counterAskLight) counterAskLight.disabled = true;
   try {
-    const body = await postCounterAction("/hub/api/counter/handoff", {
+    const body = await postCounterAction("/hub/api/counter/ask", {
       workId:centreWork.workId,
       checkpointId:centreWork.checkpointId,
       request:counterField("counterRequest")?.value,
@@ -444,38 +442,16 @@ counterForm?.addEventListener("submit", async event => {
       authority:centreWork.authority || "BIG",
       projectRef:centreWork.targetId || "GO Hub",
     });
-    const lightLeg = body?.dispatch?.legs?.LIGHT?.status || "QUEUED";
     const counterId = body?.counter?.counterId || "Counter";
-    if (counterResult) counterResult.textContent = `🔔 ${counterId} · ${lightLeg}`;
-    if (counterState) counterState.textContent = lightLeg;
+    const state = body?.counter?.currentState || body?.dispatch?.legs?.LIGHT?.status || "QUEUED";
+    const answer = String(body?.counter?.answer || "").trim();
+    if (counterResult) counterResult.textContent = answer ? `${counterId} · ${answer}` : `${counterId} · ${state}`;
+    if (counterState) counterState.textContent = state;
   } catch (error) {
     if (counterResult) counterResult.textContent = error instanceof Error ? error.message : String(error);
     if (counterState) counterState.textContent = "ERROR";
   } finally {
-    if (counterLightBell) counterLightBell.disabled = !centreWork?.workId;
-  }
-});
-
-counterMirrorBell?.addEventListener("click", async () => {
-  if (!centreWork?.workId || !centreWork?.checkpointId) {
-    if (counterResult) counterResult.textContent = "COUNTER_WORK_UNAVAILABLE";
-    return;
-  }
-  if (counterResult) counterResult.textContent = "🪞 Ringing…";
-  if (counterState) counterState.textContent = "RINGING";
-  counterMirrorBell.disabled = true;
-  try {
-    const body = await postCounterAction("/hub/api/counter/mirror", {
-      workId:centreWork.workId,
-      checkpointId:centreWork.checkpointId,
-    });
-    if (counterResult) counterResult.textContent = `🪞 ${body.signal || "MIRROR_REFRESH_BELL_COMMENT_CREATED"}`;
-    if (counterState) counterState.textContent = "RUNG";
-  } catch (error) {
-    if (counterResult) counterResult.textContent = error instanceof Error ? error.message : String(error);
-    if (counterState) counterState.textContent = "ERROR";
-  } finally {
-    counterMirrorBell.disabled = !centreWork?.workId;
+    if (counterAskLight) counterAskLight.disabled = !centreWork?.workId;
   }
 });
 
