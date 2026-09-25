@@ -729,11 +729,22 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           openPullRequest: input => runMutation("github.open_pull_request", input, () => lifecycle.openPullRequest(input)),
           rerunFailed: input => runMutation("github.rerun_failed", input, () => lifecycle.rerunFailed(input)),
           mergePullRequest: input => runMutation("github.merge_pull_request", input, () => lifecycle.mergePullRequest(input)),
-          factoryV4: input => {
+          factoryV4: async input => {
             const routed = { ...input, workId:input?.workContext?.workId };
-            return input.action === "inspect"
-              ? factoryV4(routed)
-              : runMutation("factory.v4." + String(input.action || "unknown"), routed, () => factoryV4(routed));
+            if (input.action === "inspect") return factoryV4(routed);
+            return runMutation("factory.v4." + String(input.action || "unknown"), routed, async resolvedInput => {
+              if (String(resolvedInput?.action || "").trim().toLowerCase() === "start") {
+                const inspected = await inspectCentreCompat(centreLive, resolvedInput.workContext);
+                const centre = await responsePayload(inspected);
+                if (!inspected.ok) return inspected;
+                if (!centre?.work || String(centre.work.workId || "") !== String(resolvedInput.workId || "") ||
+                    String(centre.work.checkpointId || "") !== String(resolvedInput.workContext?.checkpointId || "")) {
+                  return json({ code:"FACTORY_V4_CENTRE_IDENTITY_MISMATCH" }, 409);
+                }
+                resolvedInput.work = centre.work;
+              }
+              return factoryV4(resolvedInput);
+            });
           },
           maintenance: async input => {
             const workId = String(input?.workContext?.workId || "").trim();
