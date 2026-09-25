@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_RUNTIME_API_TOKEN: ${{ secrets.CLOUDFLARE_RUNTIME_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       GOHUB_GITHUB_TOKEN: ${{ secrets.GOHUB_GITHUB_TOKEN }}
       GOHUB_MASTER_KEY: ${{ secrets.GOHUB_MASTER_KEY }}
@@ -149,6 +150,12 @@ jobs:
           if [ -n "${GOHUB_GITHUB_TOKEN}" ]; then
             printf 'GITHUB_TOKEN=%s\n' "${GOHUB_GITHUB_TOKEN}" >> "${secrets_file}"
           fi
+          if [ -n "${CLOUDFLARE_RUNTIME_API_TOKEN}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            printf 'CLOUDFLARE_RUNTIME_API_TOKEN=%s\n' "${CLOUDFLARE_RUNTIME_API_TOKEN}" >> "${secrets_file}"
+            printf 'CLOUDFLARE_ACCOUNT_ID=%s\n' "${CLOUDFLARE_ACCOUNT_ID}" >> "${secrets_file}"
+          else
+            echo "Cloudflare runtime bridge credentials are absent; Cloudflare MCP reads will remain fail-closed."
+          fi
           if [ -n "${GOHUB_MASTER_KEY}" ] && [ -n "${GOHUB_OWNER_PASSCODE}" ]; then
             printf 'GOHUB_MASTER_KEY=%s\n' "${GOHUB_MASTER_KEY}" >> "${secrets_file}"
             printf 'GOHUB_OWNER_PASSCODE=%s\n' "${GOHUB_OWNER_PASSCODE}" >> "${secrets_file}"
@@ -165,6 +172,56 @@ jobs:
           else
             npx wrangler deploy --config wrangler.go-hub.jsonc
           fi
+
+      - name: Verify deployed Cloudflare runtime bridge through MCP
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { createTestAccessToken } from "./go-hub-oauth.mjs";
+
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const deployToken = process.env.CLOUDFLARE_API_TOKEN;
+          const signingKey = process.env.GOHUB_MASTER_KEY;
+          if (!accountId || !deployToken || !signingKey) {
+            console.error("::error::Cloudflare runtime smoke prerequisites are missing.");
+            process.exit(1);
+          }
+
+          const subdomainResponse = await fetch(
+            "https://api.cloudflare.com/client/v4/accounts/" + accountId + "/workers/subdomain",
+            { headers:{ authorization:"Bearer " + deployToken } },
+          );
+          const subdomainPayload = await subdomainResponse.json().catch(() => null);
+          const subdomain = String(subdomainPayload?.result?.subdomain || "").trim();
+          if (!subdomainResponse.ok || !subdomain) {
+            console.error("::error::Unable to resolve workers.dev subdomain for Cloudflare runtime smoke.");
+            process.exit(1);
+          }
+
+          const origin = "https://go-hub." + subdomain + ".workers.dev";
+          const accessToken = await createTestAccessToken({ issuer:origin, signingKey });
+          const response = await fetch(origin + "/mcp", {
+            method:"POST",
+            headers:{
+              authorization:"Bearer " + accessToken,
+              "content-type":"application/json",
+              accept:"application/json, text/event-stream",
+            },
+            body:JSON.stringify({
+              jsonrpc:"2.0",
+              id:1,
+              method:"tools/call",
+              params:{ name:"go_hub_cloudflare_health", arguments:{} },
+            }),
+          });
+          const payload = await response.json().catch(() => null);
+          const proof = payload?.result?.structuredContent;
+          if (!response.ok || payload?.error || payload?.result?.isError || proof?.ok !== true || proof?.upstream !== "PASS") {
+            console.error("::error::GO Hub Cloudflare runtime MCP health failed: " + String(proof?.code || payload?.error?.message || response.status));
+            process.exit(1);
+          }
+          console.log("GO Hub Cloudflare runtime MCP health passed; workers=" + String(proof.workerCount));
+          NODE
 
       - name: Verify deployed LIGHTHOUSE Control Room runtime
         shell: bash

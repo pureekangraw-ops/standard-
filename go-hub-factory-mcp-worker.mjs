@@ -2,6 +2,7 @@ import { verifyAccessToken } from "./go-hub-oauth.mjs";
 import { createMcpRegistry } from "./go-hub-mcp-registry.mjs";
 import { createMcpHandler } from "./go-hub-mcp.mjs";
 import { createLinearService } from "./go-hub-linear-service.mjs";
+import { createCloudflareService } from "./go-hub-cloudflare-service.mjs";
 import { createGithubLifecycleService } from "./go-hub-worker.mjs";
 import { createFactoryControllerService } from "./go-hub-factory-controller.mjs";
 import { createFactoryActionService, createFactoryAutoService, createFactoryV4Service } from "./go-hub-factory-service.mjs";
@@ -68,7 +69,7 @@ const LIGHT_DIRECT_TOOL_NAMES = new Set([
 function lightAllowedTools(registry) {
   const allowed = new Set(LIGHT_MUTATION_TOOL_NAMES);
   for (const tool of registry.listTools()) {
-    if (tool?.annotations?.readOnlyHint === true) allowed.add(tool.name);
+    if (tool?.annotations?.readOnlyHint === true && !tool.name.startsWith("go_hub_cloudflare_")) allowed.add(tool.name);
   }
   return allowed;
 }
@@ -673,6 +674,11 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         teamId: env?.LINEAR_TEAM_ID,
         teamKey: env?.LINEAR_TEAM_KEY,
       });
+      const cloudflare = createCloudflareService({
+        fetchImpl,
+        token: env?.CLOUDFLARE_RUNTIME_API_TOKEN,
+        accountId: env?.CLOUDFLARE_ACCOUNT_ID,
+      });
       const observer = createObserverEvidenceService({ namespace: env?.OBSERVER_SESSIONS });
       const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
       const broadcast = createBroadcastService({ namespace: env?.GO_HUB_BROADCAST_STATE });
@@ -868,6 +874,10 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           linearGetIssue: input => linear.getIssue(input),
           linearCreateIssue: input => runMutation("linear.create_issue", input, () => linear.createIssue(input)),
           linearUpdateIssue: input => runMutation("linear.update_issue", input, () => linear.updateIssue(input)),
+          cloudflareCapabilities: () => cloudflare.capabilities(),
+          cloudflareHealth: () => cloudflare.health(),
+          cloudflareListWorkers: () => cloudflare.listWorkers(),
+          cloudflareInspectWorker: input => cloudflare.inspectWorker(input),
           gmailCapabilities: () => googleWorkspace.capabilities(),
           gmailDiagnostics: () => googleWorkspace.diagnostics(),
           gmailProfile: () => googleWorkspace.gmailProfile(),
