@@ -192,6 +192,17 @@ jobs:
           const origin = "https://go-hub." + subdomain + ".workers.dev";
           const workId = "SMOKE-LIGHTHOUSE-" + process.env.GITHUB_RUN_ID + "-" + process.env.GITHUB_RUN_ATTEMPT;
           const actor = "GO";
+          const retryableStatus = status => status === 409 || status === 425 || status === 429 || status >= 500;
+          const delay = attempt => new Promise(resolve => setTimeout(resolve, Math.min(500 * attempt, 2000)));
+          const runtimeFetch = async (url, init = {}) => {
+            let response = null;
+            for (let attempt = 1; attempt <= 8; attempt += 1) {
+              response = await fetch(url, init);
+              if (!retryableStatus(response.status) || attempt === 8) return response;
+              await delay(attempt);
+            }
+            return response;
+          };
           const centre = async body => {
             for (let attempt = 1; attempt <= 8; attempt += 1) {
               const response = await fetch(origin + "/hub/api/centre/action", {
@@ -203,8 +214,8 @@ jobs:
               if (response.ok && payload?.ok === true) return payload;
               const reason = String(payload?.code || payload?.message || response.status);
               const resetting = /Durable Object reset because its code was updated/i.test(reason);
-              if (resetting && attempt < 8) {
-                await new Promise(resolve => setTimeout(resolve, 750));
+              if ((resetting || retryableStatus(response.status)) && attempt < 8) {
+                await delay(attempt);
                 continue;
               }
               throw new Error("CENTRE_SMOKE_FAILED:" + reason);
@@ -238,7 +249,7 @@ jobs:
           }
 
           const roomUrl = origin + "/hub/lighthouse?work_id=" + encodeURIComponent(workId) + "&actor=" + encodeURIComponent(actor);
-          const roomResponse = await fetch(roomUrl, { redirect:"manual" });
+          const roomResponse = await runtimeFetch(roomUrl, { redirect:"manual" });
           const roomHtml = await roomResponse.text();
           const requiredText = [
             "LIGHTHOUSE Control Room",
@@ -256,7 +267,7 @@ jobs:
             throw new Error("LIGHTHOUSE_ROOM_RENDER_FAILED");
           }
 
-          const realityResponse = await fetch(
+          const realityResponse = await runtimeFetch(
             origin + "/hub/api/lighthouse-control-port/owner-state?work_id=" + encodeURIComponent(workId) + "&actor=" + encodeURIComponent(actor),
             {
               method:"POST",
@@ -285,7 +296,7 @@ jobs:
 
           await centre({ action:"v4_claim", workId, actor });
           await centre({ action:"v4_open_pass", workId, actor, kind:"WORK", destinations:["lighthouse"] });
-          const reentered = await fetch(roomUrl, { redirect:"manual" });
+          const reentered = await runtimeFetch(roomUrl, { redirect:"manual" });
           if (!reentered.ok || !(await reentered.text()).includes("LIGHTHOUSE Control Room")) {
             throw new Error("LIGHTHOUSE_SAME_WORK_REENTRY_FAILED");
           }
