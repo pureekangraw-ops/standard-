@@ -231,3 +231,128 @@ test("Notion LIGHT OAuth client keeps a sliding refresh chain across worker recr
   );
   assert.deepEqual(identity, { subject:"notion", scope:"go-hub" });
 });
+
+
+test("Notion OAuth can authorize and rotate refresh tokens for the restricted LIGHT resource", async () => {
+  now = 1_789_391_000;
+  const { createOAuthHandler, verifyAccessToken } =
+    await import(oauthUrl + "?light-resource-oauth=" + Date.now());
+  const notionRedirect = "https://app.notion.com/workflows/mcp/oauth/callback";
+  const lightResource = issuer + "/mcp/light";
+  const lightConfig = {
+    issuer,
+    signingKey:config.signingKey,
+    ownerPasscode:config.ownerPasscode,
+    clients:[
+      {
+        clientId:"go-hub-chatgpt",
+        clientSecret:"chatgpt-secret",
+        redirectUris:[config.redirectUri],
+        subject:"big",
+        scope:"go-hub",
+      },
+      {
+        clientId:"go-hub-notion",
+        clientSecret:"notion-secret",
+        redirectUris:[notionRedirect],
+        resources:[issuer + "/mcp", lightResource],
+        subject:"notion",
+        scope:"go-hub",
+      },
+    ],
+    now:() => now,
+  };
+  const handler = createOAuthHandler(lightConfig);
+
+  const metadata = await handler(new Request(issuer + "/.well-known/oauth-protected-resource/mcp/light"));
+  assert.equal(metadata.status, 200);
+  const metadataPayload = await metadata.json();
+  assert.equal(metadataPayload.resource, lightResource);
+  assert.ok(metadataPayload.scopes_supported.includes("go-hub"));
+
+  const challenge = await challengeFor(verifier);
+  const authorize = await handler(new Request(issuer + "/oauth/authorize?" + new URLSearchParams({
+    response_type:"code",
+    client_id:"go-hub-notion",
+    redirect_uri:notionRedirect,
+    code_challenge:challenge,
+    code_challenge_method:"S256",
+    resource:lightResource,
+  })));
+  assert.equal(authorize.status, 200);
+
+  const codeResponse = await handler(new Request(issuer + "/oauth/authorize", {
+    method:"POST",
+    headers:{ "content-type":"application/x-www-form-urlencoded" },
+    body:new URLSearchParams({
+      response_type:"code",
+      client_id:"go-hub-notion",
+      redirect_uri:notionRedirect,
+      code_challenge:challenge,
+      code_challenge_method:"S256",
+      resource:lightResource,
+      passcode:config.ownerPasscode,
+    }),
+    redirect:"manual",
+  }));
+  assert.equal(codeResponse.status, 302);
+  const code = new URL(codeResponse.headers.get("location")).searchParams.get("code");
+
+  const basic = "Basic " + Buffer.from("go-hub-notion:notion-secret").toString("base64");
+  const initial = await handler(new Request(issuer + "/oauth/token", {
+    method:"POST",
+    headers:{ authorization:basic, "content-type":"application/x-www-form-urlencoded" },
+    body:new URLSearchParams({
+      grant_type:"authorization_code",
+      code,
+      redirect_uri:notionRedirect,
+      code_verifier:verifier,
+      resource:lightResource,
+    }),
+  }));
+  assert.equal(initial.status, 200);
+  const first = await initial.json();
+  assert.equal(typeof first.refresh_token, "string");
+
+  const identity = await verifyAccessToken(
+    new Request(lightResource, { headers:{ authorization:"Bearer " + first.access_token } }),
+    {
+      issuer,
+      signingKey:config.signingKey,
+      resource:lightResource,
+      acceptedIdentities:[{ subject:"notion", scope:"go-hub" }],
+      now:() => now,
+    },
+  );
+  assert.deepEqual(identity, { subject:"notion", scope:"go-hub" });
+
+  now += 3601;
+  const recreatedHandler = createOAuthHandler(lightConfig);
+  const refreshed = await recreatedHandler(new Request(issuer + "/oauth/token", {
+    method:"POST",
+    headers:{ authorization:basic, "content-type":"application/x-www-form-urlencoded" },
+    body:new URLSearchParams({
+      grant_type:"refresh_token",
+      refresh_token:first.refresh_token,
+      resource:lightResource,
+    }),
+  }));
+  assert.equal(refreshed.status, 200);
+  const second = await refreshed.json();
+  assert.equal(typeof second.access_token, "string");
+  assert.equal(typeof second.refresh_token, "string");
+  assert.notEqual(second.refresh_token, first.refresh_token);
+
+  const chatgptBasic = "Basic " + Buffer.from("go-hub-chatgpt:chatgpt-secret").toString("base64");
+  const crossed = await recreatedHandler(new Request(issuer + "/oauth/token", {
+    method:"POST",
+    headers:{ authorization:chatgptBasic, "content-type":"application/x-www-form-urlencoded" },
+    body:new URLSearchParams({
+      grant_type:"refresh_token",
+      refresh_token:second.refresh_token,
+      resource:lightResource,
+    }),
+  }));
+  assert.equal(crossed.status, 400);
+  assert.deepEqual(await crossed.json(), { error:"invalid_grant" });
+});
