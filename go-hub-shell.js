@@ -112,6 +112,60 @@ const counterConversation = document.querySelector("[data-counter-conversation]"
 const counterChatEmpty = document.querySelector("[data-counter-chat-empty]");
 const counterResult = document.querySelector("[data-counter-result]");
 
+const DRESSING_STORAGE_KEY = "go-hub:dressing-room:v1";
+const dressingCoreInputs = [...document.querySelectorAll("[data-dressing-core]")];
+const dressingStatus = document.querySelector("[data-dressing-status]");
+const dressingLesson = document.querySelector("[data-dressing-lesson]");
+const dressingAdd = document.querySelector("[data-dressing-add]");
+const dressingLessons = document.querySelector("[data-dressing-lessons]");
+const dressingEmpty = document.querySelector("[data-dressing-empty]");
+
+function readDressingState() {
+  try {
+    const parsed = JSON.parse(globalThis.localStorage?.getItem(DRESSING_STORAGE_KEY) || "{}");
+    return {
+      installed: Array.isArray(parsed.installed) ? [...new Set(parsed.installed.map(String))] : [],
+      lessons: Array.isArray(parsed.lessons)
+        ? parsed.lessons.filter(item => item && typeof item.text === "string").slice(-200)
+        : [],
+    };
+  } catch {
+    return { installed: [], lessons: [] };
+  }
+}
+
+let dressingState = readDressingState();
+
+function saveDressingState() {
+  globalThis.localStorage?.setItem(DRESSING_STORAGE_KEY, JSON.stringify(dressingState));
+}
+
+function renderDressingRoom() {
+  const installed = new Set(dressingState.installed);
+  for (const input of dressingCoreInputs) input.checked = installed.has(input.value);
+  if (dressingStatus) dressingStatus.textContent = `${installed.size}/${dressingCoreInputs.length}`;
+  if (dressingEmpty) dressingEmpty.hidden = dressingState.lessons.length > 0;
+  if (dressingLessons) {
+    dressingLessons.replaceChildren(...dressingState.lessons.map(item => {
+      const li = document.createElement("li");
+      li.textContent = item.text;
+      return li;
+    }));
+  }
+}
+
+function addDressingLesson(value) {
+  const text = String(value || "").trim();
+  if (!text) return;
+  dressingState = {
+    ...dressingState,
+    lessons: [...dressingState.lessons, { text, addedAt: new Date().toISOString() }].slice(-200),
+  };
+  saveDressingState();
+  if (dressingLesson) dressingLesson.value = "";
+  renderDressingRoom();
+}
+
 function field(name) {
   return centreForm?.elements.namedItem(name) || null;
 }
@@ -452,6 +506,26 @@ function render() {
   renderWorkbench(taskSnapshot());
   renderOperator(taskSnapshot());
 }
+
+for (const input of dressingCoreInputs) {
+  input.addEventListener("change", () => {
+    const installed = new Set(dressingState.installed);
+    if (input.checked) installed.add(input.value);
+    else installed.delete(input.value);
+    dressingState = { ...dressingState, installed: [...installed] };
+    saveDressingState();
+    renderDressingRoom();
+  });
+}
+
+dressingAdd?.addEventListener("click", () => addDressingLesson(dressingLesson?.value));
+dressingLesson?.addEventListener("keydown", event => {
+  if (event.key !== "Enter" || event.isComposing) return;
+  event.preventDefault();
+  addDressingLesson(dressingLesson.value);
+});
+
+renderDressingRoom();
 
 controlRoomRefresh?.addEventListener("click", () => { void refreshControlRoom(); });
 
