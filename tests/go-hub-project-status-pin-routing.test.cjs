@@ -233,7 +233,8 @@ test("Work ID remains the durable identity and Room ID is not required by Centre
   const context = putFile.inputSchema.properties.workContext;
   assert.equal(context.required.includes("workId"), true);
   assert.equal(context.required.includes("checkpointId"), true);
-  assert.equal(context.required.includes("returnAddress"), true);
+  assert.deepEqual(context.required, ["workId","checkpointId"]);
+  assert.deepEqual(Object.keys(context.properties), ["workId","checkpointId"]);
   assert.equal(context.required.includes("roomId"), false);
   assert.equal(Object.hasOwn(context.properties, "roomId"), false);
 });
