@@ -11,13 +11,8 @@ const oauthUrl = pathToFileURL(path.join(root, "go-hub-oauth.mjs")).href;
 const endpoint = "https://hub.example/mcp";
 
 const driveWorkContext = Object.freeze({
-  workId: "WORK-DRIVE-HUB-20260919-001",
-  checkpointId: "CP-DRIVE-HUB-001",
-  returnAddress: "CP-DRIVE-HUB-001",
-  destination: "destination://drive",
-  task: "Move one verified Drive item",
-  requestedResult: "Destination readback PASS",
-  lensReference: "role://drive-hub-integration",
+  workId:"WORK-DRIVE-HUB-20260919-001",
+  checkpointId:"CP-DRIVE-HUB-001",
 });
 
 function rpc(token, name, args = {}) {
@@ -37,7 +32,7 @@ function rpc(token, name, args = {}) {
   });
 }
 
-test("registry publishes eleven governed Drive bridge tools", async () => {
+test("registry publishes twelve governed Drive bridge tools", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?drive-tools=" + Date.now());
   const lifecycle = new Proxy({}, {
     get: (_, name) => async input => new Response(JSON.stringify({ operation: name, input }), {
@@ -54,12 +49,13 @@ test("registry publishes eleven governed Drive bridge tools", async () => {
     "go_hub_drive_get_item",
     "go_hub_drive_list_children",
     "go_hub_drive_read_document",
+    "go_hub_drive_download_file",
     "go_hub_drive_create_folder",
     "go_hub_drive_upload_file",
     "go_hub_drive_move_item",
     "go_hub_drive_rename_item",
   ]);
-  assert.deepEqual(tools.map(tool => tool.annotations.readOnlyHint), [true, true, true, true, true, true, true, false, false, false, false]);
+  assert.deepEqual(tools.map(tool => tool.annotations.readOnlyHint), [true, true, true, true, true, true, true, true, false, false, false, false]);
 
   await registry.callTool("go_hub_drive_move_item", {
     fileId: "file-a",
@@ -74,7 +70,7 @@ test("registry publishes eleven governed Drive bridge tools", async () => {
     contentBase64: "cGl4aWU=",
     size: 5,
     sha256: "0".repeat(64),
-    workContext: { ...driveWorkContext, task: "Upload Pixie staging artifact" },
+    workContext: driveWorkContext,
   });
   assert.equal(uploadResult.structuredContent.operation, "driveUploadFile");
 
@@ -86,8 +82,14 @@ test("registry publishes eleven governed Drive bridge tools", async () => {
   await assert.rejects(registry.callTool("go_hub_drive_create_folder", {
     parentId: "folder-b",
     name: "Archive",
-    workContext: { ...driveWorkContext, destination: "destination://factory" },
-  }), /destination/i);
+    workContext: { ...driveWorkContext, destination:"destination://factory" },
+  }), /unknown workContext field/i);
+
+  const downloadResult = await registry.callTool("go_hub_drive_download_file", {
+    fileId:"file-a",
+    maxBytes:1024,
+  });
+  assert.equal(downloadResult.structuredContent.operation, "driveDownloadFile");
 });
 
 test("Factory MCP injects Drive refresh credentials and serves metadata read", async () => {
