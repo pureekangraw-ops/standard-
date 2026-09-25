@@ -108,10 +108,12 @@ export function correlateControlRoomTruth(input = {}, options = {}) {
 }
 
 export function assertGoControlRoomEntry({ work, actor, authority = "GO" } = {}) {
-  if (!work || upper(work.status) !== "ON PROCESS") throw new Error("GO_CONTROL_ROOM_WORK_NOT_ACTIVE");
-  if (text(actor) !== "GO" || text(authority) !== "GO") throw new Error("GO_CONTROL_ROOM_GO_ONLY");
-  if (text(work.holder) !== "GO") throw new Error("GO_CONTROL_ROOM_GO_HOLDER_REQUIRED");
-  if (work.pass?.state !== "ACTIVE") throw new Error("GO_CONTROL_ROOM_ACTIVE_PASS_REQUIRED");
+  if (!work || !text(work.workId)) throw new Error("GO_CONTROL_ROOM_WORK_REQUIRED");
+  // GO-only is an existing authority boundary, not a new holder or Pass gate.
+  // LIGHT may implement/observe while the Work is held by LIGHT; the GO Hub
+  // surface remains the authority-owned entry point.
+  if (text(actor) && text(actor) !== "GO") throw new Error("GO_CONTROL_ROOM_GO_ONLY");
+  if (text(authority) !== "GO") throw new Error("GO_CONTROL_ROOM_GO_AUTHORITY_REQUIRED");
   return true;
 }
 
