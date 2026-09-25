@@ -69,7 +69,7 @@ const LIGHT_DIRECT_TOOL_NAMES = new Set([
 function lightAllowedTools(registry) {
   const allowed = new Set(LIGHT_MUTATION_TOOL_NAMES);
   for (const tool of registry.listTools()) {
-    if (tool?.annotations?.readOnlyHint === true && !tool.name.startsWith("go_hub_cloudflare_")) allowed.add(tool.name);
+    if (tool?.annotations?.readOnlyHint === true) allowed.add(tool.name);
   }
   return allowed;
 }
