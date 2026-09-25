@@ -279,33 +279,68 @@ async function controlRoomRead({ request, env, fetchImpl }) {
   }
 
   let cloudflare = { status:"UNKNOWN", reason:"CLOUDFLARE_RUNTIME_READER_UNAVAILABLE" };
-  const cfToken = env?.CLOUDFLARE_API_TOKEN || env?.CLOUDFLARE_TOKEN;
+  const cfToken = env?.CLOUDFLARE_RUNTIME_API_TOKEN || env?.CLOUDFLARE_API_TOKEN || env?.CLOUDFLARE_TOKEN;
   const cfAccount = env?.CLOUDFLARE_ACCOUNT_ID || env?.CF_ACCOUNT_ID;
   if (cfToken && cfAccount) {
     try {
-      const response = await createCloudflareService({ fetchImpl, token:cfToken, accountId:cfAccount }).health();
-      const payload = await response.json().catch(() => ({}));
-      cloudflare = response.ok ? { status:payload?.upstream === "PASS" ? "LIVE" : "UNKNOWN", health:payload } : { status:"UNKNOWN", reason:payload?.code || "CLOUDFLARE_HEALTH_FAILED" };
+      const service = createCloudflareService({ fetchImpl, token:cfToken, accountId:cfAccount });
+      const [healthResponse, inspectResponse] = await Promise.all([
+        service.health(),
+        service.inspectWorker({ scriptName:"go-hub" }),
+      ]);
+      const health = await healthResponse.json().catch(() => ({}));
+      const inspected = await inspectResponse.json().catch(() => ({}));
+      const deployment = Array.isArray(inspected?.deployments) ? (inspected.deployments[0] || null) : null;
+      cloudflare = healthResponse.ok ? {
+        status:health?.upstream === "PASS" ? "LIVE" : "UNKNOWN",
+        health,
+        worker:inspected?.worker || null,
+        deployment,
+        deploymentsStatus:inspected?.deploymentsStatus || (inspectResponse.ok ? "PASS" : "UNKNOWN"),
+        evidenceRef:deployment?.id ? `cloudflare://workers/go-hub/deployments/${deployment.id}` : null,
+      } : {
+        status:"UNKNOWN",
+        reason:health?.code || "CLOUDFLARE_HEALTH_FAILED",
+      };
     } catch (error) {
       cloudflare = { status:"UNKNOWN", reason:error?.message || "CLOUDFLARE_HEALTH_FAILED" };
     }
   }
 
-  // Board runtime is intentionally not inferred from Centre projection.
-  const board = { status:"UNKNOWN", reason:"BOARD_RUNTIME_READ_NOT_CONFIGURED" };
+  let board = { status:"UNKNOWN", reason:"BOARD_RUNTIME_UNAVAILABLE" };
+  try {
+    const response = await createLighthouseControlPortMcpService({
+      namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS,
+    }).boardRead();
+    const payload = await response.json().catch(() => ({}));
+    board = response.ok ? {
+      ...payload,
+      status:"LIVE",
+      evidenceRef:payload?.boardId ? `board://${payload.boardId}@${payload.revision ?? 0}` : null,
+    } : {
+      status:"UNKNOWN",
+      reason:payload?.code || "BOARD_RUNTIME_READ_FAILED",
+    };
+  } catch (error) {
+    board = { status:"UNKNOWN", reason:error?.message || "BOARD_RUNTIME_READ_FAILED" };
+  }
+
+  const controls = [
+    { id:"refresh-observations", label:"Refresh observations", mode:"READ", available:true },
+  ];
   const observations = correlateControlRoomTruth({
     centre:{ status:centre.work.status, workStatus:centre.work.status },
     projectStatus,
     factory:{ status:factory.status || "UNKNOWN" },
     board, github, cloudflare,
-    capabilities:[],
+    capabilities:controls,
     autoRefresh:true,
   });
   return json({
     ok:true, room:"GO_CONTROL_ROOM", entryAuthority:"GO", mode:"LIVE_OBSERVATION_AND_AVAILABLE_CONTROLS",
     workId, checkpointId, observedAt:new Date().toISOString(),
     centre:centre.work, projectStatus, factory, board, github, cloudflare,
-    observations, controls:[],
+    observations, controls:observations.availableControls,
   });
 }
 
