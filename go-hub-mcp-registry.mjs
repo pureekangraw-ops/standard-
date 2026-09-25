@@ -108,6 +108,7 @@ const definitions = [
   def("go_hub_drive_list_children", "List normalized Google Drive children under one folder ID.", "driveListChildren", schema({ parentId: str, pageSize: { type: "integer", minimum: 1, maximum: 1000 }, pageToken: str }, ["parentId"]), ann(true)),
   def("go_hub_drive_read_document", "Read text from one native Google Doc inside the governed Drive scope.", "driveReadDocument", schema({ documentId: str, maxChars: { type: "integer", minimum: 1000, maximum: 200000 } }, ["documentId"]), ann(true)),
   def("go_hub_drive_create_folder", "Create a Google Drive folder and require destination readback before success.", "driveCreateFolder", schema({ parentId: str, name: str, workContext }, ["parentId", "name", "workContext"]), ann(false)),
+  def("go_hub_drive_upload_file", "Upload one bounded file into the governed Drive scope with SHA-256 verification and destination readback.", "driveUploadFile", schema({ parentId: str, name: str, mimeType: str, contentBase64: str, sha256: { type: "string", pattern: "^[a-fA-F0-9]{64}$" }, size: { type: "integer", minimum: 1, maximum: 8388608 }, workContext }, ["parentId", "name", "contentBase64", "sha256", "workContext"]), ann(false)),
   def("go_hub_drive_move_item", "Move an existing Google Drive item with native parent update and require destination readback before success.", "driveMoveItem", schema({ fileId: str, destinationFolderId: str, workContext }, ["fileId", "destinationFolderId", "workContext"]), ann(false)),
   def("go_hub_drive_rename_item", "Rename an existing Google Drive item and require readback before success.", "driveRenameItem", schema({ fileId: str, name: str, workContext }, ["fileId", "name", "workContext"]), ann(false)),
 ];
@@ -117,7 +118,7 @@ const maintenanceTools = new Set(["go_hub_maintenance"]);
 const linearMutationTools = new Set(["go_hub_linear_create_issue", "go_hub_linear_update_issue"]);
 const gmailMutationTools = new Set(["go_hub_gmail_send_message"]);
 const calendarMutationTools = new Set(["go_hub_calendar_create_event"]);
-const driveMutationTools = new Set(["go_hub_drive_create_folder", "go_hub_drive_move_item", "go_hub_drive_rename_item", "go_hub_archive_workflow_artifact"]);
+const driveMutationTools = new Set(["go_hub_drive_create_folder", "go_hub_drive_upload_file", "go_hub_drive_move_item", "go_hub_drive_rename_item", "go_hub_archive_workflow_artifact"]);
 const counterTools = new Set(["go_hub_counter_create", "go_hub_counter_inbox", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_answer", "go_hub_counter_readback"]);
 
 function assertArgs(definition, args) {
