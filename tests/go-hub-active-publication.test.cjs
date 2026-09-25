@@ -15,6 +15,7 @@ const activeHubFiles = [
   "go-hub.webmanifest",
   "go-hub-shell.css",
   "go-hub-shell.js",
+  "go-hub-control-room.js",
   "go-hub-work-targets.js",
   "go-hub-runtime.js",
   "go-hub-operator-model.js",
