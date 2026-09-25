@@ -202,3 +202,67 @@ h1 { margin: 8px 0; font-size: clamp(2rem, 8vw, 4rem); }
 .counter-notion a { color: inherit; font-weight: 700; }
 
 [hidden] { display: none !important; }
+
+
+.dressing-room {
+  display: grid;
+  gap: 12px;
+  margin: 4px 0;
+  padding: 14px;
+  border: 1px solid rgba(244, 246, 248, .2);
+  border-radius: 14px;
+}
+
+.dressing-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dressing-heading h3 { margin: 3px 0 0; }
+.dressing-heading strong {
+  padding: 5px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: .75rem;
+}
+
+.dressing-intro { margin: 0; font-size: .88rem; opacity: .8; }
+.dressing-checklist { display: grid; gap: 8px; }
+.dressing-checklist label {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+}
+.dressing-checklist input { width: auto; margin-top: 2px; }
+
+.dressing-lessons {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.dressing-lessons label,
+.dressing-lessons [data-dressing-empty],
+.dressing-lessons ul { grid-column: 1 / -1; }
+.dressing-lessons button {
+  min-height: 40px;
+  align-self: end;
+}
+.dressing-lessons ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.dressing-work-fit {
+  padding-top: 4px;
+  border-top: 1px solid rgba(244, 246, 248, .14);
+}
+.dressing-work-fit summary {
+  cursor: pointer;
+  font-size: .82rem;
+  opacity: .8;
+}
+.dressing-work-fit[open] { display: grid; gap: 10px; }
