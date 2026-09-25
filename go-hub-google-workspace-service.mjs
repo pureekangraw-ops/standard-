@@ -91,15 +91,7 @@ function prepareAttachments(value) {
     const filename = safeHeader(item?.filename);
     const mimeType = safeHeader(item?.mimeType);
     const encoded = attachmentBytes(item?.contentBase64);
-    if (!filename || !/^[A-Za-z0-9][A-Za-z0-9.+_-]*\\/[A-Za-z0-9][A-Za-z0-9.+_-]*$/.test(mimeType) || !encoded) return null;
-  const bytes = new TextEncoder().encode(value);
-  let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}^_.+\/-]+\/[A-Za-z0-9!#function base64Url(value) {
-  const bytes = new TextEncoder().encode(value);
-  let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}^_.+\/-]+$/.test(mimeType) || !encoded) return null;
+    if (!filename || !/^[A-Za-z0-9][A-Za-z0-9.+_-]*\/[A-Za-z0-9][A-Za-z0-9.+_-]*$/.test(mimeType) || !encoded) return null;
     totalBytes += encoded.bytes;
     if (totalBytes > MAX_GMAIL_ATTACHMENT_BYTES) return null;
     attachments.push({ filename, mimeType, contentBase64: encoded.base64 });
