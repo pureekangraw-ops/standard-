@@ -10,7 +10,6 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
   const wrangler = JSON.parse(fs.readFileSync(path.join(root, "wrangler.go-hub.jsonc"), "utf8"));
   assert.deepEqual(wrangler.assets.run_worker_first, [
     "/hub/api/centre/*",
-    "/hub/api/counter/*",
     "/hub/api/lighthouse-control-port/*",
     "/hub/lighthouse",
     "/hub/api/browser/*",
@@ -30,9 +29,6 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
     { name: "LIGHTHOUSE_CONTROL_PORT_SESSIONS", class_name: "LighthouseControlPortSessionRegistry" },
     { name: "OBSERVER_SESSIONS", class_name: "ObserverSessionRegistry" },
     { name: "GO_HUB_GLOBAL_AUDIT", class_name: "GoHubGlobalAuditLog" },
-    { name: "GO_HUB_COUNTER_STATE", class_name: "GoHubCounterState" },
-    { name: "GO_HUB_COUNTER_INBOX", class_name: "GoHubCounterInboxState" },
-    { name: "GO_HUB_COUNTER_DISPATCH_STATE", class_name: "GoHubCounterDispatchState" },
     { name: "GO_HUB_NOTION_LIGHT_STATE", class_name: "GoHubNotionLightState" },
     { name: "GO_HUB_MAINTENANCE_STATE", class_name: "GoHubMaintenanceState" },
     { name: "GO_HUB_BROADCAST_STATE", class_name: "GoHubBroadcastState" },
@@ -55,6 +51,8 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
     Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("GoHubCounterInboxState")));
   assert.ok(wrangler.migrations?.some(item =>
     Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("GoHubCounterDispatchState")));
+  assert.equal(wrangler.durable_objects.bindings.some(item => item.name.includes("COUNTER")), false);
+  assert.equal(Object.hasOwn(wrangler.vars || {}, "COUNTER_HANDOFF_AGENT_URL"), false);
   assert.ok(wrangler.migrations?.some(item =>
     Array.isArray(item.new_sqlite_classes) && item.new_sqlite_classes.includes("GoHubNotionLightState")));
   assert.ok(wrangler.migrations?.some(item =>
@@ -75,8 +73,6 @@ test("deployment publishes Browser, Factory MCP, OAuth, and durable Hephaestus",
     "go-hub-factory-state.mjs",
     "go-hub-centre-live.mjs",
     "go-hub-global-audit.mjs",
-    "go-hub-counter.mjs",
-    "go-hub-counter-dispatcher.mjs",
     "go-hub-notion-light.mjs",
     "go-hub-lighthouse-control-port-session.js",
     "go-hub-lighthouse-control-port-service.mjs",
