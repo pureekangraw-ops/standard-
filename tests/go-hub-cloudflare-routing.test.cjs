@@ -38,10 +38,13 @@ test("GO Hub API routes run the edge Worker before SPA asset fallback", () => {
 test("Counter Ask is direct read-only Notion search while HANDOFF keeps Centre identity", () => {
   const source = fs.readFileSync(path.resolve(__dirname, "../go-hub-edge-worker.mjs"), "utf8");
   assert.match(source, /COUNTER_API_ROOT = "\/hub\/api\/counter"/);
-  const askStart = source.indexOf('url.pathname === `${COUNTER_API_ROOT}\/ask`');
-  const handoffStart = source.indexOf('url.pathname === `${COUNTER_API_ROOT}\/handoff`');
-  assert.ok(askStart >= 0 && handoffStart > askStart);
-  const ask = source.slice(askStart, handoffStart);
+
+  const askStart = source.indexOf('url.pathname === `${COUNTER_API_ROOT}/ask`');
+  const inboxStart = source.indexOf('url.pathname === `${COUNTER_API_ROOT}/inbox`', askStart);
+  const handoffStart = source.indexOf('url.pathname === `${COUNTER_API_ROOT}/handoff`');
+  assert.ok(askStart >= 0 && inboxStart > askStart && handoffStart > inboxStart);
+
+  const ask = source.slice(askStart, inboxStart);
   const handoff = source.slice(handoffStart, source.indexOf('if (request.method === "GET" && url.pathname === "/hub/observer")', handoffStart));
 
   assert.match(ask, /createNotionLightService/);
