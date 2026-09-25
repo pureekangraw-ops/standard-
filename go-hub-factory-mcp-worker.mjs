@@ -56,6 +56,15 @@ const LIGHT_MUTATION_TOOL_NAMES = new Set([
   "go_hub_drive_rename_item",
 ]);
 
+const LIGHT_DIRECT_TOOL_NAMES = new Set([
+  "go_hub_gmail_send_message",
+  "go_hub_calendar_create_event",
+  "go_hub_drive_create_folder",
+  "go_hub_drive_upload_file",
+  "go_hub_drive_move_item",
+  "go_hub_drive_rename_item",
+]);
+
 function lightAllowedTools(registry) {
   const allowed = new Set(LIGHT_MUTATION_TOOL_NAMES);
   for (const tool of registry.listTools()) {
@@ -716,7 +725,11 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const runMutation = (env?.GO_HUB_CENTRE_STATE && env?.GO_HUB_GLOBAL_AUDIT)
         ? createGovernedMutationRunner({ centreLive, globalAudit })
         : async (_operation, _input, execute) => execute();
+      const runOperationalMutation = lightMcp
+        ? async (_operation, _input, execute) => execute()
+        : runMutation;
       registry = createMcpRegistry({
+        workContextOptionalTools: lightMcp ? LIGHT_DIRECT_TOOL_NAMES : [],
         lifecycle: Object.freeze({
           ...lifecycle,
           broadcastRead: () => broadcast.current(),
@@ -860,12 +873,12 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           gmailProfile: () => googleWorkspace.gmailProfile(),
           gmailSearch: input => googleWorkspace.gmailSearch(input),
           gmailGetMessage: input => googleWorkspace.gmailGetMessage(input),
-          gmailSendMessage: input => runMutation("gmail.send_message", input, () => googleWorkspace.gmailSendMessage(input)),
+          gmailSendMessage: input => runOperationalMutation("gmail.send_message", input, () => googleWorkspace.gmailSendMessage(input)),
           calendarCapabilities: () => googleWorkspace.capabilities(),
           calendarDiagnostics: () => googleWorkspace.diagnostics(),
           calendarList: input => googleWorkspace.calendarList(input),
           calendarEvents: input => googleWorkspace.calendarEvents(input),
-          calendarCreateEvent: input => runMutation("calendar.create_event", input, () => googleWorkspace.calendarCreateEvent(input)),
+          calendarCreateEvent: input => runOperationalMutation("calendar.create_event", input, () => googleWorkspace.calendarCreateEvent(input)),
           driveCapabilities: () => drive.capabilities(),
           driveHealth: async () => {
             const response = await drive.health();
@@ -878,10 +891,10 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           driveListChildren: input => drive.listChildren(input),
           driveReadDocument: input => drive.readDocument(input),
           driveDownloadFile: input => drive.downloadFile(input),
-          driveCreateFolder: input => runMutation("drive.create_folder", input, () => drive.createFolder(input)),
-          driveUploadFile: input => runMutation("drive.upload_file", input, () => drive.uploadFile(input)),
-          driveMoveItem: input => runMutation("drive.move_item", input, () => drive.moveItem(input)),
-          driveRenameItem: input => runMutation("drive.rename_item", input, () => drive.renameItem(input)),
+          driveCreateFolder: input => runOperationalMutation("drive.create_folder", input, () => drive.createFolder(input)),
+          driveUploadFile: input => runOperationalMutation("drive.upload_file", input, () => drive.uploadFile(input)),
+          driveMoveItem: input => runOperationalMutation("drive.move_item", input, () => drive.moveItem(input)),
+          driveRenameItem: input => runOperationalMutation("drive.rename_item", input, () => drive.renameItem(input)),
           listWorkflowArtifacts: input => artifactDelivery.listArtifacts(input),
           archiveWorkflowArtifact: input => runMutation("artifact.archive_workflow", input, () => artifactDelivery.archiveArtifact(input)),
         }),
