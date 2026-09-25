@@ -125,9 +125,8 @@ test("MCP registry publishes durable Factory V4 and quarantines legacy Factory m
     assert.equal(tools.some(item => item.name === legacy), false);
   }
   await registry.callTool("go_hub_factory_v4", {
-    workId:"WORK-84",
     action:"inspect",
-    workContext:{ workId:"WORK-84", checkpointId:"CENTRE-84", returnAddress:"CENTRE-84", destination:"destination://factory", task:"govern Factory V4", requestedResult:"durable V4 project authority", lensReference:"factory://v4" },
+    workContext:{ workId:"WORK-84", checkpointId:"CENTRE-84" },
   });
   assert.equal(calls.at(-1).name, "factoryV4");
 });

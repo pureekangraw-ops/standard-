@@ -82,6 +82,19 @@ function workText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function operationDestination(operation) {
+  const current = workText(operation);
+  if (current.startsWith("github.") || current.startsWith("factory.")) return "destination://factory";
+  if (current.startsWith("maintenance.")) return "destination://maintenance";
+  if (current.startsWith("heimdall.")) return "destination://heimdall";
+  if (current.startsWith("linear.")) return "destination://linear";
+  if (current.startsWith("gmail.")) return "destination://gmail";
+  if (current.startsWith("calendar.")) return "destination://calendar";
+  if (current.startsWith("drive.") || current.startsWith("artifact.")) return "destination://drive";
+  if (current.startsWith("counter.")) return "destination://counter";
+  return "destination://hub";
+}
+
 function mutationEvent({ correlationId, stage, operation, workContext, result = null } = {}) {
   return {
     eventId: "MUTATION-" + correlationId + "-" + stage,
@@ -379,6 +392,9 @@ export function createGovernedMutationRunner({ centreLive, globalAudit } = {}) {
     if (typeof execute !== "function") return json({ code: "MUTATION_EXECUTOR_REQUIRED" }, 500);
     const workContext = input?.workContext;
     if (!workContext || typeof workContext !== "object") return json({ code: "WORK_CONTEXT_REQUIRED" }, 400);
+    if (!workText(workContext.workId) || !workText(workContext.checkpointId)) {
+      return json({ code: "WORK_IDENTITY_REQUIRED" }, 400);
+    }
 
     const inspected = await inspectCentreCompat(centreLive, workContext);
     const centre = await responsePayload(inspected);
@@ -388,24 +404,30 @@ export function createGovernedMutationRunner({ centreLive, globalAudit } = {}) {
     }
 
     const ownership = centre.ownership || {};
-    if (ownership.enforced === true) {
-      if (ownership.active !== true) return json({ code: "CENTRE_WORK_LEASE_INACTIVE" }, 409);
-      if (!workText(workContext.ownerId) || !workText(workContext.leaseId) ||
-          !Number.isSafeInteger(workContext.ownershipRevision)) {
-        return json({ code: "CENTRE_WORK_LEASE_REQUIRED" }, 409);
-      }
-      if (workText(workContext.ownerId) !== workText(ownership.ownerId) ||
-          workText(workContext.leaseId) !== workText(ownership.leaseId)) {
-        return json({ code: "CENTRE_WORK_OWNERSHIP_CONFLICT" }, 409);
-      }
-      if (Number(workContext.ownershipRevision) !== Number(ownership.revision)) {
-        return json({ code: "CENTRE_OWNERSHIP_STALE_REVISION" }, 409);
-      }
+    if (ownership.enforced === true && ownership.active !== true) {
+      return json({ code: "CENTRE_WORK_LEASE_INACTIVE" }, 409);
     }
+
+    const centreWork = centre.work && typeof centre.work === "object" ? centre.work : {};
+    const resolvedWorkContext = {
+      workId:workText(centre.workId) || workText(centreWork.workId) || workText(workContext.workId),
+      checkpointId:workText(centre.checkpointId) || workText(centreWork.checkpointId) || workText(workContext.checkpointId),
+      returnAddress:workText(centre.returnAddress) || workText(centre.checkpointId) || workText(workContext.checkpointId),
+      destination:operationDestination(operation),
+      task:workText(centreWork.task) || operation,
+      requestedResult:workText(centreWork.requestedResult) || operation,
+      lensReference:"GO_HUB_RESOLVED",
+      ...(ownership.enforced === true ? {
+        ownerId:workText(ownership.ownerId),
+        leaseId:workText(ownership.leaseId),
+        ownershipRevision:Number(ownership.revision),
+      } : {}),
+    };
+    input.workContext = resolvedWorkContext;
 
     const correlationId = crypto.randomUUID();
     const intent = await globalAudit.append(mutationEvent({
-      correlationId, stage: "INTENT", operation, workContext,
+      correlationId, stage: "INTENT", operation, workContext:resolvedWorkContext,
     }));
     const intentPayload = await responsePayload(intent);
     if (!intent.ok) {
@@ -417,28 +439,24 @@ export function createGovernedMutationRunner({ centreLive, globalAudit } = {}) {
 
     let result;
     try {
-      result = await execute();
+      result = await execute(input);
     } catch {
       result = json({ code: "MUTATION_EXECUTION_ERROR" }, 502);
     }
     const payload = await responsePayload(result);
-    const outcome = {
-      ok: result.ok,
-      status: result.status,
-      code: payload?.code || null,
-    };
+    const outcome = { ok:result.ok, status:result.status, code:payload?.code || null };
     const recorded = await globalAudit.append(mutationEvent({
-      correlationId, stage: "RESULT", operation, workContext, result: outcome,
+      correlationId, stage: "RESULT", operation, workContext:resolvedWorkContext, result:outcome,
     }));
     const auditPayload = await responsePayload(recorded);
     if (!recorded.ok) {
       return json({
-        code: "GLOBAL_AUDIT_RECONCILIATION_REQUIRED",
+        code:"GLOBAL_AUDIT_RECONCILIATION_REQUIRED",
         operation,
-        mutationObserved: true,
-        upstreamStatus: result.status,
-        upstreamCode: payload?.code || null,
-        auditCode: auditPayload.code || null,
+        mutationObserved:true,
+        upstreamStatus:result.status,
+        upstreamCode:payload?.code || null,
+        auditCode:auditPayload.code || null,
         correlationId,
       }, 502);
     }
@@ -711,24 +729,35 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           openPullRequest: input => runMutation("github.open_pull_request", input, () => lifecycle.openPullRequest(input)),
           rerunFailed: input => runMutation("github.rerun_failed", input, () => lifecycle.rerunFailed(input)),
           mergePullRequest: input => runMutation("github.merge_pull_request", input, () => lifecycle.mergePullRequest(input)),
-          factoryV4: input => input.action === "inspect"
-            ? factoryV4(input)
-            : runMutation("factory.v4." + String(input.action || "unknown"), input, () => factoryV4(input)),
+          factoryV4: input => {
+            const routed = { ...input, workId:input?.workContext?.workId };
+            return input.action === "inspect"
+              ? factoryV4(routed)
+              : runMutation("factory.v4." + String(input.action || "unknown"), routed, () => factoryV4(routed));
+          },
           maintenance: async input => {
             const workId = String(input?.workContext?.workId || "").trim();
             const checkpointId = String(input?.workContext?.checkpointId || "").trim();
-            if (!workId || !checkpointId || input?.work?.workId !== workId) {
-              return json({ code:"MAINTENANCE_V4_WORK_REQUIRED" }, 409);
-            }
+            if (!workId || !checkpointId) return json({ code:"MAINTENANCE_V4_WORK_REQUIRED" }, 409);
             const inspected = await centreLive.action({ action:"v4_inspect", workId });
             if (!inspected.ok) return inspected;
             const reality = await responsePayload(inspected);
             if (reality?.v4 !== true || reality?.work?.workId !== workId || reality.work.checkpointId !== checkpointId) {
               return json({ code:"MAINTENANCE_CENTRE_IDENTITY_MISMATCH" }, 409);
             }
-            return maintenance.maintenance({ ...input, work:reality.work });
+            return maintenance.maintenance({ ...input, checkpointId:input.mapCheckpointId || null, work:reality.work });
           },
-          heimdallPass: input => runMutation("heimdall.pass." + String(input.action || "unknown"), input, () => heimdallPass(input)),
+          heimdallPass: input => {
+            const routed = {
+              ...input,
+              workId:input?.workContext?.workId,
+              checkpointId:input?.workContext?.checkpointId,
+              returnAddress:input?.workContext?.checkpointId,
+              actor:lightMcp ? "LIGHT" : "GO",
+              holder:lightMcp ? "LIGHT" : "GO",
+            };
+            return runMutation("heimdall.pass." + String(input.action || "unknown"), routed, () => heimdallPass(routed));
+          },
           v4ProjectBoard: input => v4ProjectBoard(input),
           lightCentreV4Action: async input => {
             if (!lightMcp || !["v4_inspect", "v4_claim", "v4_wait", "v4_resume"].includes(input?.action)) {
@@ -837,6 +866,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           driveGetItem: input => drive.getItem(input),
           driveListChildren: input => drive.listChildren(input),
           driveReadDocument: input => drive.readDocument(input),
+          driveDownloadFile: input => drive.downloadFile(input),
           driveCreateFolder: input => runMutation("drive.create_folder", input, () => drive.createFolder(input)),
           driveUploadFile: input => runMutation("drive.upload_file", input, () => drive.uploadFile(input)),
           driveMoveItem: input => runMutation("drive.move_item", input, () => drive.moveItem(input)),

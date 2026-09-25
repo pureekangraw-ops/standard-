@@ -13,16 +13,7 @@ function response(payload, status = 200) {
   });
 }
 function context(overrides = {}) {
-  return {
-    workId: "WORK-A",
-    checkpointId: "CP-A",
-    returnAddress: "CP-A",
-    destination: "destination://factory",
-    task: "Mutate",
-    requestedResult: "Verified",
-    lensReference: "role://worker",
-    ...overrides,
-  };
+  return { workId:"WORK-A", checkpointId:"CP-A", ...overrides };
 }
 
 test("governed mutation allows legacy unclaimed Work and writes intent plus result audit", async () => {
@@ -50,33 +41,57 @@ test("governed mutation allows legacy unclaimed Work and writes intent plus resu
   assert.equal(events[1].details.ok, true);
 });
 
-test("claimed Work requires exact active Centre lease before side effect", async () => {
+test("claimed Work resolves active Centre lease internally and blocks inactive Work", async () => {
   const { createGovernedMutationRunner } = await import(workerUrl + "?lease=" + Date.now());
   let executed = 0;
   let auditCalls = 0;
+  let resolvedContext = null;
   const runner = createGovernedMutationRunner({
     centreLive: { action: async () => response({
-      ok:true, checkpointId:"CP-A",
+      ok:true,
+      workId:"WORK-A",
+      checkpointId:"CP-A",
+      returnAddress:"CP-A",
+      work:{ workId:"WORK-A", checkpointId:"CP-A", task:"Move item", requestedResult:"Moved" },
       ownership:{ enforced:true, active:true, revision:4, ownerId:"GO-A", leaseId:"LEASE-A" },
     })},
     globalAudit: { append: async () => { auditCalls += 1; return response({ok:true,sequence:auditCalls}); }},
   });
-  const missing = await runner("drive.move_item", { workContext:context() }, async () => {
-    executed += 1; return response({ok:true});
-  });
-  assert.equal(missing.status, 409);
-  assert.deepEqual(await missing.json(), { code:"CENTRE_WORK_LEASE_REQUIRED" });
-  assert.equal(executed, 0);
-  assert.equal(auditCalls, 0);
-
-  const valid = await runner("drive.move_item", {
-    workContext:context({ ownerId:"GO-A", leaseId:"LEASE-A", ownershipRevision:4 }),
-  }, async () => {
-    executed += 1; return response({ok:true,readback:"PASS"});
+  const valid = await runner("drive.move_item", { workContext:context() }, async input => {
+    executed += 1;
+    resolvedContext = input.workContext;
+    return response({ok:true,readback:"PASS"});
   });
   assert.equal(valid.status, 200);
   assert.equal(executed, 1);
   assert.equal(auditCalls, 2);
+  assert.deepEqual(resolvedContext, {
+    workId:"WORK-A",
+    checkpointId:"CP-A",
+    returnAddress:"CP-A",
+    destination:"destination://drive",
+    task:"Move item",
+    requestedResult:"Moved",
+    lensReference:"GO_HUB_RESOLVED",
+    ownerId:"GO-A",
+    leaseId:"LEASE-A",
+    ownershipRevision:4,
+  });
+
+  const inactive = createGovernedMutationRunner({
+    centreLive: { action: async () => response({
+      ok:true, workId:"WORK-A", checkpointId:"CP-A",
+      ownership:{ enforced:true, active:false, revision:5, ownerId:"GO-A", leaseId:"LEASE-B" },
+    })},
+    globalAudit: { append: async () => response({ok:true,sequence:1}) },
+  });
+  const blocked = await inactive("drive.move_item", { workContext:context() }, async () => {
+    executed += 1;
+    return response({ok:true});
+  });
+  assert.equal(blocked.status, 409);
+  assert.deepEqual(await blocked.json(), { code:"CENTRE_WORK_LEASE_INACTIVE" });
+  assert.equal(executed, 1);
 });
 
 test("audit intent failure prevents mutation and result audit failure reports reconciliation", async () => {

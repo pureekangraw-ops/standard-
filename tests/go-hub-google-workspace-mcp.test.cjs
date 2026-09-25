@@ -12,7 +12,9 @@ test("registry publishes governed Gmail and Calendar tools",async()=>{
  assert.equal(gmailSend.inputSchema.properties.attachments.maxItems,5);
  assert.equal(gmailSend.inputSchema.properties.driveAttachments.maxItems,5);
  assert.ok(gmailSend.inputSchema.properties.threadId);
- await assert.rejects(registry.callTool("go_hub_gmail_send_message",{to:"a@example.com",subject:"s",body:"b",workContext:{workId:"W",checkpointId:"C",returnAddress:"C",destination:"destination://factory",task:"t",requestedResult:"r",lensReference:"l"}}),/destination/i);
+ await assert.rejects(registry.callTool("go_hub_gmail_send_message",{to:"a@example.com",subject:"s",body:"b",workContext:{workId:"W",checkpointId:"C",returnAddress:"C"}}),/unknown workContext field/i);
+ await registry.callTool("go_hub_gmail_send_message",{to:"a@example.com",subject:"s",body:"b",workContext:{workId:"W",checkpointId:"C"}});
+ assert.equal(names.includes("go_hub_gmail_send_message"),true);
 });
 test("workspace service refreshes once and does not expose credentials",async()=>{
  const {createGoogleWorkspaceService}=await import(serviceUrl+"?service="+Date.now()); const calls=[];

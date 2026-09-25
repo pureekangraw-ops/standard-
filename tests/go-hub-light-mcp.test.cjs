@@ -96,6 +96,7 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.ok(names.includes("go_hub_drive_get_item"));
   assert.ok(names.includes("go_hub_drive_list_children"));
   assert.ok(names.includes("go_hub_drive_read_document"));
+  assert.ok(names.includes("go_hub_drive_download_file"));
   assert.ok(names.includes("go_hub_drive_create_folder"));
   assert.ok(names.includes("go_hub_drive_upload_file"));
   assert.ok(names.includes("go_hub_drive_move_item"));
@@ -163,11 +164,6 @@ test("LIGHT Drive upload is exposed as bounded mutation and rejects bad SHA befo
           workContext:{
             workId:"WORK-LIGHT-UPLOAD-1",
             checkpointId:"CP-LIGHT-UPLOAD-1",
-            returnAddress:"CP-LIGHT-UPLOAD-1",
-            destination:"destination://drive",
-            task:"Upload staging artifact",
-            requestedResult:"Drive readback PASS",
-            lensReference:"role://light-staging-upload",
           },
         },
       },

@@ -53,6 +53,7 @@ function encode(value) {
 }
 
 const MAX_PUBLIC_UPLOAD_BYTES = 8 * 1024 * 1024;
+const MAX_PUBLIC_DOWNLOAD_BYTES = 8 * 1024 * 1024;
 
 function decodeBase64(value) {
   const compact = String(value || "").replace(/\s+/g, "");
@@ -62,6 +63,14 @@ function decodeBase64(value) {
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
   return bytes;
+}
+
+function encodeBase64(bytes) {
+  let binary = "";
+  for (let index = 0; index < bytes.byteLength; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return btoa(binary);
 }
 
 async function sha256Hex(bytes) {
@@ -492,6 +501,7 @@ export function createGoogleDriveService({
           "get_item",
           "list_children",
           "read_document",
+          "download_file",
           "create_folder",
           "move_item",
           "rename_item",
@@ -636,6 +646,23 @@ export function createGoogleDriveService({
           totalChars:fullText.length,
           source:"docs_api",
         },
+      });
+    },
+
+    async downloadFile(input = {}) {
+      const requestedMax = Number(input.maxBytes ?? MAX_PUBLIC_DOWNLOAD_BYTES);
+      const maxBytes = Number.isSafeInteger(requestedMax) && requestedMax >= 1 && requestedMax <= MAX_PUBLIC_DOWNLOAD_BYTES
+        ? requestedMax
+        : null;
+      if (!text(input.fileId) || maxBytes == null) return json({ code:"DRIVE_INVALID_INPUT" }, 400);
+      const result = await downloadFileBytes({ fileId:input.fileId, maxBytes });
+      if (result.response) return result.response;
+      const sha256 = await sha256Hex(result.bytes);
+      return json({
+        item:result.item,
+        size:result.bytes.byteLength,
+        sha256,
+        contentBase64:encodeBase64(result.bytes),
       });
     },
 

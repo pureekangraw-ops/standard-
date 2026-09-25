@@ -11,13 +11,8 @@ const oauthUrl = pathToFileURL(path.join(root, "go-hub-oauth.mjs")).href;
 const endpoint = "https://hub.example/mcp";
 
 const linearWorkContext = Object.freeze({
-  workId: "PUR-5",
-  checkpointId: "PUR-5-LINEAR-WRITE",
-  returnAddress: "PUR-5-LINEAR-WRITE",
-  destination: "destination://linear",
-  task: "Update Linear execution state",
-  requestedResult: "Verified execution-state write",
-  lensReference: "GO Hub ↔ Linear Bridge V1",
+  workId:"PUR-5",
+  checkpointId:"PUR-5-LINEAR-WRITE",
 });
 
 function rpc(token, name, args = {}) {
@@ -65,16 +60,16 @@ test("registry publishes exactly four governed Linear bridge tools", async () =>
     workContext: linearWorkContext,
   });
   assert.equal(created.structuredContent.operation, "linearCreateIssue");
-  assert.equal(created.structuredContent.input.workContext.destination, "destination://linear");
+  assert.deepEqual(created.structuredContent.input.workContext, linearWorkContext);
 
   await assert.rejects(registry.callTool("go_hub_linear_update_issue", {
     identifier: "PUR-5",
     title: "Updated",
   }), /workContext/);
   await assert.rejects(registry.callTool("go_hub_linear_create_issue", {
-    title: "Wrong route",
-    workContext: { ...linearWorkContext, destination: "destination://factory" },
-  }), /destination/i);
+    title: "Extra gate field",
+    workContext: { ...linearWorkContext, destination:"destination://factory" },
+  }), /unknown workContext field/i);
 });
 
 test("Factory MCP worker injects server-side Linear config and serves project listing", async () => {

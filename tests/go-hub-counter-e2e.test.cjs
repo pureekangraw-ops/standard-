@@ -91,13 +91,8 @@ async function callTool(worker, env, pathname, accessToken, id, name, args) {
 
 function workContext(suffix) {
   return {
-    workId: "WORK-COUNTER-E2E-" + suffix,
-    checkpointId: "CP-COUNTER-E2E-" + suffix,
-    returnAddress: "CP-COUNTER-E2E-" + suffix,
-    destination: "destination://counter",
-    task: "Counter runtime E2E",
-    requestedResult: "Evidence-backed Counter result",
-    lensReference: "GO-INFRA-ROUTER",
+    workId:"WORK-COUNTER-E2E-" + suffix,
+    checkpointId:"CP-COUNTER-E2E-" + suffix,
   };
 }
 
@@ -162,7 +157,7 @@ test("public Counter create reaches WAITING_PICKUP inbox, then LIGHT answers wit
   assert.equal(finalInbox.inbox.count, 0, "answered handoff leaves the pending inbox");
 });
 
-test("SEARCH Counter read remains backward-compatible without lease fields", async () => {
+test("SEARCH Counter stores only the two-key public work identity", async () => {
   const [{ createFactoryMcpWorker }] = await Promise.all([
     import(workerUrl + "?search-e2e=" + Date.now()),
   ]);
@@ -186,58 +181,61 @@ test("SEARCH Counter read remains backward-compatible without lease fields", asy
     workContext: context,
   });
   assert.equal(read.counter.currentState, "OPEN");
-  assert.equal(read.counter.workContext.ownerId, undefined);
-  assert.equal(read.counter.workContext.leaseId, undefined);
-  assert.equal(read.counter.workContext.ownershipRevision, undefined);
+  assert.deepEqual(read.counter.workContext, {
+    workId:context.workId,
+    checkpointId:context.checkpointId,
+  });
 });
 
-test("governed mutations require lease fields only when Centre ownership is enforced", async () => {
+test("governed mutations resolve active Centre ownership internally", async () => {
   const [{ createGovernedMutationRunner }] = await Promise.all([
     import(workerUrl + "?ownership=" + Date.now()),
   ]);
   const context = workContext("OWNERSHIP");
   let enforced = false;
+  let active = true;
   let executed = 0;
+  let resolved = null;
   const runner = createGovernedMutationRunner({
     centreLive: {
       async action() {
         return new Response(JSON.stringify({
-          ok: true,
-          checkpointId: context.checkpointId,
-          ownership: enforced
-            ? { enforced: true, active: true, ownerId: "owner-1", leaseId: "lease-1", revision: 4 }
-            : { enforced: false },
+          ok:true,
+          workId:context.workId,
+          checkpointId:context.checkpointId,
+          returnAddress:context.checkpointId,
+          work:{ workId:context.workId, checkpointId:context.checkpointId, task:"Counter E2E", requestedResult:"Verified" },
+          ownership:enforced
+            ? { enforced:true, active, ownerId:"owner-1", leaseId:"lease-1", revision:4 }
+            : { enforced:false },
         }));
       },
     },
-    globalAudit: { async append() { return new Response(JSON.stringify({ ok: true })); } },
+    globalAudit: { async append() { return new Response(JSON.stringify({ ok:true })); } },
   });
 
-  const run = () => runner("counter.test", { workContext: context }, async () => {
+  const run = () => runner("counter.test", { workContext:{ ...context } }, async input => {
     executed += 1;
-    return new Response(JSON.stringify({ ok: true }));
+    resolved = input.workContext;
+    return new Response(JSON.stringify({ ok:true }));
   });
+
   const unenforced = await run();
   assert.equal(unenforced.status, 200);
   assert.equal(executed, 1);
+  assert.equal(resolved.ownerId, undefined);
 
   enforced = true;
-  const missingLease = await run();
-  assert.equal(missingLease.status, 409);
-  assert.deepEqual(await missingLease.json(), { code: "CENTRE_WORK_LEASE_REQUIRED" });
-  assert.equal(executed, 1);
+  const governed = await run();
+  assert.equal(governed.status, 200);
+  assert.equal(executed, 2);
+  assert.equal(resolved.ownerId, "owner-1");
+  assert.equal(resolved.leaseId, "lease-1");
+  assert.equal(resolved.ownershipRevision, 4);
 
-  const withLease = await runner("counter.test", {
-    workContext: {
-      ...context,
-      ownerId: "owner-1",
-      leaseId: "lease-1",
-      ownershipRevision: 4,
-    },
-  }, async () => {
-    executed += 1;
-    return new Response(JSON.stringify({ ok: true }));
-  });
-  assert.equal(withLease.status, 200);
+  active = false;
+  const blocked = await run();
+  assert.equal(blocked.status, 409);
+  assert.deepEqual(await blocked.json(), { code:"CENTRE_WORK_LEASE_INACTIVE" });
   assert.equal(executed, 2);
 });

@@ -38,7 +38,7 @@ test("Drive service fails closed when auth is missing", async () => {
     configured: false,
     authMode: null,
     rootScopeConfigured: false,
-    operations: ["capabilities", "health", "diagnostics", "root", "get_item", "list_children", "read_document", "create_folder", "move_item", "rename_item", "upload_file", "upload_file_internal", "download_file_internal", "ensure_folder_path_internal"],
+    operations: ["capabilities", "health", "diagnostics", "root", "get_item", "list_children", "read_document", "download_file", "create_folder", "move_item", "rename_item", "upload_file", "upload_file_internal", "download_file_internal", "ensure_folder_path_internal"],
     destructiveDeleteExposed: false,
     mutationReadbackRequired: true,
   });
@@ -428,6 +428,31 @@ test("Drive readDocument keeps Docs API as the primary structured source", async
   assert.equal(payload.document.source, "docs_api");
   assert.equal(payload.document.revisionId, "rev-1");
   assert.equal(payload.document.text, "hello");
+});
+
+test("Drive public binary download returns bounded base64 with SHA-256", async () => {
+  const { createGoogleDriveService } = await load("public-binary");
+  const fetchImpl = async (url, init = {}) => {
+    const current = String(url);
+    if (current.includes("alt=media")) {
+      assert.equal(init.headers.authorization, "Bearer access-secret");
+      return new Response(new Uint8Array([104, 105]), { headers:{ "content-type":"application/zip" } });
+    }
+    if (current.includes("/files/file-zip?")) {
+      return new Response(JSON.stringify(driveFile({
+        id:"file-zip", name:"pixie.zip", mimeType:"application/zip", size:"2", parents:[],
+      })), { headers:{ "content-type":"application/json" } });
+    }
+    throw new Error("unexpected " + current);
+  };
+  const service = createGoogleDriveService({ fetchImpl, accessToken:"access-secret" });
+  const response = await service.downloadFile({ fileId:"file-zip", maxBytes:1024 });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.item.name, "pixie.zip");
+  assert.equal(payload.size, 2);
+  assert.equal(payload.contentBase64, "aGk=");
+  assert.equal(payload.sha256, "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4");
 });
 
 test("Drive internal binary read returns governed file bytes", async () => {
