@@ -2,8 +2,6 @@ import { createOAuthHandler, verifyAccessToken } from "./go-hub-oauth.mjs";
 import { createMcpRegistry } from "./go-hub-mcp-registry.mjs";
 import { createMcpHandler } from "./go-hub-mcp.mjs";
 import { createNotionCatalogService } from "./go-hub-notion-catalog.mjs";
-import { createCounterService } from "./go-hub-counter.mjs";
-import { createCounterDispatchService } from "./go-hub-counter-dispatcher.mjs";
 import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
 import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
 
@@ -568,71 +566,6 @@ export function createGithubLifecycleService({ fetchImpl = fetch, token } = {}) 
 }
 
 
-async function parseResponse(response) {
-  return response.json().catch(() => ({ code:"INVALID_INTERNAL_RESPONSE" }));
-}
-async function counterCreateWithDispatch(counter, dispatch, input) {
-  const response = await counter.create(input);
-  const payload = await parseResponse(response);
-  if (!response.ok) return json(payload, response.status);
-  const state = payload.counter || {};
-  const dispatchResponse = await dispatch.open({
-    counterId:state.counterId,
-    workId:state.workId,
-    checkpointId:state.checkpointId,
-    request:state.request,
-    context:state.context || {},
-    sourceHints:state.sourceHints || [],
-    doNotChange:state.doNotChange || [],
-  });
-  const dispatchPayload = await parseResponse(dispatchResponse);
-  return json({
-    ...payload,
-    dispatch:dispatchPayload.dispatch || null,
-    dispatchCode:dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_FAILED"),
-  }, response.status);
-}
-async function counterGetWithDispatch(counter, dispatch, input) {
-  const response = await counter.get(input);
-  const payload = await parseResponse(response);
-  if (!response.ok) return json(payload, response.status);
-  const state = payload.counter || {};
-  const dispatchResponse = await dispatch.get({
-    counterId:state.counterId,
-    workId:state.workId,
-    checkpointId:state.checkpointId,
-  });
-  const dispatchPayload = await parseResponse(dispatchResponse);
-  return json({
-    ...payload,
-    dispatch:dispatchPayload.dispatch || null,
-    dispatchCode:dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_UNAVAILABLE"),
-  }, response.status);
-}
-async function counterAnswerWithDispatch(counter, dispatch, input) {
-  const response = await counter.answer(input);
-  const payload = await parseResponse(response);
-  if (!response.ok) return json(payload, response.status);
-  const state = payload.counter || {};
-  const dispatchResponse = await dispatch.answer({
-    counterId:state.counterId,
-    workId:state.workId,
-    checkpointId:state.checkpointId,
-    status:state.currentState,
-    answer:state.answer,
-    sources:state.sources || [],
-    evidence:state.evidence || [],
-    confidence:state.confidence,
-    nextRoute:state.nextRoute,
-  });
-  const dispatchPayload = await parseResponse(dispatchResponse);
-  return json({
-    ...payload,
-    dispatch:dispatchPayload.dispatch || null,
-    dispatchCode:dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_FAILED"),
-  }, response.status);
-}
-
 export function createWorkerHandler({ fetchImpl = fetch } = {}) {
   return {
     async fetch(request, env) {
@@ -670,8 +603,6 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
       if (url.pathname === "/mcp") {
         if (!env?.GITHUB_TOKEN) return json({ code: "GITHUB_NOT_CONFIGURED" }, 503);
         const lifecycle = createGithubLifecycleService({ fetchImpl, token: env.GITHUB_TOKEN });
-        const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE });
-        const dispatch = createCounterDispatchService({ namespace: env?.GO_HUB_COUNTER_DISPATCH_STATE });
         const catalog = createNotionCatalogService({
           fetchImpl,
           token: env?.NOTION_TOKEN,
@@ -683,11 +614,6 @@ export function createWorkerHandler({ fetchImpl = fetch } = {}) {
           lifecycle: Object.freeze({
             ...lifecycle,
             searchCatalog: input => catalog.searchCatalog(input),
-            counterCreate: input => counterCreateWithDispatch(counter, dispatch, input),
-            counterGet: input => counterGetWithDispatch(counter, dispatch, input),
-            counterSeen: input => counter.seen(input),
-            counterAnswer: input => counterAnswerWithDispatch(counter, dispatch, input),
-            counterReadback: input => counter.readback(input),
             projectStatus: async input => json(await projectStatus.read(input)),
             boardPinRoute: input => json(boardPinRoute.read(input)),
           }),
