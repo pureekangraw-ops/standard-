@@ -59,7 +59,7 @@ test("OAuth metadata advertises refresh_token grant support", async () => {
   assert.deepEqual(metadata.grant_types_supported, ["authorization_code", "refresh_token"]);
 });
 
-test("authorization exchange returns a refresh token that renews access without owner authorization", async () => {
+test("authorization exchange returns a rotating refresh token that renews access without owner authorization", async () => {
   now = 1_789_391_000;
   const { createOAuthHandler, createTestAuthorizationCode, verifyAccessToken } =
     await import(oauthUrl + "?refresh-flow=" + Date.now());
@@ -70,6 +70,7 @@ test("authorization exchange returns a refresh token that renews access without 
   const first = await initial.json();
   assert.equal(typeof first.refresh_token, "string");
   assert.ok(first.refresh_token.length > 20);
+  assert.equal(first.refresh_token_expires_in, 30 * 24 * 60 * 60);
 
   now += 3601;
   const refreshed = await handler(new Request(issuer + "/oauth/token", {
@@ -89,12 +90,35 @@ test("authorization exchange returns a refresh token that renews access without 
   assert.equal(second.token_type, "Bearer");
   assert.equal(second.expires_in, 3600);
   assert.equal(typeof second.access_token, "string");
+  assert.equal(typeof second.refresh_token, "string");
+  assert.notEqual(second.refresh_token, first.refresh_token);
+  assert.equal(second.refresh_token_expires_in, 30 * 24 * 60 * 60);
 
   const identity = await verifyAccessToken(
     new Request(issuer + "/mcp", { headers: { authorization: "Bearer " + second.access_token } }),
     config,
   );
   assert.deepEqual(identity, { subject: "big", scope: "go-hub" });
+
+  now += 3601;
+  const afterDeployHandler = createOAuthHandler(config);
+  const afterDeployRefresh = await afterDeployHandler(new Request(issuer + "/oauth/token", {
+    method:"POST",
+    headers:{
+      authorization:basicAuth(),
+      "content-type":"application/x-www-form-urlencoded",
+    },
+    body:new URLSearchParams({
+      grant_type:"refresh_token",
+      refresh_token:second.refresh_token,
+      resource:issuer + "/mcp",
+    }),
+  }));
+  assert.equal(afterDeployRefresh.status, 200);
+  const third = await afterDeployRefresh.json();
+  assert.equal(typeof third.access_token, "string");
+  assert.equal(typeof third.refresh_token, "string");
+  assert.notEqual(third.refresh_token, second.refresh_token);
 });
 
 test("refresh grant fails closed for wrong resource and expired refresh tokens", async () => {
@@ -131,4 +155,79 @@ test("refresh grant fails closed for wrong resource and expired refresh tokens",
   }));
   assert.equal(expired.status, 400);
   assert.deepEqual(await expired.json(), { error: "invalid_grant" });
+});
+
+
+test("Notion LIGHT OAuth client keeps a sliding refresh chain across worker recreation", async () => {
+  now = 1_789_391_000;
+  const { createOAuthHandler, createTestAuthorizationCode, verifyAccessToken } =
+    await import(oauthUrl + "?notion-refresh=" + Date.now());
+  const notionRedirect = "https://app.notion.com/workflows/mcp/oauth/callback";
+  const notionConfig = {
+    issuer,
+    signingKey:config.signingKey,
+    ownerPasscode:config.ownerPasscode,
+    clients:[
+      {
+        clientId:"go-hub-chatgpt",
+        clientSecret:"chatgpt-secret",
+        redirectUris:[config.redirectUri],
+        subject:"big",
+        scope:"go-hub",
+      },
+      {
+        clientId:"go-hub-notion",
+        clientSecret:"notion-secret",
+        redirectUris:[notionRedirect],
+        subject:"notion",
+        scope:"go-hub",
+      },
+    ],
+    now:() => now,
+  };
+  const code = await createTestAuthorizationCode({
+    ...notionConfig,
+    clientId:"go-hub-notion",
+    subject:"notion",
+    scope:"go-hub",
+    redirectUri:notionRedirect,
+    codeChallenge:await challengeFor(verifier),
+    resource:issuer + "/mcp",
+  });
+  const basic = "Basic " + Buffer.from("go-hub-notion:notion-secret").toString("base64");
+  const firstHandler = createOAuthHandler(notionConfig);
+  const initial = await firstHandler(new Request(issuer + "/oauth/token", {
+    method:"POST",
+    headers:{ authorization:basic, "content-type":"application/x-www-form-urlencoded" },
+    body:new URLSearchParams({
+      grant_type:"authorization_code",
+      code,
+      redirect_uri:notionRedirect,
+      code_verifier:verifier,
+      resource:issuer + "/mcp",
+    }),
+  }));
+  assert.equal(initial.status, 200);
+  const first = await initial.json();
+  assert.equal(typeof first.refresh_token, "string");
+
+  now += 3601;
+  const recreatedHandler = createOAuthHandler(notionConfig);
+  const refreshed = await recreatedHandler(new Request(issuer + "/oauth/token", {
+    method:"POST",
+    headers:{ authorization:basic, "content-type":"application/x-www-form-urlencoded" },
+    body:new URLSearchParams({
+      grant_type:"refresh_token",
+      refresh_token:first.refresh_token,
+      resource:issuer + "/mcp",
+    }),
+  }));
+  assert.equal(refreshed.status, 200);
+  const second = await refreshed.json();
+  assert.notEqual(second.refresh_token, first.refresh_token);
+  const identity = await verifyAccessToken(
+    new Request(issuer + "/mcp", { headers:{ authorization:"Bearer " + second.access_token } }),
+    notionConfig,
+  );
+  assert.deepEqual(identity, { subject:"notion", scope:"go-hub" });
 });

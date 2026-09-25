@@ -104,6 +104,13 @@ function nowSeconds(config) {
   return Math.floor(Number(config.now ? config.now() : Date.now() / 1000));
 }
 
+function refreshTokenTtlSeconds(config) {
+  const configuredTtl = Number(config.refreshTokenTtlSeconds);
+  return Number.isFinite(configuredTtl)
+    ? Math.max(3600, Math.floor(configuredTtl))
+    : REFRESH_TOKEN_TTL_SECONDS;
+}
+
 function validateAuthorize(input, config) {
   if (input.get("response_type") !== "code") throw new Error("unsupported response type");
   const client = clientById(config, input.get("client_id"));
@@ -171,7 +178,7 @@ export async function createTestRefreshToken(config = {}) {
     resource: config.resource || config.issuer + "/mcp",
     scope: config.scope || "go-hub",
     iat: issuedAt,
-    exp: config.expiresAt ?? issuedAt + REFRESH_TOKEN_TTL_SECONDS,
+    exp: config.expiresAt ?? issuedAt + refreshTokenTtlSeconds(config),
   }, config.signingKey);
 }
 
@@ -318,11 +325,19 @@ export function createOAuthHandler(config = {}) {
           if (!validRefreshToken(refresh, config, client, resource, nowSeconds(config))) {
             return json({ error: "invalid_grant" }, 400);
           }
+          const rotatedRefreshToken = await createTestRefreshToken({
+            ...config,
+            clientId:client.clientId,
+            resource,
+            subject:client.subject,
+            scope:client.scope,
+          });
           return json({
             access_token: await createTestAccessToken({ ...config, resource, subject: client.subject, scope: client.scope }),
             token_type: "Bearer",
             expires_in: ACCESS_TOKEN_TTL_SECONDS,
-            refresh_token: refreshToken,
+            refresh_token: rotatedRefreshToken,
+            refresh_token_expires_in: refreshTokenTtlSeconds(config),
             scope: client.scope,
           }, 200, { "cache-control": "no-store" });
         }
@@ -347,6 +362,7 @@ export function createOAuthHandler(config = {}) {
           token_type: "Bearer",
           expires_in: ACCESS_TOKEN_TTL_SECONDS,
           refresh_token: await createTestRefreshToken({ ...config, clientId: client.clientId, resource, subject: client.subject, scope: client.scope }),
+          refresh_token_expires_in: refreshTokenTtlSeconds(config),
           scope: client.scope,
         }, 200, { "cache-control": "no-store" });
       }
