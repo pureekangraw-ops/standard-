@@ -77,8 +77,6 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.ok(names.includes("go_hub_centre_inspect"));
   assert.ok(names.includes("go_hub_v4_project_board"));
   assert.ok(names.includes("go_hub_light_centre_v4_action"));
-  assert.ok(names.includes("go_hub_heimdall_pass"));
-  assert.ok(names.includes("go_hub_factory_v4"));
   assert.ok(names.includes("go_hub_centre_audit_history"));
   assert.ok(names.includes("go_hub_board_read"));
   assert.ok(names.includes("go_hub_counter_create"));
@@ -141,7 +139,9 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.equal(names.includes("go_hub_merge_pull_request"), false);
   assert.equal(names.includes("go_hub_centre_live_action"), false);
   for (const name of [
+    "go_hub_heimdall_pass",
     "go_hub_maintenance",
+    "go_hub_factory_v4",
     "go_hub_lighthouse_control_port_command",
     "go_hub_linear_create_issue",
     "go_hub_linear_update_issue",
@@ -543,8 +543,6 @@ test("LIGHT MCP advertises its own OAuth metadata and accepts Notion OAuth ident
   const names = payload.result.tools.map(tool => tool.name);
   assert.ok(names.includes("go_hub_centre_inspect"));
   assert.ok(names.includes("go_hub_put_file"));
-  assert.ok(names.includes("go_hub_heimdall_pass"));
-  assert.ok(names.includes("go_hub_factory_v4"));
   assert.equal(names.includes("go_hub_merge_pull_request"), false);
   assert.equal(names.includes("go_hub_centre_live_action"), false);
   assert.equal(names.includes("go_hub_maintenance"), false);
