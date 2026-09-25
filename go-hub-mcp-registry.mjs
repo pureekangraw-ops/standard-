@@ -6,21 +6,10 @@ const priority = { type: "integer", minimum: 0, maximum: 4 };
 const nullableStr = { anyOf: [{ type: "string" }, { type: "null" }] };
 const broadcastRef = schemaBroadcast();
 function schemaBroadcast() { return { type: "object", properties: { program: str, version: str, hash: str }, required: ["program","version","hash"], additionalProperties: false }; }
-const FACTORY = "destination://factory";
-const LINEAR = "destination://linear";
-const MAINTENANCE = "destination://maintenance";
-const DRIVE = "destination://drive";
-const GMAIL = "destination://gmail";
-const CALENDAR = "destination://calendar";
-const COUNTER = "destination://counter";
 const workContext = {
   type: "object",
-  properties: {
-    workId: str, checkpointId: str, returnAddress: str, destination: str,
-    task: str, requestedResult: str, lensReference: str,
-    ownerId: str, leaseId: str, ownershipRevision: revision,
-  },
-  required: ["workId", "checkpointId", "returnAddress", "destination", "task", "requestedResult", "lensReference"],
+  properties: { workId: str, checkpointId: str },
+  required: ["workId", "checkpointId"],
   additionalProperties: false,
 };
 const gmailAttachment = {
@@ -57,9 +46,9 @@ const definitions = [
   def("go_hub_get_ci", "Read exact-head CI evidence.", "getCI", schema({ repository: str, sha: str }, ["repository", "sha"]), ann(true)),
   def("go_hub_get_failure_evidence", "Read failed jobs and concise logs.", "getFailureEvidence", schema({ repository: str, runId: int }, ["repository", "runId"]), ann(true)),
   def("go_hub_rerun_failed_jobs", "Rerun failed workflow jobs.", "rerunFailed", schema({ repository: str, runId: int, workContext }, ["repository", "runId", "workContext"]), ann(false)),
-  def("go_hub_factory_v4", "Operate the durable V4 Factory project for the same Centre Work. Legacy Foreman and Ready Gate remain source-only compatibility.", "factoryV4", schema({ action: { type: "string", enum: ["start", "inspect", "record_reality", "set_plan", "advance", "update_check", "safe_stop", "finish"] }, workId: str, work: obj, form: obj, reality: obj, plan: str, result: obj, evidence: obj, checkId: str, status: str, reason: str, file: obj, ref: str, summary: str, workContext }, ["action", "workId", "workContext"]), ann(false)),
-  def("go_hub_maintenance", "Run Work-bound Maintenance V4 map inspection, safe probes, repair context, or closeout planning.", "maintenance", schema({ target: { type: "string", enum: ["factory", "go-hub"] }, action: { type: "string", enum: ["inspect", "inspect_map", "run_system_check", "probe_route", "repair_context", "plan_closeout"] }, input: obj, work: obj, map: obj, routeId: str, checkpointId: str, projectId: str, workContext }, ["action", "workContext"]), ann(false)),
-  def("go_hub_heimdall_pass", "Open or close a Work-bound Pass through Heimdall, including bounded Emergency Passes.", "heimdallPass", schema({ action: { type: "string", enum: ["open", "close"] }, workId: str, checkpointId: str, actor: str, holder: str, kind: { type: "string", enum: ["WORK", "READ", "MAINTENANCE", "EMERGENCY"] }, scope: { type: "array", items: str }, destinations: { type: "array", items: str }, expiresAt: str, closeCondition: str, returnAddress: str, reason: str, audit: obj, status: str, result: obj, workContext }, ["action", "workId", "workContext"]), ann(false)),
+  def("go_hub_factory_v4", "Operate the durable V4 Factory project for the same Centre Work. Work identity comes only from Work ID + Checkpoint ID.", "factoryV4", schema({ action: { type: "string", enum: ["start", "inspect", "record_reality", "set_plan", "advance", "update_check", "safe_stop", "finish"] }, form: obj, reality: obj, plan: str, result: obj, evidence: obj, checkId: str, status: str, reason: str, file: obj, ref: str, summary: str, workContext }, ["action", "workContext"]), ann(false)),
+  def("go_hub_maintenance", "Run Work-bound Maintenance V4 map inspection, safe probes, repair context, or closeout planning.", "maintenance", schema({ target: { type: "string", enum: ["factory", "go-hub"] }, action: { type: "string", enum: ["inspect", "inspect_map", "run_system_check", "probe_route", "repair_context", "plan_closeout"] }, input: obj, map: obj, routeId: str, mapCheckpointId: str, projectId: str, workContext }, ["action", "workContext"]), ann(false)),
+  def("go_hub_heimdall_pass", "Open or close a Work-bound Pass through Heimdall. Work identity comes only from Work ID + Checkpoint ID.", "heimdallPass", schema({ action: { type: "string", enum: ["open", "close"] }, kind: { type: "string", enum: ["WORK", "READ", "MAINTENANCE", "EMERGENCY"] }, scope: { type: "array", items: str }, destinations: { type: "array", items: str }, expiresAt: str, closeCondition: str, reason: str, audit: obj, status: str, result: obj, workContext }, ["action", "workContext"]), ann(false)),
   def("go_hub_v4_project_board", "Read Heimdall's three-way Project ref board without replacing Workspace truth.", "v4ProjectBoard", schema({ workId: str, checkpointId: str }, ["workId", "checkpointId"]), ann(true)),
   def("go_hub_light_centre_v4_action", "LIGHT may inspect, claim, wait, or resume an existing V4 Work. Centre enforces the holder and Pass; this cannot create, grant Pass, or Return.", "lightCentreV4Action", schema({ action: { type: "string", enum: ["v4_inspect", "v4_claim", "v4_wait", "v4_resume"] }, workId: str, checkpointId: str, reason: str, resumeFrom: str }, ["action", "workId", "checkpointId"]), ann(false)),
   def("go_hub_merge_pull_request", "Merge through GitHub owner truth after exact-head CI; Factory V4 owns lifecycle and internal QC.", "mergePullRequest", schema({ repository: str, number: int, expectedHeadSha: str, goId: str, jobId: str, method: { type: "string", enum: ["merge", "squash", "rebase"] }, workContext }, ["repository", "number", "expectedHeadSha", "workContext"]), ann(false, true)),
@@ -107,6 +96,7 @@ const definitions = [
   def("go_hub_drive_get_item", "Read normalized Google Drive item metadata by file or folder ID.", "driveGetItem", schema({ fileId: str }, ["fileId"]), ann(true)),
   def("go_hub_drive_list_children", "List normalized Google Drive children under one folder ID.", "driveListChildren", schema({ parentId: str, pageSize: { type: "integer", minimum: 1, maximum: 1000 }, pageToken: str }, ["parentId"]), ann(true)),
   def("go_hub_drive_read_document", "Read text from one native Google Doc inside the governed Drive scope.", "driveReadDocument", schema({ documentId: str, maxChars: { type: "integer", minimum: 1000, maximum: 200000 } }, ["documentId"]), ann(true)),
+  def("go_hub_drive_download_file", "Download one bounded binary file from governed Google Drive with SHA-256 verification data.", "driveDownloadFile", schema({ fileId: str, maxBytes: { type: "integer", minimum: 1, maximum: 8388608 } }, ["fileId"]), ann(true)),
   def("go_hub_drive_create_folder", "Create a Google Drive folder and require destination readback before success.", "driveCreateFolder", schema({ parentId: str, name: str, workContext }, ["parentId", "name", "workContext"]), ann(false)),
   def("go_hub_drive_upload_file", "Upload one bounded file into the governed Drive scope with SHA-256 verification and destination readback.", "driveUploadFile", schema({ parentId: str, name: str, mimeType: str, contentBase64: str, sha256: { type: "string", pattern: "^[a-fA-F0-9]{64}$" }, size: { type: "integer", minimum: 1, maximum: 8388608 }, workContext }, ["parentId", "name", "contentBase64", "sha256", "workContext"]), ann(false)),
   def("go_hub_drive_move_item", "Move an existing Google Drive item with native parent update and require destination readback before success.", "driveMoveItem", schema({ fileId: str, destinationFolderId: str, workContext }, ["fileId", "destinationFolderId", "workContext"]), ann(false)),
@@ -135,25 +125,16 @@ function assertArgs(definition, args) {
   }
 }
 
-function assertWork(value, destination, { ownershipRequired = false } = {}) {
+function assertWork(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("workContext is required");
   for (const field of workContext.required) if (!String(value[field] || "").trim()) throw new Error("workContext missing field: " + field);
   for (const key of Object.keys(value)) if (!Object.hasOwn(workContext.properties, key)) throw new Error("unknown workContext field: " + key);
-  if (String(value.checkpointId) !== String(value.returnAddress)) throw new Error("workContext Return Address must match Checkpoint ID");
-  if (String(value.destination) !== destination) throw new Error("workContext destination must be " + destination);
-  if (ownershipRequired && (!String(value.ownerId || "").trim() || !String(value.leaseId || "").trim() || !Number.isSafeInteger(value.ownershipRevision))) {
-    throw new Error("workContext ownership fields are required for Counter operations");
-  }
 }
 
 function assertLifecycle(name, args) {
-  if (factoryTools.has(name)) assertWork(args.workContext, FACTORY);
-  if (linearMutationTools.has(name)) assertWork(args.workContext, LINEAR);
-  if (maintenanceTools.has(name)) assertWork(args.workContext, MAINTENANCE);
-  if (driveMutationTools.has(name)) assertWork(args.workContext, DRIVE);
-  if (gmailMutationTools.has(name)) assertWork(args.workContext, GMAIL);
-  if (calendarMutationTools.has(name)) assertWork(args.workContext, CALENDAR);
-  if (counterTools.has(name)) assertWork(args.workContext, COUNTER);
+  if (factoryTools.has(name) || linearMutationTools.has(name) || maintenanceTools.has(name) ||
+      driveMutationTools.has(name) || gmailMutationTools.has(name) || calendarMutationTools.has(name) ||
+      counterTools.has(name)) assertWork(args.workContext);
 }
 
 async function toolResult(response, broadcastReadback = null) {
