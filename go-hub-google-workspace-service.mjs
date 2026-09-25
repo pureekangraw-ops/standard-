@@ -82,6 +82,30 @@ function attachmentBytes(base64) {
 function wrapBase64(value) {
   return String(value || "").match(/.{1,76}/g)?.join("\r\n") || "";
 }
+function bytesToBase64(bytes) {
+  if (!(bytes instanceof Uint8Array)) return "";
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 8192, bytes.length)));
+  }
+  return btoa(binary);
+}
+function validMimeType(value) {
+  return /^[A-Za-z0-9][A-Za-z0-9.+_-]*\/[A-Za-z0-9][A-Za-z0-9.+_-]*$/.test(String(value || ""));
+}
+function prepareDriveReferences(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.length > MAX_GMAIL_ATTACHMENTS) return null;
+  const refs = [];
+  for (const item of value) {
+    const fileId = safeHeader(item?.fileId);
+    const filename = item?.filename == null ? "" : safeHeader(item.filename);
+    const mimeType = item?.mimeType == null ? "" : safeHeader(item.mimeType);
+    if (!fileId || (item?.filename != null && !filename) || (mimeType && !validMimeType(mimeType))) return null;
+    refs.push({ fileId, filename, mimeType });
+  }
+  return refs;
+}
 function prepareAttachments(value) {
   if (value == null) return { attachments: [], totalBytes: 0 };
   if (!Array.isArray(value) || value.length > MAX_GMAIL_ATTACHMENTS) return null;
@@ -91,7 +115,7 @@ function prepareAttachments(value) {
     const filename = safeHeader(item?.filename);
     const mimeType = safeHeader(item?.mimeType);
     const encoded = attachmentBytes(item?.contentBase64);
-    if (!filename || !/^[A-Za-z0-9][A-Za-z0-9.+_-]*\/[A-Za-z0-9][A-Za-z0-9.+_-]*$/.test(mimeType) || !encoded) return null;
+    if (!filename || !validMimeType(mimeType) || !encoded) return null;
     totalBytes += encoded.bytes;
     if (totalBytes > MAX_GMAIL_ATTACHMENT_BYTES) return null;
     attachments.push({ filename, mimeType, contentBase64: encoded.base64 });
@@ -129,11 +153,11 @@ function buildRawEmail({ to, subject, body, attachments = [], inReplyTo = "", re
   parts.push("--" + boundary + "--", "");
   return headers.join("\r\n") + "\r\n\r\n" + parts.join("\r\n");
 }
-export function createGoogleWorkspaceService({ fetchImpl = fetch, accessToken, refreshToken, clientId, clientSecret } = {}) {
+export function createGoogleWorkspaceService({ fetchImpl = fetch, accessToken, refreshToken, clientId, clientSecret, driveService = null } = {}) {
   const auth = createGoogleAuth({ fetchImpl, accessToken, refreshToken, clientId, clientSecret });
   return Object.freeze({
     async capabilities() {
-      return json({ configured: Boolean(auth.mode()), authMode: auth.mode(), gmail: ["profile","search","get_message","send_message","send_message_with_attachments"], gmailAttachmentLimits: { maxFiles: MAX_GMAIL_ATTACHMENTS, maxDecodedBytes: MAX_GMAIL_ATTACHMENT_BYTES }, calendar: ["list_calendars","list_events","create_event"], destructiveDeleteExposed: false });
+      return json({ configured: Boolean(auth.mode()), authMode: auth.mode(), gmail: ["profile","search","get_message","send_message","send_message_with_attachments","send_message_with_drive_attachments"], gmailAttachmentLimits: { maxFiles: MAX_GMAIL_ATTACHMENTS, maxDecodedBytes: MAX_GMAIL_ATTACHMENT_BYTES, governedDriveReferences: true }, calendar: ["list_calendars","list_events","create_event"], destructiveDeleteExposed: false });
     },
     async diagnostics() {
       return json({ configured: Boolean(auth.mode()), authMode: auth.mode(), scopes: auth.scopes(), scopeSource: auth.scopes().length ? "refresh_response" : "unavailable" });
@@ -158,20 +182,49 @@ export function createGoogleWorkspaceService({ fetchImpl = fetch, accessToken, r
       const to = safeHeader(input.to), subject = safeHeader(input.subject), body = String(input.body || "");
       const threadId = safeHeader(input.threadId), inReplyTo = safeHeader(input.inReplyTo), references = safeHeader(input.references);
       const prepared = prepareAttachments(input.attachments);
-      if (!to || !subject || !body || !prepared ||
+      const driveRefs = prepareDriveReferences(input.driveAttachments);
+      if (!to || !subject || !body || !prepared || !driveRefs ||
+          prepared.attachments.length + driveRefs.length > MAX_GMAIL_ATTACHMENTS ||
           (input.threadId != null && !threadId) ||
           (input.inReplyTo != null && !inReplyTo) ||
           (input.references != null && !references)) {
         return json({ code: "GMAIL_INVALID_INPUT" }, 400);
       }
-      const raw = base64Url(buildRawEmail({ to, subject, body, attachments: prepared.attachments, inReplyTo, references }));
+      const attachments = [...prepared.attachments];
+      let totalBytes = prepared.totalBytes;
+      for (const ref of driveRefs) {
+        if (!driveService || typeof driveService.readFileBytes !== "function") {
+          return json({ code: "GMAIL_DRIVE_ATTACHMENT_UNAVAILABLE" }, 503);
+        }
+        const remaining = MAX_GMAIL_ATTACHMENT_BYTES - totalBytes;
+        if (remaining < 1) return json({ code: "GMAIL_ATTACHMENT_LIMIT_EXCEEDED" }, 413);
+        const loaded = await driveService.readFileBytes({ fileId: ref.fileId, maxBytes: remaining });
+        if (!loaded || loaded.response) {
+          const failure = loaded?.response ? await loaded.response.clone().json().catch(() => ({})) : {};
+          return json({
+            code: "GMAIL_DRIVE_ATTACHMENT_ERROR",
+            driveCode: failure.code || "DRIVE_FILE_READ_FAILED",
+            fileId: ref.fileId,
+          }, loaded?.response?.status || 502);
+        }
+        const filename = safeHeader(ref.filename || loaded.item?.name);
+        const mimeType = safeHeader(ref.mimeType || loaded.item?.mimeType || "application/octet-stream");
+        if (!filename || !validMimeType(mimeType) || !(loaded.bytes instanceof Uint8Array) || !loaded.bytes.byteLength) {
+          return json({ code: "GMAIL_DRIVE_ATTACHMENT_ERROR", driveCode: "DRIVE_FILE_INVALID", fileId: ref.fileId }, 409);
+        }
+        totalBytes += loaded.bytes.byteLength;
+        if (totalBytes > MAX_GMAIL_ATTACHMENT_BYTES) return json({ code: "GMAIL_ATTACHMENT_LIMIT_EXCEEDED" }, 413);
+        attachments.push({ filename, mimeType, contentBase64: bytesToBase64(loaded.bytes) });
+      }
+      const raw = base64Url(buildRawEmail({ to, subject, body, attachments, inReplyTo, references }));
       const payload = { raw };
       if (threadId) payload.threadId = threadId;
       const r = await request(fetchImpl, auth, GMAIL_ROOT, "/users/me/messages/send", { method: "POST", body: JSON.stringify(payload) }); if (r.response) return r.response;
       return json({
         message: { id: r.payload?.id || null, threadId: r.payload?.threadId || null },
-        attachmentCount: prepared.attachments.length,
-        attachmentBytes: prepared.totalBytes,
+        attachmentCount: attachments.length,
+        driveAttachmentCount: driveRefs.length,
+        attachmentBytes: totalBytes,
         readback: "ACCEPTED_BY_GMAIL",
       });
     },
