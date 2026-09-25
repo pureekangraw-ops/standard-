@@ -35,15 +35,24 @@ test("GO Hub API routes run the edge Worker before SPA asset fallback", () => {
   ]);
 });
 
-
-test("Counter HTTP surface keeps Centre identity while separating Ask from owner-triggered HANDOFF", () => {
-  const source = require("node:fs").readFileSync(require("node:path").resolve(__dirname, "../go-hub-edge-worker.mjs"), "utf8");
+test("Counter Ask is direct read-only Notion search while HANDOFF keeps Centre identity", () => {
+  const source = fs.readFileSync(path.resolve(__dirname, "../go-hub-edge-worker.mjs"), "utf8");
   assert.match(source, /COUNTER_API_ROOT = "\/hub\/api\/counter"/);
-  assert.match(source, /COUNTER_API_ROOT}\/ask/);
-  assert.match(source, /COUNTER_API_ROOT}\/handoff/);
-  assert.doesNotMatch(source, /COUNTER_API_ROOT}\/mirror/);
-  assert.match(source, /action:"v4_inspect", workId/);
-  assert.match(source, /createCounterDispatchLifecycle/);
-  assert.match(source, /mode:url\.pathname === `\$\{COUNTER_API_ROOT\}\/ask` \? "SEARCH" : "HANDOFF"/);
-  assert.doesNotMatch(source, /bellType:"MIRROR_REFRESH"/);
+
+  const askStart = source.indexOf('url.pathname === `${COUNTER_API_ROOT}/ask`');
+  const inboxStart = source.indexOf('url.pathname === `${COUNTER_API_ROOT}/inbox`', askStart);
+  const handoffStart = source.indexOf('url.pathname === `${COUNTER_API_ROOT}/handoff`');
+  assert.ok(askStart >= 0 && inboxStart > askStart && handoffStart > inboxStart);
+
+  const ask = source.slice(askStart, inboxStart);
+  const handoff = source.slice(handoffStart, source.indexOf('if (request.method === "GET" && url.pathname === "/hub/observer")', handoffStart));
+
+  assert.match(ask, /createNotionLightService/);
+  assert.match(ask, /\.search\(\{ query:question \}\)/);
+  assert.doesNotMatch(ask, /v4_inspect|createCounterDispatchLifecycle|workId|checkpointId/);
+
+  assert.match(handoff, /action:"v4_inspect", workId/);
+  assert.match(handoff, /createCounterDispatchLifecycle/);
+  assert.match(handoff, /mode:"HANDOFF"/);
+  assert.doesNotMatch(source, /COUNTER_API_ROOT}\/mirror|bellType:"MIRROR_REFRESH"/);
 });
