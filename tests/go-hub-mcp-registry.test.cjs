@@ -5,14 +5,10 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const registryUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-mcp-registry.mjs")).href;
-const factoryWorkContext = Object.freeze({
-  workId: "WORK-A", checkpointId: "CENTRE-001", returnAddress: "CENTRE-001",
-  destination: "destination://factory", task: "Build GO City",
-  requestedResult: "Verified result", lensReference: "lens://city",
-});
-const linearWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://linear" });
-const driveWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://drive" });
-const counterWorkContext = Object.freeze({ ...factoryWorkContext, destination: "destination://counter" });
+const factoryWorkContext = Object.freeze({ workId:"WORK-A", checkpointId:"CENTRE-001" });
+const linearWorkContext = factoryWorkContext;
+const driveWorkContext = factoryWorkContext;
+const counterWorkContext = factoryWorkContext;
 
 test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe annotations", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?contract=" + Date.now());
@@ -38,7 +34,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
     "go_hub_gmail_capabilities", "go_hub_gmail_diagnostics", "go_hub_gmail_profile", "go_hub_gmail_search", "go_hub_gmail_get_message", "go_hub_gmail_send_message",
     "go_hub_calendar_capabilities", "go_hub_calendar_diagnostics", "go_hub_calendar_list", "go_hub_calendar_events", "go_hub_calendar_create_event",
-    "go_hub_drive_capabilities", "go_hub_drive_health", "go_hub_drive_diagnostics", "go_hub_drive_root", "go_hub_drive_get_item", "go_hub_drive_list_children", "go_hub_drive_read_document",
+    "go_hub_drive_capabilities", "go_hub_drive_health", "go_hub_drive_diagnostics", "go_hub_drive_root", "go_hub_drive_get_item", "go_hub_drive_list_children", "go_hub_drive_read_document", "go_hub_drive_download_file",
     "go_hub_drive_create_folder", "go_hub_drive_upload_file", "go_hub_drive_move_item", "go_hub_drive_rename_item",
   ]);
   assert.equal(tools[0].annotations.readOnlyHint, true);
@@ -76,6 +72,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_get_item").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_list_children").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_read_document").annotations.readOnlyHint, true);
+  assert.equal(tools.find(tool => tool.name === "go_hub_drive_download_file").annotations.readOnlyHint, true);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_create_folder").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_upload_file").annotations.readOnlyHint, false);
   assert.equal(tools.find(tool => tool.name === "go_hub_drive_move_item").annotations.readOnlyHint, false);
@@ -85,11 +82,16 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   for (const name of [
     "go_hub_create_branch", "go_hub_put_file", "go_hub_delete_file",
     "go_hub_open_pull_request", "go_hub_rerun_failed_jobs", "go_hub_factory_v4",
-    "go_hub_merge_pull_request", "go_hub_counter_create", "go_hub_counter_inbox", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_pickup", "go_hub_counter_answer", "go_hub_counter_readback",
+    "go_hub_maintenance", "go_hub_heimdall_pass", "go_hub_merge_pull_request",
+    "go_hub_counter_create", "go_hub_counter_inbox", "go_hub_counter_get", "go_hub_counter_seen", "go_hub_counter_pickup", "go_hub_counter_answer", "go_hub_counter_readback",
     "go_hub_linear_create_issue", "go_hub_linear_update_issue",
+    "go_hub_gmail_send_message", "go_hub_calendar_create_event",
     "go_hub_drive_create_folder", "go_hub_drive_upload_file", "go_hub_drive_move_item", "go_hub_drive_rename_item",
   ]) {
-    assert.equal(tools.find(tool => tool.name === name).inputSchema.required.includes("workContext"), true, `${name} must require city work context`);
+    const tool = tools.find(tool => tool.name === name);
+    assert.equal(tool.inputSchema.required.includes("workContext"), true, `${name} must require work identity`);
+    assert.deepEqual(tool.inputSchema.properties.workContext.required, ["workId","checkpointId"], `${name} gate must have exactly two identity values`);
+    assert.deepEqual(Object.keys(tool.inputSchema.properties.workContext.properties), ["workId","checkpointId"], `${name} gate must expose no extra identity fields`);
   }
   assert.equal(tools.find(tool => tool.name === "go_hub_inspect_repository").inputSchema.required.includes("workContext"), false);
   assert.equal(tools.find(tool => tool.name === "go_hub_linear_list_projects").inputSchema.required.includes("workContext"), false);
@@ -124,6 +126,8 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(calls.at(-1).name, "centreLiveAction");
   await registry.callTool("go_hub_centre_read_only_fast_lane", { purpose: "READ_TELL", operations: ["READ"] });
   assert.equal(calls.at(-1).name, "centreReadOnlyFastLane");
+  await registry.callTool("go_hub_drive_download_file", { fileId:"zip-a", maxBytes:1024 });
+  assert.equal(calls.at(-1).name, "driveDownloadFile");
   await registry.callTool("go_hub_lighthouse_control_port_state", { targetId: "lighthouse" });
   assert.equal(calls.at(-1).name, "lighthouseControlPortState");
   await registry.callTool("go_hub_lighthouse_control_port_command", { targetId: "lighthouse", requestId: "hub-1", capabilityId: "system.appState", payload: {} });
@@ -144,7 +148,7 @@ test("registry publishes lifecycle plus one Hephaestus Foreman tool with safe an
   assert.equal(calls.at(-1).name, "archiveWorkflowArtifact");
 });
 
-test("city lifecycle tools require exact Centre identity and correct destination", async () => {
+test("governed tools expose exactly two gate identity values and reject extras", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?identity=" + Date.now());
   const calls = [];
   const lifecycle = new Proxy({}, {
@@ -160,23 +164,17 @@ test("city lifecycle tools require exact Centre identity and correct destination
   }), /workContext/);
   await assert.rejects(registry.callTool("go_hub_put_file", {
     repository: "pureekangraw-ops/standard-", path: "x.js", branch: "task-branch", content: "x",
-    workContext: { ...factoryWorkContext, returnAddress: "CENTRE-002" },
-  }), /Return Address|returnAddress/);
-  await assert.rejects(registry.callTool("go_hub_counter_get", {
-    counterId: "COUNTER-0001", workContext: driveWorkContext,
-  }), /destination/i);
+    workContext: { ...factoryWorkContext, returnAddress: "CENTRE-001" },
+  }), /unknown workContext field/i);
   await assert.rejects(registry.callTool("go_hub_factory_v4", {
-    action: "inspect", workId: "WORK-A",
+    action: "inspect",
   }), /workContext/);
-  await assert.rejects(registry.callTool("go_hub_linear_create_issue", {
-    title: "Wrong route", workContext: factoryWorkContext,
-  }), /destination/i);
 
   await registry.callTool("go_hub_linear_create_issue", {
     title: "Bridge", workContext: linearWorkContext,
   });
   assert.equal(calls.at(-1).name, "linearCreateIssue");
-  assert.deepEqual(calls.at(-1).input.workContext, linearWorkContext);
+  assert.deepEqual(calls.at(-1).input.workContext, { workId:"WORK-A", checkpointId:"CENTRE-001" });
 });
 
 test("merge schema uses exact-head GitHub owner truth without Foreman identity", async () => {
