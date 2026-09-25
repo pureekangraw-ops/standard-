@@ -34,18 +34,6 @@
         "class_name": "GoHubGlobalAuditLog"
       },
       {
-        "name": "GO_HUB_COUNTER_STATE",
-        "class_name": "GoHubCounterState"
-      },
-      {
-        "name": "GO_HUB_COUNTER_INBOX",
-        "class_name": "GoHubCounterInboxState"
-      },
-      {
-        "name": "GO_HUB_COUNTER_DISPATCH_STATE",
-        "class_name": "GoHubCounterDispatchState"
-      },
-      {
         "name": "GO_HUB_NOTION_LIGHT_STATE",
         "class_name": "GoHubNotionLightState"
       },
@@ -135,7 +123,6 @@
   ],
   "vars": {
     "LIGHT_BELL_PAGE_ID": "88970e1da0a64ceebaa1ac1928361911",
-    "COUNTER_HANDOFF_AGENT_URL": "agent://1277043d-9861-8158-a732-000347bf2bab/3e27043d-9861-8026-8e4b-009237cacaec",
     "MIRROR_REFRESH_AGENT_URL": "agent://1277043d-9861-8158-a732-000347bf2bab/3e27043d-9861-800e-9b05-00926ce24c3a",
     "BROWSER_POLICY": {
       "allowedHostnames": [
@@ -151,7 +138,6 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": [
       "/hub/api/centre/*",
-      "/hub/api/counter/*",
       "/hub/api/lighthouse-control-port/*",
       "/hub/lighthouse",
       "/hub/api/browser/*",
