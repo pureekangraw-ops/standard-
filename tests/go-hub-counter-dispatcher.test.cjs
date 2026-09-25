@@ -33,6 +33,9 @@ function notionNamespace({
   authorizationUrl = "https://notion.example/allow",
   searchStatus = 200,
   searchBody = null,
+  prepareStatus = 200,
+  prepareBody = null,
+  statusBody = null,
   calls = [],
 } = {}) {
   const body = searchBody || {
@@ -54,13 +57,19 @@ function notionNamespace({
           const input = JSON.parse(await request.text());
           calls.push(input.action);
           if (input.action === "status") {
-            return new Response(JSON.stringify({ ok:true, connected }), {
+            return new Response(JSON.stringify(statusBody || {
+              ok:true,
+              connected,
+              clientRegistered:false,
+              authorizationStored:false,
+              refreshAvailable:false,
+            }), {
               status:200, headers:{ "content-type":"application/json" },
             });
           }
           if (input.action === "prepare") {
-            return new Response(JSON.stringify({ ok:true, authorizationUrl }), {
-              status:200, headers:{ "content-type":"application/json" },
+            return new Response(JSON.stringify(prepareBody || { ok:true, authorizationUrl }), {
+              status:prepareStatus, headers:{ "content-type":"application/json" },
             });
           }
           if (input.action === "search") {
@@ -112,6 +121,29 @@ test("unauthorized Notion LIGHT returns WAITING_AUTH and a real authorization UR
   assert.equal(result.authRequired, true);
   assert.equal(result.authorizationUrl, "https://notion.example/allow");
   assert.deepEqual(calls, ["status","prepare"]);
+});
+
+test("failed Notion OAuth prepare surfaces a safe diagnostic instead of a null-only auth result", async () => {
+  const { GoHubCounterDispatchState } = await import(moduleUrl + "?auth-prepare-failed=" + Date.now());
+  const dispatch = new GoHubCounterDispatchState(
+    { storage:storage() },
+    { GO_HUB_NOTION_LIGHT_STATE:notionNamespace({
+      connected:false,
+      prepareStatus:502,
+      prepareBody:{ ok:false, code:"NOTION_MCP_CLIENT_REGISTRATION_FAILED" },
+    }) },
+  );
+  const result = await dispatch.enqueueOpen(openInput());
+  assert.equal(result.dispatch.legs.LIGHT.status, "WAITING_AUTH");
+  assert.equal(result.authorizationUrl, null);
+  assert.equal(result.authPrepareCode, "NOTION_MCP_CLIENT_REGISTRATION_FAILED");
+  assert.equal(result.authPrepareStatus, 502);
+  assert.deepEqual(result.notionStatus, {
+    connected:false,
+    clientRegistered:false,
+    authorizationStored:false,
+    refreshAvailable:false,
+  });
 });
 
 test("same Counter ticket retries after OAuth and returns Notion AI Search answer", async () => {
