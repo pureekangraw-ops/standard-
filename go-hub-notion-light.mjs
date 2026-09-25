@@ -83,16 +83,17 @@ function normalizeSearchEvidence(payload, query) {
   });
   const sources = [...new Set(evidence.map(item => item.source || item.position).filter(Boolean))];
   const answer = evidence.length
-    ? evidence.map(item => `${item.rank}. ${item.title || "Untitled"} — ${item.position || item.source || "Notion"}${item.snippet ? " — " + item.snippet : ""}`).join("\n")
-    : `No Notion AI Search results found for: ${query}`;
+    ? `SEARCH_ONLY — Notion AI Search found ${evidence.length} candidate source${evidence.length === 1 ? "" : "s"}, but no LIGHT Agent answer was produced.`
+    : `UNKNOWN — No Notion AI Search results found for: ${query}`;
   return {
-    status:evidence.length ? "ANSWERED" : "UNKNOWN",
+    status:"UNKNOWN",
     answer,
     sources:evidence.length ? (sources.length ? sources : ["notion-mcp://ai-search"]) : [],
     evidence:evidence.length ? evidence : [{ kind:"notion_ai_search", query, resultCount:0 }],
-    confidence:evidence.length ? "NOTION_AI_SEARCH" : "NONE",
-    nextRoute:"GO",
+    confidence:evidence.length ? "SEARCH_EVIDENCE_ONLY" : "NONE",
+    nextRoute:"LIGHT_AGENT",
     resultCount:evidence.length,
+    searchOnly:true,
   };
 }
 
