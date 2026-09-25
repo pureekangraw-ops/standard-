@@ -130,6 +130,10 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
     "go_hub_observer_screenshot",
     "go_hub_linear_list_projects",
     "go_hub_linear_get_issue",
+    "go_hub_cloudflare_capabilities",
+    "go_hub_cloudflare_health",
+    "go_hub_cloudflare_list_workers",
+    "go_hub_cloudflare_inspect_worker",
   ]) assert.ok(names.includes(name), "LIGHT should inherit read-only tool " + name);
   assert.equal(names.includes("go_hub_delete_file"), false);
   assert.equal(names.includes("go_hub_merge_pull_request"), false);
@@ -416,4 +420,78 @@ test("LIGHT owner page mints scoped bearer without echoing owner passcode", asyn
     scope:"go-hub-light",
   });
   assert.equal(verified.subject, "light");
+});
+
+
+test("LIGHT Cloudflare mirror is read-only and never exposes runtime secrets", async () => {
+  const { createAccessToken } = await import(oauthUrl + "?light-cloudflare=" + Date.now());
+  const { createFactoryMcpWorker } = await import(factoryUrl + "?light-cloudflare=" + Date.now());
+  const token = await createAccessToken({
+    issuer:"https://hub.example",
+    signingKey:"master-secret",
+    resource:"https://hub.example/mcp/light",
+    subject:"light",
+    scope:"go-hub-light",
+    ttlSeconds:3600,
+  });
+  const runtimeSecret = "runtime-secret-never-return";
+  const fetchImpl = async (url, init = {}) => {
+    const current = String(url);
+    assert.equal(init.headers.authorization, "Bearer " + runtimeSecret);
+    if (current.endsWith("/accounts/account-a/workers/scripts")) {
+      return new Response(JSON.stringify({ success:true, result:[{ id:"go-hub", modified_on:"2026-09-25T10:00:00Z" }] }), {
+        headers:{ "content-type":"application/json" },
+      });
+    }
+    if (current.endsWith("/accounts/account-a/workers/scripts/go-hub/settings")) {
+      return new Response(JSON.stringify({ success:true, result:{
+        bindings:[
+          { name:"CLOUDFLARE_RUNTIME_API_TOKEN", type:"secret_text", text:runtimeSecret },
+          { name:"GO_HUB_CENTRE_STATE", type:"durable_object_namespace" },
+        ],
+      }}), { headers:{ "content-type":"application/json" } });
+    }
+    if (current.endsWith("/accounts/account-a/workers/scripts/go-hub/deployments")) {
+      return new Response(JSON.stringify({ success:true, result:{ deployments:[
+        { id:"dep-1", created_on:"2026-09-25T10:00:00Z", source:"api" },
+      ]}}), { headers:{ "content-type":"application/json" } });
+    }
+    throw new Error("unexpected upstream " + current);
+  };
+  const worker = createFactoryMcpWorker({ fetchImpl });
+  const env = {
+    GITHUB_TOKEN:"github-token",
+    GOHUB_MASTER_KEY:"master-secret",
+    GOHUB_OWNER_PASSCODE:"owner-passcode",
+    CLOUDFLARE_RUNTIME_API_TOKEN:runtimeSecret,
+    CLOUDFLARE_ACCOUNT_ID:"account-a",
+  };
+  async function call(id, name, args = {}) {
+    const response = await worker.fetch(new Request("https://hub.example/mcp/light", {
+      method:"POST",
+      headers:{
+        authorization:"Bearer " + token,
+        "content-type":"application/json",
+        origin:"https://www.notion.so",
+      },
+      body:JSON.stringify({ jsonrpc:"2.0", id, method:"tools/call", params:{ name, arguments:args } }),
+    }), env);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.error, undefined);
+    assert.equal(payload.result.isError, undefined);
+    assert.doesNotMatch(JSON.stringify(payload), new RegExp(runtimeSecret));
+    return payload.result.structuredContent;
+  }
+
+  const health = await call(31, "go_hub_cloudflare_health");
+  assert.equal(health.upstream, "PASS");
+  assert.equal(health.workerCount, 1);
+
+  const inspected = await call(32, "go_hub_cloudflare_inspect_worker", { scriptName:"go-hub" });
+  assert.deepEqual(inspected.worker.bindings, [
+    { name:"CLOUDFLARE_RUNTIME_API_TOKEN", type:"secret_text" },
+    { name:"GO_HUB_CENTRE_STATE", type:"durable_object_namespace" },
+  ]);
+  assert.equal(inspected.secretValuesExposed, false);
 });
