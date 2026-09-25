@@ -11,32 +11,17 @@ function storage() {
   return {
     async get(key) { return values.has(key) ? structuredClone(values.get(key)) : undefined; },
     async put(key, value) { values.set(key, structuredClone(value)); },
-    async setAlarm() {},
-  };
-}
-
-function notionNamespace(responseBody, status = 500) {
-  return {
-    getByName() {
-      return {
-        async fetch() {
-          return new Response(JSON.stringify(responseBody), {
-            status,
-            headers: { "content-type": "application/json" },
-          });
-        },
-      };
-    },
+    async setAlarm() { throw new Error("HANDOFF must not schedule a bell retry"); },
   };
 }
 
 const input = {
-  counterId: "COUNTER-PICKUP-BELL-SEAM-TEST-001",
+  counterId: "COUNTER-OWNER-TRIGGER-BOUNDARY-001",
   workId: "WORK-GO-LIGHT-COUNTER-20260919-001",
   checkpointId: "CP-GO-LIGHT-COUNTER-001",
   mode: "HANDOFF",
-  request: "Inspect the governed source and report evidence.",
-  requestedResult: "Evidence-backed answer.",
+  request: "Hold this ticket until BIG explicitly triggers LIGHT.",
+  requestedResult: "WAITING_PICKUP without automatic wake.",
   authority: "BIG",
   target: "GO Hub",
   projectRef: "GO Hub",
@@ -49,11 +34,17 @@ const input = {
   },
 };
 
-test("Bell failure leaves HANDOFF available for pickup and records an independent retry state", async () => {
-  const { GoHubCounterDispatchState } = await import(dispatcherUrl + "?bell-failure=" + Date.now());
+test("HANDOFF stays waiting even when legacy bell configuration exists", async () => {
+  const { GoHubCounterDispatchState } = await import(dispatcherUrl + "?owner-trigger-boundary=" + Date.now());
+  const calls = [];
   const service = new GoHubCounterDispatchState({ storage: storage() }, {
-    GO_HUB_NOTION_LIGHT_STATE: notionNamespace({ ok: false, code: "NOTION_CREATE_COMMENT_FAILED" }),
-    LIGHT_BELL_PAGE_ID: "light-bell-page",
+    LIGHT_BELL_PAGE_ID: "legacy-bell-page",
+    LIGHT_WAKE_URL: "https://light.example/wake",
+    GO_HUB_NOTION_LIGHT_STATE: {
+      getByName() {
+        return { fetch: async () => { calls.push("notion"); throw new Error("must not be called"); } };
+      },
+    },
   });
 
   const response = await service.fetch(new Request("https://counter-dispatch.internal/open", {
@@ -64,12 +55,8 @@ test("Bell failure leaves HANDOFF available for pickup and records an independen
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.ok, true);
-  assert.equal(payload.bellFailed, true);
+  assert.equal(payload.triggerRequired, true);
   assert.equal(payload.dispatch.legs.LIGHT.status, "WAITING_PICKUP");
   assert.equal(payload.dispatch.legs.LIGHT.attempts, 0);
-  assert.equal(payload.dispatch.bell.status, "RETRY_WAIT");
-  assert.equal(payload.dispatch.bell.attempts, 1);
-  assert.equal(payload.dispatch.bell.lastError, "NOTION_CREATE_COMMENT_FAILED");
-  assert.equal(payload.dispatch.events.at(-1).type, "WAITING_PICKUP");
-  assert.ok(payload.dispatch.events.some(event => event.type === "BELL_RETRY_WAIT"));
+  assert.deepEqual(calls, []);
 });
