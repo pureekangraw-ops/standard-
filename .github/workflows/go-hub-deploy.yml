@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_RUNTIME_API_TOKEN: ${{ secrets.CLOUDFLARE_RUNTIME_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       GOHUB_GITHUB_TOKEN: ${{ secrets.GOHUB_GITHUB_TOKEN }}
       GOHUB_MASTER_KEY: ${{ secrets.GOHUB_MASTER_KEY }}
@@ -148,6 +149,12 @@ jobs:
           chmod 600 "${secrets_file}"
           if [ -n "${GOHUB_GITHUB_TOKEN}" ]; then
             printf 'GITHUB_TOKEN=%s\n' "${GOHUB_GITHUB_TOKEN}" >> "${secrets_file}"
+          fi
+          if [ -n "${CLOUDFLARE_RUNTIME_API_TOKEN}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            printf 'CLOUDFLARE_RUNTIME_API_TOKEN=%s\n' "${CLOUDFLARE_RUNTIME_API_TOKEN}" >> "${secrets_file}"
+            printf 'CLOUDFLARE_ACCOUNT_ID=%s\n' "${CLOUDFLARE_ACCOUNT_ID}" >> "${secrets_file}"
+          else
+            echo "Cloudflare runtime bridge credentials are absent; Cloudflare MCP reads will remain fail-closed."
           fi
           if [ -n "${GOHUB_MASTER_KEY}" ] && [ -n "${GOHUB_OWNER_PASSCODE}" ]; then
             printf 'GOHUB_MASTER_KEY=%s\n' "${GOHUB_MASTER_KEY}" >> "${secrets_file}"
