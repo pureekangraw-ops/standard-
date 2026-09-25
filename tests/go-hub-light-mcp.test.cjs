@@ -102,6 +102,23 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.ok(names.includes("go_hub_drive_move_item"));
   assert.ok(names.includes("go_hub_drive_rename_item"));
   for (const name of [
+    "go_hub_gmail_send_message",
+    "go_hub_calendar_create_event",
+    "go_hub_drive_create_folder",
+    "go_hub_drive_upload_file",
+    "go_hub_drive_move_item",
+    "go_hub_drive_rename_item",
+  ]) {
+    const tool = payload.result.tools.find(item => item.name === name);
+    assert.ok(tool, "missing LIGHT direct tool " + name);
+    assert.equal(Object.hasOwn(tool.inputSchema.properties, "workContext"), false, name + " must not expose WorkContext gate");
+    assert.equal(tool.inputSchema.required.includes("workContext"), false, name + " must not require WorkContext");
+  }
+  for (const name of ["go_hub_create_branch", "go_hub_put_file", "go_hub_open_pull_request"]) {
+    const tool = payload.result.tools.find(item => item.name === name);
+    assert.ok(tool.inputSchema.required.includes("workContext"), name + " must stay behind Factory work identity");
+  }
+  for (const name of [
     "go_hub_get_workflow_runs",
     "go_hub_list_workflow_artifacts",
     "go_hub_audit_history",
@@ -130,7 +147,7 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.equal(payload.result.tools.some(tool => Object.hasOwn(tool, "securitySchemes")), false);
 });
 
-test("LIGHT Drive upload is exposed as bounded mutation and rejects bad SHA before upstream", async () => {
+test("LIGHT Drive upload bypasses Work/Centre gates and keeps tool-level SHA validation", async () => {
   const { createAccessToken } = await import(oauthUrl + "?light-upload-token=" + Date.now());
   const { createFactoryMcpWorker } = await import(factoryUrl + "?light-upload=" + Date.now());
   const token = await createAccessToken({
@@ -161,10 +178,6 @@ test("LIGHT Drive upload is exposed as bounded mutation and rejects bad SHA befo
           contentBase64:"cGl4aWU=",
           size:5,
           sha256:"0".repeat(64),
-          workContext:{
-            workId:"WORK-LIGHT-UPLOAD-1",
-            checkpointId:"CP-LIGHT-UPLOAD-1",
-          },
         },
       },
     }),
@@ -172,6 +185,12 @@ test("LIGHT Drive upload is exposed as bounded mutation and rejects bad SHA befo
     GITHUB_TOKEN:"github-token",
     GOHUB_MASTER_KEY:"master-secret",
     GOHUB_OWNER_PASSCODE:"owner-passcode",
+    GO_HUB_CENTRE_STATE:{
+      getByName() { throw new Error("LIGHT direct Drive tool must not inspect Centre"); },
+    },
+    GO_HUB_GLOBAL_AUDIT:{
+      getByName() { throw new Error("LIGHT direct Drive tool must not write governed mutation audit"); },
+    },
   });
   assert.equal(response.status, 200);
   const payload = await response.json();
