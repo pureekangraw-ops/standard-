@@ -79,13 +79,7 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
   assert.ok(names.includes("go_hub_light_centre_v4_action"));
   assert.ok(names.includes("go_hub_centre_audit_history"));
   assert.ok(names.includes("go_hub_board_read"));
-  assert.ok(names.includes("go_hub_counter_create"));
-  assert.ok(names.includes("go_hub_counter_inbox"));
-  assert.ok(names.includes("go_hub_counter_get"));
-  assert.ok(names.includes("go_hub_counter_seen"));
-  assert.ok(names.includes("go_hub_counter_pickup"));
-  assert.ok(names.includes("go_hub_counter_answer"));
-  assert.ok(names.includes("go_hub_counter_readback"));
+  assert.equal(names.some(name => name.startsWith("go_hub_counter_")), false);
   assert.ok(names.includes("go_hub_gmail_search"));
   assert.ok(names.includes("go_hub_gmail_get_message"));
   assert.ok(names.includes("go_hub_gmail_send_message"));
