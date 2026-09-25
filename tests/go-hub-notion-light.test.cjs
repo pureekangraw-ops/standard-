@@ -203,9 +203,14 @@ test("Notion LIGHT uses notion-fetch self then notion-ai-search when AI Search i
     assert.equal(result.ok, true);
     assert.equal(result.tool, "notion-ai-search");
     assert.deepEqual(toolCalls, ["notion-fetch","notion-ai-search"]);
-    assert.equal(result.status, "ANSWERED");
+    assert.equal(result.status, "UNKNOWN");
+    assert.equal(result.searchOnly, true);
+    assert.equal(result.confidence, "SEARCH_EVIDENCE_ONLY");
+    assert.equal(result.nextRoute, "LIGHT_AGENT");
     assert.deepEqual(result.sources, ["https://notion.so/page-1"]);
-    assert.match(result.answer, /GO Hub \/ Counter/);
+    assert.match(result.answer, /SEARCH_ONLY/);
+    assert.match(result.answer, /1 candidate source/);
+    assert.equal(result.evidence[0].position, "GO Hub / Counter");
   } finally {
     globalThis.fetch = originalFetch;
   }
