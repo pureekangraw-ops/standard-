@@ -483,6 +483,8 @@ export class GoHubCounterDispatchState {
 
       if (!statusResponse.ok || status.connected !== true) {
         let authorizationUrl = null;
+        let authPrepareCode = null;
+        let authPrepareStatus = null;
         if (hubOrigin) {
           const prepareResponse = await notion.fetch(new Request("https://notion-light.internal/prepare", {
             method:"POST",
@@ -491,6 +493,10 @@ export class GoHubCounterDispatchState {
           }));
           const prepared = await prepareResponse.json().catch(() => ({}));
           if (prepareResponse.ok) authorizationUrl = prepared.authorizationUrl || null;
+          else {
+            authPrepareCode = String(prepared?.code || "NOTION_LIGHT_OAUTH_PREPARE_FAILED");
+            authPrepareStatus = prepareResponse.status;
+          }
         }
         const result = this.core.waitingAuth({ target }, state);
         if (!result.idempotent) await this.save(result.dispatch);
@@ -498,6 +504,14 @@ export class GoHubCounterDispatchState {
           targetConfigured:true,
           authRequired:true,
           authorizationUrl,
+          authPrepareCode,
+          authPrepareStatus,
+          notionStatus:{
+            connected:status.connected === true,
+            clientRegistered:status.clientRegistered === true,
+            authorizationStored:status.authorizationStored === true,
+            refreshAvailable:status.refreshAvailable === true,
+          },
         });
       }
 
