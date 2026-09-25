@@ -399,7 +399,7 @@ async function refreshControlRoom() {
       workId: String(centreWork.workId),
       checkpointId: String(centreWork.checkpointId || ""),
     });
-    const response = await fetch(`/hub/api/control-room?${params}`);
+    const response = await fetch(`/hub/api/centre/control-room?${params}`);
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body?.code || "CONTROL_ROOM_READ_FAILED");
     renderControlRoom(body);
