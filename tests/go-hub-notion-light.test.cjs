@@ -52,7 +52,9 @@ test("Notion LIGHT prepare performs OAuth discovery, DCR, and PKCE without expos
     const authUrl = new URL(result.authorizationUrl);
     assert.equal(authUrl.origin + authUrl.pathname, "https://auth.notion.example/authorize");
     assert.equal(authUrl.searchParams.get("client_id"), "client-1");
+    assert.equal(calls[0].url, "https://mcp.notion.com/mcp/.well-known/oauth-protected-resource");
     assert.equal(authUrl.searchParams.get("redirect_uri"), "https://hub.example/hub/api/notion-light/callback");
+    assert.equal(authUrl.searchParams.get("resource"), "https://mcp.notion.com/mcp");
     assert.equal(authUrl.searchParams.get("code_challenge_method"), "S256");
     assert.ok(authUrl.searchParams.get("code_challenge"));
     assert.ok(authUrl.searchParams.get("state"));
@@ -74,6 +76,8 @@ test("Notion LIGHT callback exchanges code and stores a reusable workspace conne
       verifier:"verifier-1",
       redirectUri:"https://hub.example/hub/api/notion-light/callback",
       metadata:{ token_endpoint:"https://auth.notion.example/token" },
+      issuer:"https://auth.notion.example",
+      resource:"https://mcp.notion.com/mcp",
       createdAt:now,
       expiresAt:now + 600000,
     },
@@ -82,6 +86,7 @@ test("Notion LIGHT callback exchanges code and stores a reusable workspace conne
     assert.equal(String(url), "https://auth.notion.example/token");
     const params = new URLSearchParams(init.body);
     assert.equal(params.get("code_verifier"), "verifier-1");
+    assert.equal(params.get("resource"), "https://mcp.notion.com/mcp");
     return jsonResponse({
       access_token:"access-1",
       refresh_token:"refresh-1",
@@ -94,7 +99,7 @@ test("Notion LIGHT callback exchanges code and stores a reusable workspace conne
   try {
     const { GoHubNotionLightState } = await import(moduleUrl + "?callback=" + Date.now());
     const light = new GoHubNotionLightState({ storage }, {});
-    const result = await light.callback({ code:"code-1", state:"state-1" });
+    const result = await light.callback({ code:"code-1", state:"state-1", iss:"https://auth.notion.example" });
     assert.equal(result.connected, true);
     const status = await light.status();
     assert.equal(status.connected, true);
@@ -103,6 +108,28 @@ test("Notion LIGHT callback exchanges code and stores a reusable workspace conne
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("Notion LIGHT rejects a mismatched OAuth issuer before token exchange", async () => {
+  const storage = memoryStorage({
+    client:{ clientId:"client-1", clientSecret:null, redirectUri:"https://hub.example/hub/api/notion-light/callback" },
+    pending:{
+      state:"state-1",
+      verifier:"verifier-1",
+      redirectUri:"https://hub.example/hub/api/notion-light/callback",
+      metadata:{ token_endpoint:"https://auth.notion.example/token" },
+      issuer:"https://auth.notion.example",
+      resource:"https://mcp.notion.com/mcp",
+      createdAt:Date.now(),
+      expiresAt:Date.now()+600000,
+    },
+  });
+  const { GoHubNotionLightState } = await import(moduleUrl + "?issuer-mismatch=" + Date.now());
+  const light = new GoHubNotionLightState({ storage }, {});
+  await assert.rejects(
+    () => light.callback({ code:"code-1", state:"state-1", iss:"https://evil.example" }),
+    /NOTION_LIGHT_OAUTH_ISSUER_MISMATCH/,
+  );
 });
 
 test("Notion LIGHT uses notion-fetch self then notion-ai-search when AI Search is available", async () => {
