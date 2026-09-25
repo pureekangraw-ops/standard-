@@ -203,3 +203,26 @@ test("Counter surface is only handoff guidance, Notion AI catalog search, and No
   assert.match(counter, /event\.shiftKey/);
   assert.doesNotMatch(counter, /\/hub\/api\/counter\/inbox|\/hub\/api\/counter\/pickup|refreshCounterInbox|counterInbox|centreWork\?\.workId/);
 });
+
+
+test("Centre includes a thin persistent GO Identity Installer dressing room", () => {
+  for (const html of [read("index.html"), read("go-hub.html")]) {
+    assert.match(html, /GO IDENTITY INSTALLER/);
+    assert.match(html, /data-dressing-room/);
+    assert.match(html, /data-dressing-status/);
+    assert.equal((html.match(/data-dressing-core/g) || []).length, 5);
+    assert.match(html, /data-dressing-lesson/);
+    assert.match(html, /data-dressing-add/);
+    assert.match(html, /data-dressing-lessons/);
+    assert.match(html, /name="personaReference"/);
+    assert.match(html, /name="workingView"/);
+  }
+
+  const source = read("go-hub-shell.js");
+  assert.match(source, /DRESSING_STORAGE_KEY/);
+  assert.match(source, /go-hub:dressing-room:v1/);
+  assert.match(source, /readDressingState/);
+  assert.match(source, /saveDressingState/);
+  assert.match(source, /addDressingLesson/);
+  assert.match(source, /slice\(-200\)/);
+});
