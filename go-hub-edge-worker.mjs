@@ -289,6 +289,14 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
           { status:200, headers:{ "content-type":"text/html; charset=utf-8", "cache-control":"no-store" } },
         );
       }
+      if (url.pathname === `${COUNTER_API_ROOT}/ask`) {
+        if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405);
+        const body = await request.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code:"INVALID_JSON" }, 400);
+        const question = String(body.question || body.request || "").trim();
+        if (!question) return json({ code:"COUNTER_QUESTION_REQUIRED" }, 400);
+        return createNotionLightService({ namespace:env?.GO_HUB_NOTION_LIGHT_STATE }).search({ query:question });
+      }
       if (url.pathname === `${COUNTER_API_ROOT}/inbox` || url.pathname === `${COUNTER_API_ROOT}/pickup`) {
         if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405);
         const body = await request.json().catch(() => null);
@@ -330,7 +338,7 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
         if (!counterId) return json({ code:"COUNTER_ID_REQUIRED" }, 400);
         return counter.seen({ counterId, actor:"GO", workContext });
       }
-      if (url.pathname === `${COUNTER_API_ROOT}/ask` || url.pathname === `${COUNTER_API_ROOT}/handoff`) {
+      if (url.pathname === `${COUNTER_API_ROOT}/handoff`) {
         if (request.method !== "POST") return json({ code:"METHOD_NOT_ALLOWED" }, 405);
         const body = await request.json().catch(() => null);
         if (!body || typeof body !== "object" || Array.isArray(body)) return json({ code:"INVALID_JSON" }, 400);
@@ -375,7 +383,7 @@ export function createEdgeWorkerHandler({ delegate = githubWorker, factoryMcp = 
         };
         return lifecycle.create({
           counterId,
-          mode:url.pathname === `${COUNTER_API_ROOT}/ask` ? "SEARCH" : "HANDOFF",
+          mode:"HANDOFF",
           fromActor:"GO",
           toActor:"LIGHT",
           request:requestText,
