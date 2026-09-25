@@ -649,6 +649,10 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         ? {
             ...oauthConfig,
             resource:url.origin + "/mcp/light",
+            acceptedIdentities:[
+              { subject:"light", scope:"go-hub-light" },
+              ...(env?.GOHUB_NOTION_CLIENT_SECRET ? [{ subject:"notion", scope:"go-hub" }] : []),
+            ],
             subject:"light",
             scope:"go-hub-light",
           }
@@ -920,6 +924,9 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
         allowedOrigins: lightMcp
           ? ["https://www.notion.so", "https://notion.so", "https://app.notion.com"]
           : [],
+        resourceMetadataUrl: lightMcp
+          ? url.origin + "/.well-known/oauth-protected-resource/mcp/light"
+          : null,
       })(request);
     },
   });
