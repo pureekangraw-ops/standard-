@@ -17,7 +17,8 @@
     "Heimdall Work registry, holder, scoped Passes, Warp, and three-way Project Board",
     "Factory V4 PLAN → BUILD → ASSEMBLY → MERGE → CHECK → OUTPUT lifecycle",
     "Maintenance V4 persisted Map, safe probes, first-break readback, and closeout plan",
-    "Counter → LIGHT → Work → Answer → Readback continuity"
+    "Counter → LIGHT → Work → Answer → Readback continuity",
+    "GO Control Room live cross-system correlation surface"
   ],
   "serviceWorker": {
     "file": "go-hub-sw.js",
@@ -58,6 +59,9 @@
     },
     {
       "path": "go-hub-shell.js"
+    },
+    {
+      "path": "go-hub-control-room.js"
     },
     {
       "path": "go-hub-runtime.js"
