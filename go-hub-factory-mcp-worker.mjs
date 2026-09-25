@@ -18,8 +18,6 @@ import { createWorkflowArtifactService } from "./go-hub-workflow-artifact-servic
 import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
 import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
 import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
-import { createCounterService } from "./go-hub-counter.mjs";
-import { createCounterDispatchService } from "./go-hub-counter-dispatcher.mjs";
 import { createNotionLightService } from "./go-hub-notion-light.mjs";
 import { sealReadyGate } from "./go-hub-ready-gate.js";
 
@@ -43,11 +41,6 @@ const LIGHT_MUTATION_TOOL_NAMES = new Set([
   "go_hub_put_file",
   "go_hub_open_pull_request",
   "go_hub_light_centre_v4_action",
-  "go_hub_counter_create",
-  "go_hub_counter_seen",
-  "go_hub_counter_pickup",
-  "go_hub_counter_answer",
-  "go_hub_counter_readback",
   "go_hub_gmail_send_message",
   "go_hub_calendar_create_event",
   "go_hub_drive_create_folder",
@@ -193,181 +186,6 @@ async function centreAuditHistory(globalAudit, input = {}) {
     nextSequence,
     hasMore: nextSequence < lastSequence,
     source: "CENTRE_AUDIT",
-  });
-}
-
-export function createCounterDispatchLifecycle({ counter, dispatch, notionLight = null, hubOrigin = null } = {}) {
-  if (!counter || !dispatch) throw new Error("Counter and dispatch services are required");
-
-  async function parsed(response) {
-    return response.clone().json().catch(() => ({}));
-  }
-
-  return Object.freeze({
-    async create(input = {}) {
-      const response = await counter.create(input);
-      const payload = await parsed(response);
-      if (!response.ok) return response;
-      const state = payload.counter || {};
-      const dispatchResponse = await dispatch.open({
-        counterId:state.counterId,
-        workId:state.workId,
-        checkpointId:state.checkpointId,
-        workContext:state.workContext || input.workContext || {},
-        mode:state.mode || input.mode || "SEARCH",
-        request:state.request,
-        requestedResult:state.requestedResult || input.requestedResult || null,
-        authority:state.authority || input.authority || null,
-        target:state.target || input.target || null,
-        projectRef:state.projectRef || input.projectRef || null,
-        fromActor:state.from || input.fromActor || "GO",
-        toActor:state.to || input.toActor || "LIGHT",
-        context:state.context || {},
-        sourceHints:state.sourceHints || [],
-        doNotChange:state.doNotChange || [],
-      });
-      let dispatchPayload = await parsed(dispatchResponse);
-      let dispatchCode = dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_FAILED");
-
-      const dispatchMode = String(state.mode || input.mode || "SEARCH").toUpperCase();
-      const lightState = dispatchPayload.dispatch?.legs?.LIGHT?.status || null;
-      const waitingForLightAuth =
-        dispatchMode === "SEARCH" &&
-        (dispatchPayload.authRequired === true || lightState === "WAITING_AUTH");
-      if (waitingForLightAuth && !dispatchPayload.authorizationUrl && notionLight && typeof notionLight.prepare === "function" && hubOrigin) {
-        const prepareResponse = await notionLight.prepare({ hubOrigin });
-        const prepared = await parsed(prepareResponse);
-        if (prepareResponse.ok && prepared?.authorizationUrl) {
-          dispatchPayload = {
-            ...dispatchPayload,
-            authRequired:true,
-            authorizationUrl:prepared.authorizationUrl,
-          };
-        } else {
-          dispatchPayload = {
-            ...dispatchPayload,
-            authRequired:true,
-            authPrepareCode:prepared?.code || "NOTION_LIGHT_OAUTH_PREPARE_FAILED",
-            authPrepareStatus:prepareResponse.status,
-          };
-        }
-      }
-
-      let finalPayload = payload;
-      const mode = dispatchMode;
-      const lightAnswer = dispatchPayload.lightAnswer || dispatchPayload.dispatch?.lightResult || null;
-      if (lightAnswer && mode === "SEARCH") {
-        const identity = {
-          counterId:state.counterId,
-          workContext:{
-            workId:state.workId,
-            checkpointId:state.checkpointId,
-          },
-        };
-        const seenResponse = await counter.seen(identity);
-        if (!seenResponse.ok) return seenResponse;
-        const answerResponse = await counter.answer({
-          ...identity,
-          ...lightAnswer,
-        });
-        if (!answerResponse.ok) return answerResponse;
-        const answerPayload = await parsed(answerResponse);
-        finalPayload = {
-          ...payload,
-          counter:answerPayload.counter,
-          lightResult:lightAnswer,
-        };
-
-        if (typeof dispatch.returnInline === "function") {
-          const inlineResponse = await dispatch.returnInline({
-            counterId:state.counterId,
-            workId:state.workId,
-            checkpointId:state.checkpointId,
-            status:answerPayload.counter?.currentState || lightAnswer.status,
-            answer:answerPayload.counter?.answer || lightAnswer.answer,
-            sources:answerPayload.counter?.sources || lightAnswer.sources || [],
-            evidence:answerPayload.counter?.evidence || lightAnswer.evidence || [],
-            confidence:answerPayload.counter?.confidence || lightAnswer.confidence,
-            nextRoute:answerPayload.counter?.nextRoute || lightAnswer.nextRoute || "GO",
-          });
-          const inlinePayload = await parsed(inlineResponse);
-          if (inlineResponse.ok) {
-            dispatchPayload = inlinePayload;
-            dispatchCode = null;
-          } else {
-            dispatchCode = inlinePayload.code || "DISPATCH_INLINE_RETURN_FAILED";
-          }
-        }
-      }
-
-      return json({
-        ...finalPayload,
-        dispatch:dispatchPayload.dispatch || null,
-        dispatchCode,
-        lightAuthorizationUrl:dispatchPayload.authorizationUrl || null,
-        lightAuthRequired:dispatchPayload.authRequired === true,
-        lightAuthPrepareCode:dispatchPayload.authPrepareCode || null,
-        lightAuthPrepareStatus:Number.isInteger(dispatchPayload.authPrepareStatus) ? dispatchPayload.authPrepareStatus : null,
-        lightNotionStatus:dispatchPayload.notionStatus || null,
-        lightCapabilityBlocked:dispatchPayload.capabilityBlocked === true,
-        lightCapabilityStatus:dispatchPayload.capabilityStatus || null,
-        lightUpgradeUrl:dispatchPayload.upgradeUrl || null,
-      }, response.status);
-    },
-
-    async inbox(input = {}) {
-      return counter.inbox(input);
-    },
-
-    async get(input = {}) {
-      const response = await counter.get(input);
-      const payload = await parsed(response);
-      if (!response.ok) return response;
-      const state = payload.counter || {};
-      const dispatchResponse = await dispatch.get({
-        counterId:state.counterId,
-        workId:state.workId,
-        checkpointId:state.checkpointId,
-      });
-      const dispatchPayload = await parsed(dispatchResponse);
-      return json({
-        ...payload,
-        dispatch:dispatchPayload.dispatch || null,
-        dispatchCode:dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_UNAVAILABLE"),
-      }, response.status);
-    },
-
-    async answer(input = {}) {
-      const response = await counter.answer(input);
-      const payload = await parsed(response);
-      if (!response.ok) return response;
-      const state = payload.counter || {};
-      const dispatchInput = {
-        counterId:state.counterId,
-        workId:state.workId,
-        checkpointId:state.checkpointId,
-        status:state.currentState,
-        answer:state.answer,
-        sources:state.sources || [],
-        evidence:state.evidence || [],
-        confidence:state.confidence,
-        nextRoute:state.nextRoute,
-      };
-      const handoff = String(state.mode || "").trim().toUpperCase() === "HANDOFF";
-      const dispatchResponse = handoff && typeof dispatch.returnInline === "function"
-        ? await dispatch.returnInline({
-            ...dispatchInput,
-            transport:"COUNTER_INBOX",
-            receiptId:"go-counter-inbox",
-          })
-        : await dispatch.answer(dispatchInput);
-      const dispatchPayload = await parsed(dispatchResponse);
-      return json({
-        ...payload,
-        dispatch:dispatchPayload.dispatch || null,
-        dispatchCode:dispatchResponse.ok ? null : (dispatchPayload.code || "DISPATCH_FAILED"),
-      }, response.status);
-    },
   });
 }
 
@@ -650,11 +468,6 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const centreLive = createCentreLiveService({ namespace: env?.GO_HUB_CENTRE_STATE });
       const broadcast = createBroadcastService({ namespace: env?.GO_HUB_BROADCAST_STATE });
       const globalAudit = createGlobalAuditService({ namespace: env?.GO_HUB_GLOBAL_AUDIT });
-      const counter = createCounterService({ namespace: env?.GO_HUB_COUNTER_STATE, inboxNamespace: env?.GO_HUB_COUNTER_INBOX });
-      const dispatch = createCounterDispatchService({
-        namespace: env?.GO_HUB_COUNTER_DISPATCH_STATE,
-        hubOrigin: url.origin,
-      });
       const notionLight = createNotionLightService({ namespace:env?.GO_HUB_NOTION_LIGHT_STATE });
       const counterDispatch = createCounterDispatchLifecycle({ counter, dispatch, notionLight, hubOrigin:url.origin });
       const lighthouseControlPort = createLighthouseControlPortMcpService({ namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS });
@@ -781,36 +594,6 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           projectStatus: async input => json(await projectStatus.read(input)),
           boardRead: () => lighthouseControlPort.boardRead(),
           boardPinRoute: input => json(boardPinRoute.read(input)),
-          counterCreate: input => {
-            const fromActor = lightMcp ? "LIGHT" : "GO";
-            const toActor = lightMcp ? "GO" : "LIGHT";
-            const mode = String(input?.mode || "SEARCH").trim().toUpperCase();
-            if (lightMcp && mode !== "HANDOFF") return json({ code:"LIGHT_COUNTER_CREATE_HANDOFF_ONLY" }, 400);
-            const routed = { ...input, fromActor, toActor };
-            return runMutation("counter.create." + fromActor.toLowerCase(), routed, () => counterDispatch.create(routed));
-          },
-          counterInbox: input => counter.inbox({ ...input, actor:lightMcp ? "LIGHT" : "GO" }),
-          counterGet: input => counterDispatch.get(input),
-          counterSeen: input => {
-            const actor = lightMcp ? "LIGHT" : "GO";
-            const routed = { ...input, actor };
-            return runMutation("counter.seen." + actor.toLowerCase(), routed, () => counter.seen(routed));
-          },
-          counterPickup: input => {
-            const actor = lightMcp ? "LIGHT" : "GO";
-            const routed = { ...input, actor };
-            return runMutation("counter.pickup." + actor.toLowerCase(), routed, () => counter.seen(routed));
-          },
-          counterAnswer: input => {
-            const actor = lightMcp ? "LIGHT" : "GO";
-            const routed = { ...input, actor };
-            return runMutation("counter.answer." + actor.toLowerCase(), routed, () => counterDispatch.answer(routed));
-          },
-          counterReadback: input => {
-            const actor = lightMcp ? "LIGHT" : "GO";
-            const routed = { ...input, actor };
-            return runMutation("counter.readback." + actor.toLowerCase(), routed, () => counter.readback(routed));
-          },
           linearListProjects: input => linear.listProjects(input),
           linearGetIssue: input => linear.getIssue(input),
           linearCreateIssue: input => runMutation("linear.create_issue", input, () => linear.createIssue(input)),
