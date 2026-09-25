@@ -368,7 +368,7 @@ jobs:
           const names = (toolsPayload?.result?.tools || []).map(tool => tool?.name).filter(Boolean);
           const required = [
             "go_hub_read_file", "go_hub_create_branch", "go_hub_put_file", "go_hub_compare_refs", "go_hub_open_pull_request",
-            "go_hub_drive_read_document", "go_hub_get_workflow_runs", "go_hub_list_workflow_artifacts",
+            "go_hub_drive_read_document", "go_hub_drive_download_file", "go_hub_get_workflow_runs", "go_hub_list_workflow_artifacts",
             "go_hub_audit_history", "go_hub_lighthouse_control_port_state", "go_hub_project_status",
             "go_hub_observer_latest", "go_hub_linear_list_projects", "go_hub_linear_get_issue",
           ];
@@ -426,15 +426,7 @@ jobs:
           const lightToken = await createAccessToken({
             issuer:origin, signingKey, resource:origin + "/mcp/light", subject:"light", scope:"go-hub-light", ttlSeconds:600,
           });
-          const context = destination => ({
-            workId,
-            checkpointId,
-            returnAddress:checkpointId,
-            destination:"destination://" + destination,
-            task:"Verify GO Hub V4 production close-loop",
-            requestedResult:"V4 inspect, all Pass kinds, Factory, Maintenance, Counter/LIGHT, Project Board, Board projection and Return verified",
-            lensReference:"GO_HUB_V4_CUTOVER.json",
-          });
+          const context = () => ({ workId, checkpointId });
           let rpcId = 10;
           const mcp = async (path, token, name, args, { allowToolError=false, notionOrigin=false } = {}) => {
             const headers = {
@@ -526,8 +518,8 @@ jobs:
           // WORK Pass + Factory V4.
           await centre({ action:"v4_claim", workId, actor });
           await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
-            action:"open", workId, checkpointId, actor, kind:"WORK",
-            destinations:["factory"], returnAddress:checkpointId, workContext:context("centre"),
+            action:"open", kind:"WORK",
+            destinations:["factory"], workContext:context(),
           });
           inspected = await mcp("/mcp", ownerToken, "go_hub_centre_live_action", {
             action:"v4_inspect", workId, checkpointId,
@@ -535,7 +527,6 @@ jobs:
           if (inspected.proof?.work?.pass?.kind !== "WORK" || inspected.proof?.work?.pass?.state !== "ACTIVE") {
             throw new Error("WORK_PASS_RUNTIME_FAILED");
           }
-          const liveWork = inspected.proof.work;
           const factoryForm = {
             projectId:"FACTORY-" + workId,
             repository:"pureekangraw-ops/standard-",
@@ -546,25 +537,25 @@ jobs:
             criticalChecklist:[{ id:"runtime", label:"Production runtime verified" }],
           };
           await mcp("/mcp", ownerToken, "go_hub_factory_v4", {
-            action:"start", workId, work:liveWork, form:factoryForm, workContext:context("factory"),
+            action:"start", form:factoryForm, workContext:context(),
           });
           await mcp("/mcp", ownerToken, "go_hub_factory_v4", {
-            action:"record_reality", workId,
+            action:"record_reality",
             reality:{ repository:factoryForm.repository, branch:"main", headSha:process.env.GITHUB_SHA, lastUpdated:new Date().toISOString() },
-            workContext:context("factory"),
+            workContext:context(),
           });
-          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", workId, workContext:context("factory") });
-          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", workId, result:{ built:true }, workContext:context("factory") });
-          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", workId, result:{ assembled:true }, workContext:context("factory") });
-          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", workId, result:{ deployment:"production" }, workContext:context("factory") });
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", workContext:context() });
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", result:{ built:true }, workContext:context() });
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", result:{ assembled:true }, workContext:context() });
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", result:{ deployment:"production" }, workContext:context() });
           await mcp("/mcp", ownerToken, "go_hub_factory_v4", {
-            action:"update_check", workId, checkId:"runtime", status:"PASS",
-            evidence:"github-actions:" + process.env.GITHUB_RUN_ID, workContext:context("factory"),
+            action:"update_check", checkId:"runtime", status:"PASS",
+            evidence:"github-actions:" + process.env.GITHUB_RUN_ID, workContext:context(),
           });
-          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", workId, workContext:context("factory") });
+          await mcp("/mcp", ownerToken, "go_hub_factory_v4", { action:"advance", workContext:context() });
           const factoryDone = await mcp("/mcp", ownerToken, "go_hub_factory_v4", {
-            action:"finish", workId, ref:"github-actions:" + process.env.GITHUB_RUN_ID + ":factory-v4",
-            summary:"Factory V4 production lifecycle verified", workContext:context("factory"),
+            action:"finish", ref:"github-actions:" + process.env.GITHUB_RUN_ID + ":factory-v4",
+            summary:"Factory V4 production lifecycle verified", workContext:context(),
           });
           if (factoryDone.proof?.task?.output?.type !== "REF" || factoryDone.proof?.task?.projectRef?.status !== "COMPLETE") {
             throw new Error("FACTORY_V4_PRODUCTION_OUTPUT_FAILED");
@@ -574,15 +565,15 @@ jobs:
             throw new Error("V4_PROJECT_BOARD_RUNTIME_FAILED");
           }
           await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
-            action:"close", workId, checkpointId, actor, status:"OPEN",
-            result:{ pass:"WORK", factory:"PASS" }, workContext:context("centre"),
+            action:"close", status:"OPEN",
+            result:{ pass:"WORK", factory:"PASS" }, workContext:context(),
           });
 
           // READ Pass + GO -> LIGHT -> GO Counter close-loop.
           await centre({ action:"v4_claim", workId, actor });
           await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
-            action:"open", workId, checkpointId, actor, kind:"READ",
-            destinations:["counter"], returnAddress:checkpointId, workContext:context("centre"),
+            action:"open", kind:"READ",
+            destinations:["counter"], workContext:context(),
           });
           await mcp("/mcp", ownerToken, "go_hub_counter_create", {
             counterId, mode:"HANDOFF",
@@ -590,38 +581,37 @@ jobs:
             requestedResult:"LIGHT picks up, answers, and GO records readback on the same Counter ticket.",
             authority:"READ_ONLY_SMOKE", target:"LIGHT",
             context:{ source:"GO_HUB_V4_RUNTIME_SMOKE" },
-            workContext:context("counter"),
+            workContext:context(),
           });
           await mcp("/mcp/light", lightToken, "go_hub_counter_pickup", {
-            counterId, workContext:context("counter"),
+            counterId, workContext:context(),
           }, { notionOrigin:true });
           await mcp("/mcp/light", lightToken, "go_hub_counter_answer", {
             counterId, status:"ANSWERED", answer:"Counter/LIGHT production close-loop passed.",
             sources:["production://go-hub/counter"], evidence:[{ ref:"github-actions:" + process.env.GITHUB_RUN_ID + ":counter-light" }],
-            confidence:"HIGH", nextRoute:"GO", workContext:context("counter"),
+            confidence:"HIGH", nextRoute:"GO", workContext:context(),
           }, { notionOrigin:true });
           const readback = await mcp("/mcp", ownerToken, "go_hub_counter_readback", {
             counterId, evidence:{ ref:"github-actions:" + process.env.GITHUB_RUN_ID + ":counter-readback" },
-            close:true, workContext:context("counter"),
+            close:true, workContext:context(),
           });
           if (readback.proof?.counter?.currentState !== "CLOSED") throw new Error("COUNTER_LIGHT_READBACK_NOT_CLOSED");
           await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
-            action:"close", workId, checkpointId, actor, status:"OPEN",
-            result:{ pass:"READ", counterLight:"PASS" }, workContext:context("centre"),
+            action:"close", status:"OPEN",
+            result:{ pass:"READ", counterLight:"PASS" }, workContext:context(),
           });
 
           // MAINTENANCE Pass + safe production binding probes.
           await centre({ action:"v4_claim", workId, actor });
           await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
-            action:"open", workId, checkpointId, actor, kind:"MAINTENANCE",
-            returnAddress:checkpointId, workContext:context("centre"),
+            action:"open", kind:"MAINTENANCE",
+            workContext:context(),
           });
           inspected = await mcp("/mcp", ownerToken, "go_hub_centre_live_action", {
             action:"v4_inspect", workId, checkpointId,
           });
           const maintenance = await mcp("/mcp", ownerToken, "go_hub_maintenance", {
             action:"run_system_check",
-            work:inspected.proof.work,
             projectId:"MAINTENANCE-" + workId,
             map:{
               source:"GO_V4_RUNTIME_CLOSE_LOOP",
@@ -636,7 +626,7 @@ jobs:
                 ],
               }],
             },
-            workContext:context("maintenance"),
+            workContext:context(),
           });
           if (maintenance.proof?.status !== "MAINTENANCE_CHECK_COMPLETE" ||
               maintenance.proof?.autoRepair !== false ||
@@ -645,26 +635,26 @@ jobs:
             throw new Error("MAINTENANCE_V4_PRODUCTION_CHECK_FAILED:" + JSON.stringify(maintenance.proof));
           }
           await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
-            action:"close", workId, checkpointId, actor, status:"OPEN",
-            result:{ pass:"MAINTENANCE", maintenance:"PASS" }, workContext:context("centre"),
+            action:"close", status:"OPEN",
+            result:{ pass:"MAINTENANCE", maintenance:"PASS" }, workContext:context(),
           });
 
           // EMERGENCY Pass age: expired must fail, bounded future pass must work.
           await centre({ action:"v4_claim", workId, actor });
           const expired = await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
-            action:"open", workId, checkpointId, actor, kind:"EMERGENCY", scope:["factory"],
+            action:"open", kind:"EMERGENCY", scope:["factory"],
             expiresAt:new Date(Date.now() - 60_000).toISOString(),
             reason:"Production expiry guard smoke", audit:{ source:"GO_V4_RUNTIME_SMOKE" },
-            returnAddress:checkpointId, workContext:context("centre"),
+            workContext:context(),
           }, { allowToolError:true });
           if (!expired.tool?.isError || !/expired/i.test(JSON.stringify(expired.proof))) {
             throw new Error("EMERGENCY_EXPIRED_PASS_WAS_NOT_REJECTED:" + JSON.stringify(expired.proof));
           }
           const validExpiry = new Date(Date.now() + 5 * 60_000).toISOString();
           await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
-            action:"open", workId, checkpointId, actor, kind:"EMERGENCY", scope:["factory"],
+            action:"open", kind:"EMERGENCY", scope:["factory"],
             expiresAt:validExpiry, reason:"Bounded production recovery smoke", audit:{ source:"GO_V4_RUNTIME_SMOKE" },
-            returnAddress:checkpointId, workContext:context("centre"),
+            workContext:context(),
           });
           inspected = await mcp("/mcp", ownerToken, "go_hub_centre_live_action", {
             action:"v4_inspect", workId, checkpointId,
@@ -674,8 +664,8 @@ jobs:
             throw new Error("EMERGENCY_LIVE_AGE_PROOF_FAILED");
           }
           await mcp("/mcp", ownerToken, "go_hub_heimdall_pass", {
-            action:"close", workId, checkpointId, actor, status:"OPEN",
-            result:{ pass:"EMERGENCY", expiryGuard:"PASS" }, workContext:context("centre"),
+            action:"close", status:"OPEN",
+            result:{ pass:"EMERGENCY", expiryGuard:"PASS" }, workContext:context(),
           });
 
           // Final Return on the same Work, then force Board read-model reconciliation.
@@ -730,6 +720,21 @@ jobs:
 
           const origin = "https://go-hub." + subdomain + ".workers.dev";
           const accessToken = await createTestAccessToken({ issuer: origin, signingKey });
+          const listResponse = await fetch(origin + "/mcp", {
+            method:"POST",
+            headers:{
+              authorization:"Bearer " + accessToken,
+              "content-type":"application/json",
+              accept:"application/json, text/event-stream",
+            },
+            body:JSON.stringify({ jsonrpc:"2.0", id:0, method:"tools/list", params:{} }),
+          });
+          const listPayload = await listResponse.json().catch(() => null);
+          const driveNames = (listPayload?.result?.tools || []).map(tool => tool?.name).filter(Boolean);
+          if (!listResponse.ok || listPayload?.error || !driveNames.includes("go_hub_drive_download_file")) {
+            console.error("::error::GO Hub Drive binary download tool is not published.");
+            process.exit(1);
+          }
           const response = await fetch(origin + "/mcp", {
             method: "POST",
             headers: {
