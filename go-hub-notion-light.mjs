@@ -1,4 +1,5 @@
 const NOTION_MCP_URL = "https://mcp.notion.com/mcp";
+const NOTION_MCP_RESOURCE = NOTION_MCP_URL;
 const MAGNIFICENT_ARCHITECT_AGENT_MENTION = '<mention url="agent://1277043d-9861-8158-a732-000347bf2bab/3e27043d-9861-8026-8e4b-009237cacaec">Magnificent Architect</mention>';
 const OAUTH_PENDING_TTL_MS = 10 * 60 * 1000;
 const TOKEN_SKEW_MS = 60 * 1000;
@@ -97,8 +98,8 @@ function normalizeSearchEvidence(payload, query) {
 
 export async function discoverNotionOAuth(fetchImpl = fetch) {
   const resourceUrls = [
-    "https://mcp.notion.com/.well-known/oauth-protected-resource",
     "https://mcp.notion.com/mcp/.well-known/oauth-protected-resource",
+    "https://mcp.notion.com/.well-known/oauth-protected-resource",
   ];
   let resource = null;
   let lastStatus = 0;
@@ -240,6 +241,9 @@ export class GoHubNotionLightState {
       workspaceId:auth?.workspaceId || null,
       userId:auth?.userId || null,
       expiresAt:auth?.expiresAt || null,
+      clientRegistered:Boolean(client?.clientId),
+      authorizationStored:Boolean(auth?.accessToken),
+      refreshAvailable:Boolean(auth?.refreshToken),
     };
   }
 
@@ -260,6 +264,8 @@ export class GoHubNotionLightState {
       verifier,
       redirectUri,
       metadata:discovered.metadata,
+      issuer:discovered.metadata.issuer,
+      resource:NOTION_MCP_RESOURCE,
       createdAt:Date.now(),
       expiresAt:Date.now() + OAUTH_PENDING_TTL_MS,
     };
@@ -271,6 +277,7 @@ export class GoHubNotionLightState {
       state,
       code_challenge:challenge,
       code_challenge_method:"S256",
+      resource:NOTION_MCP_RESOURCE,
       prompt:"consent",
     });
     if (discovered.metadata.scopes_supported.length) {
@@ -294,6 +301,9 @@ export class GoHubNotionLightState {
       throw Object.assign(new Error("NOTION_LIGHT_OAUTH_EXPIRED"), { status:410 });
     }
     if (text(input.error)) throw Object.assign(new Error("NOTION_LIGHT_OAUTH_DENIED:" + text(input.error)), { status:400 });
+    if (text(input.iss) && text(pending.issuer) && text(input.iss) !== text(pending.issuer)) {
+      throw Object.assign(new Error("NOTION_LIGHT_OAUTH_ISSUER_MISMATCH"), { status:403 });
+    }
     if (!text(input.state) || text(input.state) !== pending.state) {
       throw Object.assign(new Error("NOTION_LIGHT_OAUTH_STATE_MISMATCH"), { status:403 });
     }
@@ -305,6 +315,7 @@ export class GoHubNotionLightState {
       client_id:client.clientId,
       redirect_uri:pending.redirectUri,
       code_verifier:pending.verifier,
+      resource:text(pending.resource) || NOTION_MCP_RESOURCE,
     });
     if (client.clientSecret) params.set("client_secret", client.clientSecret);
     const exchanged = await fetchJson(this.fetchImpl, pending.metadata.token_endpoint, {
@@ -330,6 +341,7 @@ export class GoHubNotionLightState {
       emailDomain:text(exchanged.payload.email_domain) || null,
       expiresAt:Date.now() + Math.max(60, expiresIn) * 1000,
       tokenEndpoint:pending.metadata.token_endpoint,
+      resource:text(pending.resource) || NOTION_MCP_RESOURCE,
     };
     await this.put("auth", auth);
     await this.delete("pending");
@@ -350,6 +362,7 @@ export class GoHubNotionLightState {
       grant_type:"refresh_token",
       refresh_token:auth.refreshToken,
       client_id:client.clientId,
+      resource:text(auth.resource) || NOTION_MCP_RESOURCE,
     });
     if (client.clientSecret) params.set("client_secret", client.clientSecret);
     const refreshed = await fetchJson(this.fetchImpl, auth.tokenEndpoint, {
@@ -525,4 +538,4 @@ export function createNotionLightService({ namespace } = {}) {
   });
 }
 
-export { NOTION_MCP_URL, MCP_PROTOCOL_VERSION, OAUTH_PENDING_TTL_MS };
+export { NOTION_MCP_URL, NOTION_MCP_RESOURCE, MCP_PROTOCOL_VERSION, OAUTH_PENDING_TTL_MS };
