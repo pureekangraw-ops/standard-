@@ -301,7 +301,7 @@ function renderMissionCardParking() {
     centreWork?.handoff?.destination,
   ].filter(Boolean).map(String);
   const factoryBound = destinations.some(value => value === FACTORY_DESTINATION || value === "factory");
-  const parked = Boolean(centreWork?.workId && factoryBound && !finalStates.has(rawStatus));
+  const parked = Boolean(centreWork && centreWork.workId && factoryBound && !finalStates.has(rawStatus));
 
   if (!parked) {
     stateNode.textContent = "EMPTY";
