@@ -3,6 +3,7 @@ import {
   centreSessionIsActive,
   createCentreReconciliationService,
 } from "./go-hub-centre-reconciliation.mjs";
+import { cardCompleteness, workCardView } from "./go-hub-work-card.js";
 
 const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_SESSION_TTL_MS = DEFAULT_SESSION_TTL_MS;
@@ -117,10 +118,27 @@ function hubBoardPin(view = {}, previous = null, at = new Date().toISOString()) 
     : "";
   const resumeFrom = clean(view.executionCheckpoint?.latest?.resumeFrom);
   const status = boardStatus(view);
+  const cardWork = {
+    ...(view.work || {}),
+    workId:canonicalWorkId || workId,
+    createdAt:clean(view.work?.createdAt) || clean(previous?.createdAt) || at,
+  };
+  const card = workCardView(cardWork);
+  const cardCheck = cardCompleteness(card);
+  const workCard = Object.freeze({
+    ...card,
+    health:cardCheck.complete ? "NORMAL" : "CAUTION",
+    caution:cardCheck.complete ? null : Object.freeze({ kind:"INCOMPLETE_CARD", missing:Object.freeze([...cardCheck.missing]) }),
+  });
   return {
     pinId:("PIN:" + workId).slice(0, 128),
     workId,
     canonicalWorkId:canonicalWorkId && canonicalWorkId !== workId ? canonicalWorkId : null,
+    card:workCard,
+    jobCode:workCard.jobCode,
+    destinations:[...workCard.destinations],
+    scope:[...workCard.scope],
+    workType:workCard.type,
     title:clean(view.work?.task || view.work?.name || view.work?.command) || workId,
     detail:clean(view.work?.requestedResult),
     status,
