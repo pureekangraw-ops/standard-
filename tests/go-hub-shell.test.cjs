@@ -184,7 +184,7 @@ test("Counter surface is only handoff guidance, Notion AI catalog search, and No
   const source = read("go-hub-shell.js");
   for (const html of [read("index.html"), read("go-hub.html")]) {
     const start = html.indexOf('<section class="counter-panel"');
-    const end = html.indexOf('<section class="go-workbench"', start);
+    const end = html.indexOf('data-mission-card-reader', start);
     const counter = html.slice(start, end);
     assert.match(counter, /SEND WORK TO LIGHT/);
     assert.match(counter, /data-counter-conversation/);
@@ -231,4 +231,62 @@ test("Centre includes a thin persistent GO Identity Installer dressing room", ()
   assert.match(source, /saveDressingState/);
   assert.match(source, /addDressingLesson/);
   assert.match(source, /slice\(-200\)/);
+});
+
+
+test("Mission Card Reader lives outside Dressing Room at the old Board surface slot", () => {
+  const source = read("go-hub-shell.js");
+  for (const html of [read("index.html"), read("go-hub.html")]) {
+    const dressingStart = html.indexOf('<fieldset class="dressing-room"');
+    const dressingEnd = html.indexOf("</fieldset>", dressingStart);
+    const dressing = html.slice(dressingStart, dressingEnd);
+    assert.doesNotMatch(dressing, /data-mission-card-reader/);
+
+    const counterIndex = html.indexOf('<section class="counter-panel"');
+    const readerIndex = html.indexOf("data-mission-card-reader");
+    const workbenchIndex = html.indexOf('data-workbench-shell');
+    assert.ok(counterIndex >= 0 && readerIndex > counterIndex && workbenchIndex > readerIndex,
+      "reader must occupy the standalone slot between Counter and Factory Workbench");
+    assert.equal((html.match(/data-mission-card-reader/g) || []).length, 1);
+    assert.match(html, /MISSION CARD READER/);
+    assert.match(html, /จุดแตะการ์ด/);
+    assert.match(html, /READ ONLY/);
+  }
+
+  assert.match(source, /function mountMissionCardStation/);
+  assert.match(source, /previousBrief:\s*null/);
+  assert.doesNotMatch(source, /latestMissionBrief/);
+  assert.doesNotMatch(source, /SINCE LAST BRIEF/);
+  assert.match(source, /ไม่มีการ mutate Work \/ Pass \/ Route/);
+});
+
+test("Factory work plate exposes exactly one stateless pending-card parking slot", () => {
+  const source = read("go-hub-shell.js");
+  for (const html of [read("index.html"), read("go-hub.html")]) {
+    assert.equal((html.match(/data-mission-card-parking/g) || []).length, 1);
+    assert.match(html, /FACTORY · WORK PLATE/);
+    assert.match(html, /จุดวางการ์ดค้าง/);
+    assert.match(html, /วางได้ 1 ใบ/);
+    for (const marker of [
+      "data-parking-state",
+      "data-parking-job",
+      "data-parking-status",
+      "data-parking-work",
+      "data-parking-checkpoint",
+      "data-parking-route",
+    ]) {
+      assert.match(html, new RegExp(marker));
+    }
+  }
+
+  assert.doesNotMatch(source, /go-hub-work-card\.js/);
+  assert.match(source, /function renderMissionCardParking/);
+  assert.match(source, /renderMissionCardParking\(\)/);
+  assert.match(source, /new Set\(\["COMPLETE", "RETURNED", "CANCEL", "CANCELLED", "CANCELED"\]\)/);
+  const start = source.indexOf("function renderMissionCardParking()");
+  const end = source.indexOf("\nfunction field(name)", start);
+  const parking = source.slice(start, end);
+  assert.doesNotMatch(parking, /localStorage|save|history/i);
+  assert.match(parking, /centreWork\.workId/);
+  assert.match(parking, /centreWork\.checkpointId/);
 });

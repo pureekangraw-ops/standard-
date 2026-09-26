@@ -96,6 +96,27 @@
       </div>
       <p class="counter-notion"><a href="https://app.notion.com/p/fe23e5c0f7a1436aad58827b8a8c9bb9" target="_blank" rel="noreferrer">เปิด GO × LIGHT ใน Notion ↗</a></p>
     </section>
+    <section class="hub-panel mission-card-station" aria-labelledby="mission-card-title" data-mission-card-reader>
+      <div class="operator-heading">
+        <div>
+          <p class="hub-kicker">MISSION CARD READER</p>
+          <h2 id="mission-card-title">จุดแตะการ์ด</h2>
+        </div>
+        <strong>READ ONLY</strong>
+      </div>
+      <p>สงสัยเมื่อไรค่อยแตะ — อ่าน owner source ใหม่ทุกครั้ง และไม่สั่งงาน ไม่เปลี่ยน state ไม่เปิด/ปิด Pass หรือ Route</p>
+      <div class="mission-card-fields">
+        <label>Work ID<input data-mission-card-work placeholder="WORK-…"></label>
+        <label>Checkpoint ID<input data-mission-card-checkpoint placeholder="CP-…"></label>
+        <label>Job Code <span class="counter-hint">(optional)</span><input data-mission-card-job placeholder="JOB-…"></label>
+      </div>
+      <div class="dressing-briefing-actions">
+        <button type="button" data-mission-card-tap>แตะ Mission Card</button>
+        <button type="button" data-mission-card-remove>ยกบัตรออก</button>
+      </div>
+      <p class="counter-result" data-mission-card-status role="status">ยังไม่ได้แตะการ์ด</p>
+      <pre class="dressing-briefing-output" data-mission-card-output>ยังไม่มี Readback</pre>
+    </section>
     <section class="go-workbench" aria-label="GO Workbench" data-workbench-shell hidden>
       <div class="go-workbench__item"><span>Mission</span><strong data-workbench-mission>—</strong></div>
       <div class="go-workbench__item"><span>Blueprint</span><strong data-workbench-blueprint>—</strong></div>
@@ -103,6 +124,24 @@
       <div class="go-workbench__item"><span>Status</span><strong data-workbench-status>—</strong></div>
       <div class="go-workbench__item"><span>Evidence</span><strong data-workbench-evidence>—</strong></div>
       <div class="go-workbench__item"><span>Next</span><strong data-workbench-next>—</strong></div>
+    </section>
+    <section class="hub-panel factory-card-plate" aria-labelledby="factory-card-plate-title" data-factory-card-plate>
+      <div class="operator-heading">
+        <div>
+          <p class="hub-kicker">FACTORY · WORK PLATE</p>
+          <h2 id="factory-card-plate-title">จุดวางการ์ดค้าง</h2>
+        </div>
+        <strong data-parking-state>EMPTY</strong>
+      </div>
+      <p>วางได้ 1 ใบ · ฉายจาก Work ปัจจุบันเท่านั้น · ไม่เก็บประวัติและไม่ถือ truth ซ้ำ</p>
+      <dl class="mission-card-parking" data-mission-card-parking>
+        <div><dt>Job Code</dt><dd data-parking-job>—</dd></div>
+        <div><dt>Status</dt><dd data-parking-status>—</dd></div>
+        <div class="parking-wide"><dt>Work</dt><dd data-parking-work>—</dd></div>
+        <div class="parking-wide"><dt>Checkpoint</dt><dd data-parking-checkpoint>—</dd></div>
+        <div class="parking-wide"><dt>ไปทาง</dt><dd data-parking-route>—</dd></div>
+      </dl>
+      <p class="counter-hint" data-parking-note>ยังไม่มีการ์ดค้าง</p>
     </section>
     <section class="hub-panel control-room" data-control-room aria-labelledby="control-room-title">
       <div class="operator-heading">

@@ -135,7 +135,6 @@ function readDressingState() {
 }
 
 let dressingState = readDressingState();
-let latestMissionBrief = null;
 
 function saveDressingState() {
   globalThis.localStorage?.setItem(DRESSING_STORAGE_KEY, JSON.stringify(dressingState));
@@ -167,27 +166,9 @@ function addDressingLesson(value) {
   renderDressingRoom();
 }
 
-function mountMissionBriefingRoom() {
-  const room = document.querySelector("[data-dressing-room]");
-  if (!room || room.querySelector("[data-mission-card-reader]")) return;
-
-  const panel = document.createElement("div");
-  panel.className = "dressing-briefing-room";
-  panel.dataset.missionCardReader = "true";
-  panel.innerHTML = `
-    <p class="hub-kicker">MISSION BRIEFING ROOM</p>
-    <p class="counter-hint">Mission Card เป็น pointer ของ Work เท่านั้น — ทุก observation อ่านใหม่จาก owner source</p>
-    <label>Work ID<input data-mission-card-work placeholder="WORK-…"></label>
-    <label>Checkpoint ID<input data-mission-card-checkpoint placeholder="CP-…"></label>
-    <label>Job Code <span class="counter-hint">(optional)</span><input data-mission-card-job placeholder="JOB-…"></label>
-    <div class="dressing-briefing-actions">
-      <button type="button" data-mission-card-tap>ทาบ Mission Card</button>
-      <button type="button" data-mission-card-remove>ยกบัตรออก</button>
-    </div>
-    <p class="counter-result" data-mission-card-status role="status">ยังไม่มีบัตร</p>
-    <pre class="dressing-briefing-output" data-mission-card-output>ยังไม่มี Brief</pre>
-  `;
-  room.append(panel);
+function mountMissionCardStation() {
+  const panel = document.querySelector("[data-mission-card-reader]");
+  if (!panel) return;
 
   const workInput = panel.querySelector("[data-mission-card-work]");
   const checkpointInput = panel.querySelector("[data-mission-card-checkpoint]");
@@ -200,6 +181,7 @@ function mountMissionBriefingRoom() {
   if (centreWork) {
     workInput.value = centreWork.workId || "";
     checkpointInput.value = centreWork.checkpointId || "";
+    jobInput.value = centreWork.jobCode || "";
   }
 
   const readRemote = async (endpoint, context) => {
@@ -245,7 +227,7 @@ function mountMissionBriefingRoom() {
 
   const renderBrief = brief => {
     const lines = [
-      `DRESSING ROOM BRIEF · ${brief.workId} · ${brief.checkpointId}`,
+      `MISSION CARD READBACK · ${brief.workId} · ${brief.checkpointId}`,
       `MODE: ${brief.mode} · LENS: ${brief.lens}`,
       "",
       "OWNER-SOURCE OBSERVATIONS",
@@ -259,9 +241,6 @@ function mountMissionBriefingRoom() {
       "",
       "LIGHT INTEL",
       `LIGHT: ${brief.light.status}${brief.light.optional ? " · optional" : ""}`,
-      "",
-      "SINCE LAST BRIEF",
-      ...(brief.sinceLastBrief.length ? brief.sinceLastBrief.map(item => `${item.source}: CHANGED`) : ["NO PRIOR BRIEF"]),
     ];
     output.textContent = lines.join("\n");
   };
@@ -275,34 +254,73 @@ function mountMissionBriefingRoom() {
         checkpointId: checkpointInput.value,
         jobCode: jobInput.value,
       });
-      const projection = await cardCounter.tap(card, { lens: "dressing-room" });
+      const projection = await cardCounter.tap(card, { lens: "mission-card-reader" });
       const sourceMap = new Map(projection.observations.map(item => [item.source, item]));
       const comparisons = [
         compareOneToOne({ topic: "Centre status ↔ Board status", left: sourceMap.get("CENTRE"), right: sourceMap.get("BOARD") }),
         compareOneToOne({ topic: "GitHub SHA ↔ Cloudflare evidence", left: sourceMap.get("GITHUB"), right: sourceMap.get("CLOUDFLARE") }),
         compareOneToOne({ topic: "Factory phase ↔ Control Room runtime", left: sourceMap.get("FACTORY"), right: sourceMap.get("CONTROL ROOM") }),
       ];
-      latestMissionBrief = composeDressingBrief({
+      const brief = composeDressingBrief({
         counterProjection: projection,
         lightIntel: await lightIntel({ card, projection }),
         comparisons,
-        previousBrief: latestMissionBrief,
+        previousBrief: null,
       });
-      renderBrief(latestMissionBrief);
-      statusNode.textContent = "อ่าน Brief ใหม่แล้ว · ไม่มีการ mutate Work / Pass / Route";
+      renderBrief(brief);
+      statusNode.textContent = "อ่านใหม่แล้ว · ไม่มีการ mutate Work / Pass / Route";
     } catch (error) {
       statusNode.textContent = error instanceof Error ? error.message : String(error);
-      output.textContent = "UNKNOWN — Brief unavailable";
+      output.textContent = "UNKNOWN — Readback unavailable";
     } finally {
       tapButton.disabled = false;
     }
   });
 
   removeButton.addEventListener("click", () => {
-    latestMissionBrief = null;
     statusNode.textContent = "ยกบัตรออกแล้ว · ไม่มีการเปลี่ยน Work";
-    output.textContent = "ยังไม่มี Brief";
+    output.textContent = "ยังไม่มี Readback";
   });
+}
+
+function renderMissionCardParking() {
+  const stateNode = document.querySelector("[data-parking-state]");
+  const jobNode = document.querySelector("[data-parking-job]");
+  const statusNode = document.querySelector("[data-parking-status]");
+  const workNode = document.querySelector("[data-parking-work]");
+  const checkpointNode = document.querySelector("[data-parking-checkpoint]");
+  const routeNode = document.querySelector("[data-parking-route]");
+  const noteNode = document.querySelector("[data-parking-note]");
+  if (!stateNode || !jobNode || !statusNode || !workNode || !checkpointNode || !routeNode || !noteNode) return;
+
+  const finalStates = new Set(["COMPLETE", "RETURNED", "CANCEL", "CANCELLED", "CANCELED"]);
+  const rawStatus = String(centreWork?.status || "").trim().toUpperCase();
+  const destinations = [
+    ...(Array.isArray(centreWork?.requestedDestinations) ? centreWork.requestedDestinations : []),
+    centreWork?.destination,
+    centreWork?.handoff?.destination,
+  ].filter(Boolean).map(String);
+  const factoryBound = destinations.some(value => value === FACTORY_DESTINATION || value === "factory");
+  const parked = Boolean(centreWork && centreWork.workId && factoryBound && !finalStates.has(rawStatus));
+
+  if (!parked) {
+    stateNode.textContent = "EMPTY";
+    jobNode.textContent = "—";
+    statusNode.textContent = "—";
+    workNode.textContent = "—";
+    checkpointNode.textContent = "—";
+    routeNode.textContent = "—";
+    noteNode.textContent = "ยังไม่มีการ์ดค้าง";
+    return;
+  }
+
+  stateNode.textContent = "1 / 1";
+  jobNode.textContent = centreWork.jobCode || "—";
+  statusNode.textContent = rawStatus || "UNKNOWN";
+  workNode.textContent = centreWork.workId || "—";
+  checkpointNode.textContent = centreWork.checkpointId || "—";
+  routeNode.textContent = destinations.join(" · ") || FACTORY_DESTINATION;
+  noteNode.textContent = `${centreWork.name || centreWork.task || centreWork.workId} · ยังไม่จบ — เก็บใบเดิมไว้หยิบต่อ`;
 }
 
 function field(name) {
@@ -642,6 +660,7 @@ function render() {
     }),
   );
   renderCentre();
+  renderMissionCardParking();
   renderWorkbench(taskSnapshot());
   renderOperator(taskSnapshot());
 }
@@ -665,7 +684,7 @@ dressingLesson?.addEventListener("keydown", event => {
 });
 
 renderDressingRoom();
-mountMissionBriefingRoom();
+mountMissionCardStation();
 
 controlRoomRefresh?.addEventListener("click", () => { void refreshControlRoom(); });
 
