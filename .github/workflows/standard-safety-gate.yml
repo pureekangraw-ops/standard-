@@ -26,8 +26,10 @@ jobs:
         run: node --test tests/go-hub-[a-fA-F]*.test.cjs
       - name: Run GO Hub tests G-M
         run: node --test tests/go-hub-[g-mG-M]*.test.cjs
-      - name: Run GO Hub tests N-P
-        run: node --test tests/go-hub-[n-pN-P]*.test.cjs
+      - name: Run GO Hub tests N-O
+        run: node --test tests/go-hub-[n-oN-O]*.test.cjs
+      - name: Run GO Hub tests P
+        run: node --test tests/go-hub-[pP]*.test.cjs
       - name: Run GO Hub tests Q-R
         run: node --test tests/go-hub-[q-rQ-R]*.test.cjs
       - name: Run GO Hub tests S-Z
