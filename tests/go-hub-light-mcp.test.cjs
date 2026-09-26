@@ -130,6 +130,8 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
     "go_hub_observer_screenshot",
     "go_hub_linear_list_projects",
     "go_hub_linear_get_issue",
+    "go_hub_bridge_catalog",
+    "go_hub_bridge_read",
     "go_hub_cloudflare_capabilities",
     "go_hub_cloudflare_health",
     "go_hub_cloudflare_list_workers",
@@ -145,6 +147,7 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
     "go_hub_lighthouse_control_port_command",
     "go_hub_linear_create_issue",
     "go_hub_linear_update_issue",
+    "go_hub_bridge_action",
     "go_hub_archive_workflow_artifact",
     "go_hub_rerun_failed_jobs",
   ]) assert.equal(names.includes(name), false, "LIGHT should not inherit mutation " + name);
@@ -494,6 +497,18 @@ test("LIGHT Cloudflare mirror is read-only and never exposes runtime secrets", a
     { name:"GO_HUB_CENTRE_STATE", type:"durable_object_namespace" },
   ]);
   assert.equal(inspected.secretValuesExposed, false);
+
+  const catalog = await call(33, "go_hub_bridge_catalog");
+  assert.equal(catalog.interfaceVersion, "go-hub-bridge/v1");
+  assert.deepEqual(catalog.bridges[0].readOperations, ["capabilities","health","inspect_worker","list_workers"]);
+  assert.deepEqual(catalog.bridges[0].actionOperations, []);
+
+  const bridgedHealth = await call(34, "go_hub_bridge_read", {
+    bridgeId:"cloudflare",
+    operation:"health",
+  });
+  assert.equal(bridgedHealth.upstream, "PASS");
+  assert.equal(bridgedHealth.workerCount, 1);
 });
 
 
