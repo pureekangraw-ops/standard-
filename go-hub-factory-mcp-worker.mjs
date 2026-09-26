@@ -935,7 +935,35 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
               debugAuthority:{ kind, holder:workText(pass.holder) || null },
             };
             if (action === "start") routed.work = work;
-            return runMutation("pixie.debug_factory." + action, routed, () => factoryV4(routed));
+            return runMutation("pixie.debug_factory." + action, routed, async () => {
+              const rechecked = await centreLive.action({ action:"v4_inspect", workId });
+              if (!rechecked.ok) return rechecked;
+              const latest = await responsePayload(rechecked);
+              const latestWork = latest?.work;
+              const latestPass = latestWork?.pass || {};
+              const latestKind = workText(latestPass.kind).toUpperCase();
+              const latestAllowed = Array.isArray(latestPass.allowedDestinations) ? latestPass.allowedDestinations.map(workText) : [];
+              const latestFactoryAllowed = latestAllowed.some(value => ["factory", "destination://factory", "ALL_GO_HUB_OWNED_AREAS"].includes(value));
+              if (!latestWork || latestWork.workId !== workId || latestWork.checkpointId !== checkpointId) {
+                return json({ code:"PIXIE_DEBUG_FACTORY_CENTRE_IDENTITY_MISMATCH" }, 409);
+              }
+              if (latestWork.status !== "ON PROCESS" || workText(latestPass.state).toUpperCase() !== "ACTIVE") {
+                return json({ code:"PIXIE_DEBUG_FACTORY_ACTIVE_PASS_REQUIRED" }, 403);
+              }
+              if (!["MAINTENANCE", "EMERGENCY"].includes(latestKind)) {
+                return json({ code:"PIXIE_DEBUG_FACTORY_MAINTENANCE_OR_EMERGENCY_REQUIRED", observedKind:latestKind || null }, 403);
+              }
+              if (!latestFactoryAllowed) return json({ code:"PIXIE_DEBUG_FACTORY_SCOPE_REQUIRED" }, 403);
+              if (latestKind === "EMERGENCY") {
+                const latestExpiry = Date.parse(workText(latestPass.expiresAt));
+                if (!Number.isFinite(latestExpiry) || latestExpiry <= Date.now()) {
+                  return json({ code:"PIXIE_DEBUG_FACTORY_EMERGENCY_PASS_EXPIRED" }, 403);
+                }
+              }
+              routed.debugAuthority = { kind:latestKind, holder:workText(latestPass.holder) || null };
+              if (action === "start") routed.work = latestWork;
+              return factoryV4(routed);
+            });
           },
           pixieResult: input => pixie.result(input),
           counterCreate: input => {
