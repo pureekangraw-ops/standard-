@@ -276,3 +276,112 @@ h1 { margin: 8px 0; font-size: clamp(2rem, 8vw, 4rem); }
   opacity: .8;
 }
 .dressing-work-fit[open] { display: grid; gap: 10px; }
+
+
+/* ---------- Mission card station / Factory parking ---------- */
+.mission-card-station,
+.factory-card-plate {
+  margin-bottom: 24px;
+}
+
+.mission-card-station {
+  border-color: #9b8cff;
+  background: linear-gradient(145deg, rgba(155, 140, 255, .1), rgba(17, 19, 24, .2));
+}
+
+.factory-card-plate {
+  border-color: #f4c95d;
+  background: linear-gradient(145deg, rgba(244, 201, 93, .09), rgba(17, 19, 24, .2));
+}
+
+.mission-card-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 10px;
+  margin: 14px 0 10px;
+}
+
+.mission-card-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: .78rem;
+}
+
+.mission-card-fields input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(244, 246, 248, .35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #171a20;
+  color: inherit;
+  font: inherit;
+}
+
+.dressing-briefing-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.dressing-briefing-actions button {
+  min-height: 42px;
+}
+
+.dressing-briefing-output {
+  max-height: 22rem;
+  margin: 10px 0 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid rgba(244, 246, 248, .16);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, .18);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: .76rem;
+  line-height: 1.5;
+}
+
+.mission-card-parking {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 10px;
+}
+
+.mission-card-parking div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(244, 246, 248, .16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .025);
+}
+
+.mission-card-parking .parking-wide {
+  grid-column: 1 / -1;
+}
+
+.mission-card-parking dt {
+  font-size: .68rem;
+  letter-spacing: .08em;
+  opacity: .62;
+  text-transform: uppercase;
+}
+
+.mission-card-parking dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 750;
+}
+
+@media (max-width: 480px) {
+  .dressing-briefing-actions,
+  .mission-card-parking {
+    grid-template-columns: 1fr;
+  }
+  .mission-card-parking .parking-wide {
+    grid-column: auto;
+  }
+}
