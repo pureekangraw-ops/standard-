@@ -19,6 +19,7 @@ import { createWorkflowArtifactService } from "./go-hub-workflow-artifact-servic
 import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
 import { createPixieCommandService } from "./go-hub-pixie-service.mjs";
 import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
+import { createOperatorCommandPlan } from "./go-hub-operator-planner.js";
 import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
 import { createCounterService } from "./go-hub-counter.mjs";
 import { createCounterDispatchService } from "./go-hub-counter-dispatcher.mjs";
@@ -885,6 +886,34 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           lighthouseControlPortCommand: input => lighthouseControlPort.command(input),
           projectStatus: async input => json(await projectStatus.read(input)),
           boardRead: () => lighthouseControlPort.boardRead(),
+          operatorPlan: async input => {
+            const workId = workText(input?.workContext?.workId);
+            const checkpointId = workText(input?.workContext?.checkpointId);
+            if (!workId || !checkpointId) return json({ code:"WORK_IDENTITY_REQUIRED" }, 400);
+            const inspected = await centreLive.action({ action:"v4_inspect", workId, checkpointId });
+            if (!inspected.ok) return inspected;
+            const reality = await responsePayload(inspected);
+            const work = reality?.work;
+            if (!work || work.workId !== workId || work.checkpointId !== checkpointId) {
+              return json({ code:"GO_OPERATOR_CENTRE_IDENTITY_MISMATCH" }, 409);
+            }
+            const pass = work.pass || {};
+            const plan = createOperatorCommandPlan({
+              command:input.command,
+              requestedResult:input.requestedResult,
+              mode:input.mode || "AUTO",
+              allowedDestinations:Array.isArray(pass.allowedDestinations) ? pass.allowedDestinations : [],
+              passState:pass.state || "NONE",
+              workStatus:work.status || "UNKNOWN",
+            });
+            return json({
+              ok:true,
+              operator:"GO_OPERATOR_V1",
+              work:{ workId, checkpointId, status:work.status || "UNKNOWN" },
+              pass:{ state:pass.state || "NONE", kind:pass.kind || null },
+              plan,
+            });
+          },
           boardPinRoute: input => json(boardPinRoute.read(input)),
           pixieCommand: input => runMutation("pixie.command", input, () => pixie.command(input)),
           pixieDebugFactoryAction: async input => {
