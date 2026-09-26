@@ -10,9 +10,9 @@ async function load() { return import(producerUrl + "?producer=" + Date.now() + 
 function truth() {
   const headSha = "head-165";
   return {
-    workPackage: { id: "wp-165", blueprintRef: "blueprint://factory", inputs: [], dependencies: [], assemblyTarget: "factory" },
+    workPackage: { id: "wp-165", blueprintRef: "blueprint://factory", inputs: [], dependencies: [], assemblyTarget: "factory", version: "OWNER.19" },
     blueprint: { ref: "blueprint://factory" },
-    piece: { id: "piece-165", workPackageId: "wp-165", repository: "pureekangraw-ops/standard-", branch: "fix/factory-ready-gate-seam", headSha, changedPaths: ["x.js"], outputs: [] },
+    piece: { id: "piece-165", name: "WEB-RUNTIME", workPackageId: "wp-165", repository: "pureekangraw-ops/standard-", branch: "fix/factory-ready-gate-seam", headSha, changedPaths: ["x.js"], outputs: [] },
     pieceQc: { status: "pass", checkedHeadSha: headSha, evidenceIds: ["purpose", "behavior", "interface"] },
     evidence: [
       { id: "purpose", scope: "piece", headSha, claim: "purpose-correct" },
@@ -28,6 +28,7 @@ test("producer seals Ready Gate and routes to Assembly after exact-head Piece QC
   const result = produceReadyGate({ ...input, ci: { headSha: input.piece.headSha, status: "success" } });
   assert.equal(result.readyGate.status, "READY_FOR_ASSEMBLY");
   assert.equal(result.readyGate.headSha, input.piece.headSha);
+  assert.deepEqual(result.readyGate.completionStamp, { name: "WEB-RUNTIME", version: "OWNER.19" });
   assert.equal(result.nextAction, "request-assembly-slot");
   assert.equal(result.ci.corroboratingOnly, true);
 });
