@@ -18,7 +18,8 @@
     "Factory V4 PLAN → BUILD → ASSEMBLY → MERGE → CHECK → OUTPUT lifecycle",
     "Maintenance V4 persisted Map, safe probes, first-break readback, and closeout plan",
     "Counter → LIGHT → Work → Answer → Readback continuity",
-    "GO Control Room live cross-system correlation surface"
+    "GO Control Room live cross-system correlation surface",
+    "PIXIE Visual Workbench: IDEA/REFERENCE + BRIEF/PROMPT + MAIN WORKSPACE with local render-packet preparation"
   ],
   "serviceWorker": {
     "file": "go-hub-sw.js",
@@ -167,6 +168,18 @@
     },
     {
       "path": "go-hub-heimdall.js"
+    },
+    {
+      "path": "pixie-visual-workbench.html"
+    },
+    {
+      "path": "pixie-visual-workbench.css"
+    },
+    {
+      "path": "pixie-visual-workbench.js"
+    },
+    {
+      "path": "go-hub-visual-workbench-model.js"
     }
   ],
   "serverRuntimeFiles": [
