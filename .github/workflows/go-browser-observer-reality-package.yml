@@ -1,3 +1,4 @@
+# GO Hub retrigger: CP-BROWSER-OBSERVER-ADDON-20260923-001
 name: GO Browser Observer Reality Package
 
 # Branch-local push fallback exists so Observer Reality can be produced before this workflow reaches default branch.
