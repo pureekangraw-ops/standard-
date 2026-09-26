@@ -121,3 +121,22 @@ test("Visual Workbench has responsive/mobile treatment and remains a dedicated p
   assert.match(css, /\.visual-clipboards\s*\{\s*grid-template-columns:\s*1fr/);
   assert.match(css, /\.visual-canvas/);
 });
+
+
+test("GO Hub exposes the dedicated desk without embedding another dashboard and PWA caches its assets", () => {
+  for (const shell of ["index.html", "go-hub.html"]) {
+    const html = read(shell);
+    assert.match(html, /href="\.\/pixie-visual-workbench\.html"/);
+    assert.match(html, /PIXIE Visual Workbench/);
+  }
+  const sw = read("go-hub-sw.js");
+  for (const asset of [
+    "./pixie-visual-workbench.html",
+    "./pixie-visual-workbench.css",
+    "./pixie-visual-workbench.js",
+    "./go-hub-visual-workbench-model.js",
+  ]) {
+    assert.equal(sw.includes(asset), true, `service worker must cache ${asset}`);
+  }
+  assert.match(sw, /v12-pixie-visual-workbench/);
+});
