@@ -20,36 +20,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run tests A-F
-        run: node --test tests/[a-fA-F]*.test.cjs
-      - name: Run GO Hub tests A-F
-        run: node --test tests/go-hub-[a-fA-F]*.test.cjs
-      - name: Run GO Hub tests G-M
-        run: node --test tests/go-hub-[g-mG-M]*.test.cjs
-      - name: Run GO Hub tests N-O
-        run: node --test tests/go-hub-[n-oN-O]*.test.cjs
-      - name: Run GO Hub P core tests
-        run: node --test tests/go-hub-persistence.test.cjs tests/go-hub-piece-qc.test.cjs tests/go-hub-pixie-mcp.test.cjs
-      - name: Run GO Hub P product tests
-        run: node --test tests/go-hub-product-qc.test.cjs tests/go-hub-production-sequence.test.cjs tests/go-hub-project-status-pin-routing.test.cjs
-      - name: Run GO Hub P publication tests
-        run: node --test tests/go-hub-publication-seam.test.cjs tests/go-hub-publish-observe.test.cjs tests/go-hub-pwa-seam.test.cjs
-      - name: Run GO Hub tests Q-R
-        run: node --test tests/go-hub-[q-rQ-R]*.test.cjs
-      - name: Run GO Hub tests S-Z
-        run: node --test tests/go-hub-[s-zS-Z]*.test.cjs
-      - name: Run other G tests
-        run: node --test tests/go-browser*.test.cjs tests/go-light*.test.cjs
-      - name: Run tests H-M
-        run: node --test tests/[h-mH-M]*.test.cjs
-      - name: Run tests N-Z
-        run: node --test tests/[n-zN-Z]*.test.cjs
-      - name: Check syntax
-        run: npm run check:syntax
-      - name: Check UTF-8
-        run: npm run check:utf8
-      - name: Check no-RIDE
-        run: npm run check:no-ride
+      - name: Run deploy gate
+        run: npm run deploy:gate
       - name: Build unsigned GO Browser review artifact
         run: npm run build:go-browser-extension
       - name: Upload unsigned GO Browser review artifact
