@@ -213,8 +213,9 @@ function mountMissionBriefingRoom() {
 
   const cardCounter = createCardCounter({
     resolveWork: async ({ workId, checkpointId }) => {
-      if (centreWork?.workId === workId && centreWork?.checkpointId === checkpointId) {
-        return { status: "LIVE", ownerSource: "Centre", data: structuredClone(centreWork), sourceRef: `centre://${workId}` };
+      const currentWork = centreWork;
+      if (currentWork && currentWork.workId === workId && currentWork.checkpointId === checkpointId) {
+        return { status: "LIVE", ownerSource: "Centre", data: structuredClone(currentWork), sourceRef: `centre://${workId}` };
       }
       return readRemote("/hub/api/centre/inspect", { card: { workId, checkpointId } });
     },
