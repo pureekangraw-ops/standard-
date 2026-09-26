@@ -466,6 +466,66 @@ async function exactHeadCI(fetchImpl, token, repository, sha) {
   return { runs, checks };
 }
 
+function ciTerminalAccepted(item, acceptedTerminalConclusions) {
+  return item?.status === "completed" && acceptedTerminalConclusions.has(item?.conclusion);
+}
+
+function checkProviderKey(check) {
+  const provider = String(check?.app?.slug || check?.app?.name || "unknown").trim().toLowerCase();
+  const name = String(check?.name || "").trim();
+  return `${provider}::${name}`;
+}
+
+function isGithubActionsCheck(check) {
+  return String(check?.app?.slug || "").trim().toLowerCase() === "github-actions";
+}
+
+async function baselineAwareCIGreen(fetchImpl, token, repository, pullPayload, expectedHeadSha) {
+  const acceptedTerminalConclusions = new Set(["success", "skipped", "neutral"]);
+  const current = await exactHeadCI(fetchImpl, token, repository, expectedHeadSha);
+  if (current.error) return { error: current.error };
+
+  const currentSignals = [...current.runs, ...current.checks];
+  if (currentSignals.length === 0) return { green:false };
+
+  const strictGreen = currentSignals.every(item => ciTerminalAccepted(item, acceptedTerminalConclusions));
+  if (strictGreen) return { green:true, baselineExternalExceptions:[] };
+
+  const baseSha = String(pullPayload?.base?.sha || "").trim();
+  const ownedRunsGreen = current.runs.length > 0 &&
+    current.runs.every(item => ciTerminalAccepted(item, acceptedTerminalConclusions));
+  const ownedChecksGreen = current.checks
+    .filter(isGithubActionsCheck)
+    .every(item => ciTerminalAccepted(item, acceptedTerminalConclusions));
+  if (!baseSha || !ownedRunsGreen || !ownedChecksGreen) return { green:false };
+
+  const baseline = await exactHeadCI(fetchImpl, token, repository, baseSha);
+  if (baseline.error) return { error: baseline.error };
+
+  const baselineFailures = new Set(
+    baseline.checks
+      .filter(check => !isGithubActionsCheck(check))
+      .filter(check => check?.status === "completed" && !acceptedTerminalConclusions.has(check?.conclusion))
+      .map(check => `${checkProviderKey(check)}::${String(check?.conclusion || "")}`)
+  );
+
+  const exceptions = [];
+  for (const check of current.checks.filter(check => !isGithubActionsCheck(check))) {
+    if (ciTerminalAccepted(check, acceptedTerminalConclusions)) continue;
+    if (check?.status !== "completed") return { green:false };
+    const key = `${checkProviderKey(check)}::${String(check?.conclusion || "")}`;
+    if (!baselineFailures.has(key)) return { green:false };
+    exceptions.push({
+      provider:String(check?.app?.slug || check?.app?.name || "unknown"),
+      name:String(check?.name || ""),
+      conclusion:String(check?.conclusion || ""),
+      baselineSha:baseSha,
+    });
+  }
+
+  return { green:true, baselineExternalExceptions:exceptions };
+}
+
 async function mergePullRequest(fetchImpl, token, repository, number, expectedHeadSha, method) {
   const pull = await githubRequest(
     fetchImpl, token, `https://api.github.com/repos/${repository}/pulls/${number}`,
@@ -475,14 +535,9 @@ async function mergePullRequest(fetchImpl, token, repository, number, expectedHe
   if (currentHeadSha !== expectedHeadSha) {
     return json({ code: "STALE_PULL_REQUEST_HEAD" }, 409);
   }
-  const ci = await exactHeadCI(fetchImpl, token, repository, expectedHeadSha);
+  const ci = await baselineAwareCIGreen(fetchImpl, token, repository, pull.payload, expectedHeadSha);
   if (ci.error) return ci.error;
-  const signals = [...ci.runs, ...ci.checks];
-  const acceptedTerminalConclusions = new Set(["success", "skipped", "neutral"]);
-  const green = signals.length > 0 && signals.every(item =>
-    item.status === "completed" && acceptedTerminalConclusions.has(item.conclusion)
-  );
-  if (!green) return json({ code: "CURRENT_HEAD_CI_NOT_GREEN" }, 409);
+  if (!ci.green) return json({ code: "CURRENT_HEAD_CI_NOT_GREEN" }, 409);
   const result = await githubRequest(
     fetchImpl, token, `https://api.github.com/repos/${repository}/pulls/${number}/merge`,
     {
