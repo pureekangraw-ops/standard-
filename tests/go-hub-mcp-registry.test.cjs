@@ -184,23 +184,24 @@ test("governed tools expose exactly two gate identity values and reject extras",
   assert.deepEqual(calls.at(-1).input.workContext, { workId:"WORK-A", checkpointId:"CENTRE-001" });
 });
 
-test("merge schema uses exact-head GitHub owner truth without Foreman identity", async () => {
+test("merge schema requires explicit BIG approval on every merge", async () => {
   const { createMcpRegistry } = await import(registryUrl + "?merge=" + Date.now());
   let received = null;
   const registry = createMcpRegistry({ lifecycle: { mergePullRequest: async input => { received = input; return new Response(JSON.stringify({ ok:true }), { headers:{ "content-type":"application/json" } }); } } });
-  const result = await registry.callTool("go_hub_merge_pull_request", {
+  await assert.rejects(registry.callTool("go_hub_merge_pull_request", {
     repository: "pureekangraw-ops/standard-", number: 50, expectedHeadSha: "head-sha", workContext: factoryWorkContext,
+  }), /ownerApproval|approval/i);
+  await assert.rejects(registry.callTool("go_hub_merge_pull_request", {
+    repository: "pureekangraw-ops/standard-", number: 50, expectedHeadSha: "head-sha", ownerApproval: "GO_APPROVED", workContext: factoryWorkContext,
+  }), /BIG merge approval/i);
+  const result = await registry.callTool("go_hub_merge_pull_request", {
+    repository: "pureekangraw-ops/standard-", number: 50, expectedHeadSha: "head-sha", ownerApproval: "BIG_APPROVED", workContext: factoryWorkContext,
   });
   assert.equal(result.structuredContent.ok, true);
   assert.equal(received.number, 50);
+  assert.equal(received.ownerApproval, "BIG_APPROVED");
   assert.equal(Object.hasOwn(received, "goId"), false);
   assert.equal(Object.hasOwn(received, "jobId"), false);
-  const legacy = await registry.callTool("go_hub_merge_pull_request", {
-    repository: "pureekangraw-ops/standard-", number: 51, expectedHeadSha: "head-sha", goId: "legacy-go", jobId: "legacy-job", workContext: factoryWorkContext,
-  });
-  assert.equal(legacy.structuredContent.ok, true);
-  assert.equal(received.goId, "legacy-go");
-  assert.equal(received.jobId, "legacy-job");
 });
 
 test("registry preserves domain failures and rejects unknown tools", async () => {
