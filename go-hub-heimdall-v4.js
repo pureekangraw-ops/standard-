@@ -90,7 +90,7 @@ function reportFor(works,scanOptions={}){
     cards,
     projectBoard:projectBoard(works),
     counts:Object.values(WORK_STATUS).reduce((o,s)=>(o[s]=items.filter(x=>x.status===s).length,o),{}),
-    cardCounts:["WORK","RESUME","DONE","CANCEL"].reduce((o,s)=>(o[s]=cards.filter(x=>x.status===s).length,o),{}),
+    cardCounts:["Work","Resume","Done","Cancel"].reduce((o,s)=>(o[s]=cards.filter(x=>x.status===s).length,o),{}),
     active:items.filter(x=>x.status===WORK_STATUS.ON_PROCESS),
     waiting:items.filter(x=>x.status===WORK_STATUS.WAIT_CONFIRM),
     resumable:items.filter(x=>[WORK_STATUS.OPEN,WORK_STATUS.WAIT_CONFIRM].includes(x.status)),
