@@ -7,7 +7,7 @@ test("Counter UI is a thin Ask LIGHT conversation with no Bell, Mirror, inbox, p
   const html = fs.readFileSync("go-hub.html", "utf8");
   const shell = fs.readFileSync("go-hub-shell.js", "utf8");
   const start = html.indexOf('<section class="counter-panel"');
-  const end = html.indexOf('<section class="go-workbench"', start);
+  const end = html.indexOf('data-mission-card-reader', start);
   const counter = html.slice(start, end);
 
   assert.match(counter, /SEND WORK TO LIGHT/);
