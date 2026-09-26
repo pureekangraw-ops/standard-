@@ -16,7 +16,7 @@ function startProduction(createCodeTask) {
     .setWorkbenchTruth({ blueprint: { ref: "spec.md" } })
     .setWorkPackage({
       id: "wp-1", title: "Authority repair", purpose: "one effective factory authority",
-      blueprintRef: "spec.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "factory",
+      blueprintRef: "spec.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "factory", version: "V4",
     });
 }
 
@@ -56,7 +56,7 @@ test("factory truth derives next action instead of inheriting legacy lifecycle a
 
   task = task.recordGateHandoff({
     status: "READY_FOR_ASSEMBLY", pieceId: "piece-1", workPackageId: "wp-1",
-    blueprintRef: "spec.md", headSha: "piece-head", evidenceIds: ["piece-ev"],
+    blueprintRef: "spec.md", headSha: "piece-head", evidenceIds: ["piece-ev"], completionStamp: { name: "piece-1", version: "V4" },
   });
   assert.equal(task.factoryStage, "READY_GATE");
   assert.equal(task.nextAction, "assemble");
