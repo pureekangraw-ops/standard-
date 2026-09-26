@@ -20,8 +20,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run tests
-        run: npm test
+      - name: Run tests A-M
+        run: node --test tests/[a-mA-M]*.test.cjs
+      - name: Run tests N-Z
+        run: node --test tests/[n-zN-Z]*.test.cjs
       - name: Check syntax
         run: npm run check:syntax
       - name: Check UTF-8
