@@ -86,6 +86,25 @@ jobs:
           done
           test "$ok" = "1" || { echo "OBSERVER_REALITY_ENDPOINT_UNAVAILABLE"; exit 1; }
 
+      - name: Stamp unique Observer version for AMO
+        id: observer_version
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const manifestPath = "browser-extension/go-browser-local-observer-v1/manifest.json";
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+          const runNumber = Number(process.env.GITHUB_RUN_NUMBER);
+          const runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT || 1);
+          if (!Number.isInteger(runNumber) || runNumber < 1 || runNumber > 65535) throw new Error("OBSERVER_VERSION_RUN_NUMBER_INVALID");
+          if (!Number.isInteger(runAttempt) || runAttempt < 1 || runAttempt > 65535) throw new Error("OBSERVER_VERSION_RUN_ATTEMPT_INVALID");
+          const version = `0.1.${runNumber}.${runAttempt}`;
+          manifest.version = version;
+          fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\\n");
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\\n`);
+          console.log(`Observer AMO version: ${version}`);
+          NODE
+
       - name: Build Observer extension source
         run: npm run build:go-browser-observer-extension
 
@@ -111,6 +130,8 @@ jobs:
         shell: bash
         env:
           SIGNED_TARGET: ${{ steps.sign.outputs.target }}
+          SIGNED_VERSION: ${{ steps.observer_version.outputs.version }}
+          EXPECTED_VERSION: ${{ steps.observer_version.outputs.version }}
         run: |
           test -n "${SIGNED_TARGET}" || { echo "SIGNED_OBSERVER_TARGET_MISSING"; exit 1; }
           manifest_file="${RUNNER_TEMP}/signed-observer-manifest.json"
@@ -121,7 +142,7 @@ jobs:
           const expectedName = "GO Browser Local Observer Eye";
           const expectedId = "go-browser-local-observer-v1@pureekangraw.local";
           const actualId = manifest?.browser_specific_settings?.gecko?.id;
-          if (manifest?.name !== expectedName || actualId !== expectedId) process.exit(1);
+          if (manifest?.name !== expectedName || actualId !== expectedId || manifest?.version !== process.env.EXPECTED_VERSION) process.exit(1);
           NODE
 
       - name: Create Reality manifest and digest
@@ -144,6 +165,7 @@ jobs:
             preview_origin: process.env.REALITY_ORIGIN,
             observer_owner_url: `${process.env.REALITY_ORIGIN}/hub/observer`,
             signed_xpi_filename: "go-browser-local-observer-v1-signed.xpi",
+            signed_xpi_version: process.env.SIGNED_VERSION,
             signed_xpi_sha256: process.env.SIGNED_SHA256,
             firefox_android_reality: "PENDING_OWNER_DEVICE",
             merge_status: "NOT_MERGED",
