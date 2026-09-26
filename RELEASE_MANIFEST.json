@@ -95,6 +95,9 @@
       "path": "go-hub-piece-qc.js"
     },
     {
+      "path": "go-hub-completion-stamp.js"
+    },
+    {
       "path": "go-hub-ready-gate.js"
     },
     {

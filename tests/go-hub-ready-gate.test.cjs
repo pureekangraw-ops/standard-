@@ -11,10 +11,10 @@ function fixture() {
   return {
     workPackage: {
       id: "wp-1", blueprintRef: "spec.md", inputs: ["truth"], expectedOutputs: ["sealed piece"],
-      dependencies: ["Engine 1"], assemblyTarget: "Engine 2 line",
+      dependencies: ["Engine 1"], assemblyTarget: "Engine 2 line", version: "OWNER.19",
     },
     piece: {
-      id: "piece-1", workPackageId: "wp-1", repository: "pureekangraw-ops/standard-",
+      id: "piece-1", name: "RIDE-MAP", workPackageId: "wp-1", repository: "pureekangraw-ops/standard-",
       branch: "engine-2", headSha: "head-1", changedPaths: ["piece.js"], outputs: ["sealed piece"],
     },
     blueprint: { ref: "spec.md" },
@@ -37,6 +37,8 @@ test("Ready Gate seals an immutable, complete, exact-head handoff", async () => 
   assert.equal(handoff.status, "READY_FOR_ASSEMBLY");
   assert.equal(handoff.pieceId, "piece-1");
   assert.equal(handoff.workPackageId, "wp-1");
+  assert.deepEqual(handoff.completionStamp, { name: "RIDE-MAP", version: "OWNER.19" });
+  assert.deepEqual(Object.keys(handoff.completionStamp).sort(), ["name", "version"]);
   assert.equal(handoff.blueprintRef, "spec.md");
   assert.equal(handoff.repository, "pureekangraw-ops/standard-");
   assert.equal(handoff.branch, "engine-2");
@@ -66,4 +68,12 @@ test("Ready Gate rejects missing QC evidence and Blueprint drift", async () => {
   const drift = fixture();
   drift.blueprint.ref = "changed.md";
   assert.throws(() => sealReadyGate(drift), /mounted Blueprint/);
+});
+
+
+test("Ready Gate refuses to stamp a finished piece when the planned version is missing", async () => {
+  const { sealReadyGate } = await load();
+  const input = fixture();
+  delete input.workPackage.version;
+  assert.throws(() => sealReadyGate(input), /Work Package version is required/);
 });

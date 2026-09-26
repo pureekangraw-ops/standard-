@@ -38,6 +38,7 @@ const activeHubFiles = [
   "go-hub-code-task.js",
   "go-hub-evidence-ledger.js",
   "go-hub-piece-qc.js",
+  "go-hub-completion-stamp.js",
   "go-hub-ready-gate.js",
   "go-hub-assembly-bench.js",
   "go-hub-assembly-qc.js",

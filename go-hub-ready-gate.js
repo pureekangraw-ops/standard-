@@ -1,3 +1,5 @@
+import { stampCompletedItem } from "./go-hub-completion-stamp.js";
+
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
@@ -36,6 +38,12 @@ export function sealReadyGate({
     throw new Error("all Piece QC evidence must exist for the exact head");
   }
 
+  const completionStamp = stampCompletedItem({
+    name: required(piece.name || piece.id, "Piece name"),
+    version: required(workPackage.version, "Work Package version"),
+    verified: true,
+  });
+
   return deepFreeze({
     pieceId: required(piece.id, "Piece id"),
     workPackageId: required(workPackage.id, "Work Package id"),
@@ -51,6 +59,7 @@ export function sealReadyGate({
     evidenceIds,
     knownLimitations: clone(Array.isArray(knownLimitations) ? knownLimitations : []),
     assemblyTarget: required(workPackage.assemblyTarget, "assemblyTarget"),
+    completionStamp,
     sealedAt: new Date().toISOString(),
     status: "READY_FOR_ASSEMBLY",
   });
