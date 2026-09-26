@@ -125,7 +125,7 @@ test("LIGHT MCP exposes bounded code tools and hides delete/merge", async () => 
     "go_hub_centre_read_only_fast_lane",
     "go_hub_lighthouse_control_port_state",
     "go_hub_project_status",
-    "go_hub_board_pin_route",
+    "go_hub_board_read",
     "go_hub_observer_latest",
     "go_hub_observer_screenshot",
     "go_hub_linear_list_projects",
