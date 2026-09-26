@@ -22,8 +22,14 @@ jobs:
           node-version: 22
       - name: Run tests A-F
         run: node --test tests/[a-fA-F]*.test.cjs
-      - name: Run tests G
-        run: node --test tests/[gG]*.test.cjs
+      - name: Run GO Hub tests A-F
+        run: node --test tests/go-hub-[a-fA-F]*.test.cjs
+      - name: Run GO Hub tests G-M
+        run: node --test tests/go-hub-[g-mG-M]*.test.cjs
+      - name: Run GO Hub tests N-Z
+        run: node --test tests/go-hub-[n-zN-Z]*.test.cjs
+      - name: Run other G tests
+        run: node --test tests/go-browser*.test.cjs tests/go-light*.test.cjs
       - name: Run tests H-M
         run: node --test tests/[h-mH-M]*.test.cjs
       - name: Run tests N-Z
