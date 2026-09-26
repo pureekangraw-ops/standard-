@@ -28,8 +28,12 @@ jobs:
         run: node --test tests/go-hub-[g-mG-M]*.test.cjs
       - name: Run GO Hub tests N-O
         run: node --test tests/go-hub-[n-oN-O]*.test.cjs
-      - name: Run GO Hub tests P
-        run: node --test tests/go-hub-[pP]*.test.cjs
+      - name: Run GO Hub P core tests
+        run: node --test tests/go-hub-persistence.test.cjs tests/go-hub-piece-qc.test.cjs tests/go-hub-pixie-mcp.test.cjs
+      - name: Run GO Hub P product tests
+        run: node --test tests/go-hub-product-qc.test.cjs tests/go-hub-production-sequence.test.cjs tests/go-hub-project-status-pin-routing.test.cjs
+      - name: Run GO Hub P publication tests
+        run: node --test tests/go-hub-publication-seam.test.cjs tests/go-hub-publish-observe.test.cjs tests/go-hub-pwa-seam.test.cjs
       - name: Run GO Hub tests Q-R
         run: node --test tests/go-hub-[q-rQ-R]*.test.cjs
       - name: Run GO Hub tests S-Z
