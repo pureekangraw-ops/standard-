@@ -184,7 +184,7 @@ test("Counter surface is only handoff guidance, Notion AI catalog search, and No
   const source = read("go-hub-shell.js");
   for (const html of [read("index.html"), read("go-hub.html")]) {
     const start = html.indexOf('<section class="counter-panel"');
-    const end = html.indexOf('<section class="go-workbench"', start);
+    const end = html.indexOf('data-mission-card-reader', start);
     const counter = html.slice(start, end);
     assert.match(counter, /SEND WORK TO LIGHT/);
     assert.match(counter, /data-counter-conversation/);
