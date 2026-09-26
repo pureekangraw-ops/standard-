@@ -210,6 +210,12 @@ test("Centre includes a thin persistent GO Identity Installer dressing room", ()
     assert.match(html, /GO IDENTITY INSTALLER/);
     assert.match(html, /data-dressing-room/);
     assert.match(html, /data-dressing-status/);
+    assert.match(html, /data-dressing-rule/);
+    assert.match(html, /ทาบบัตร = อ่าน\/ฉายข้อมูลเท่านั้น/);
+    assert.match(html, /ไม่สั่งงาน/);
+    assert.match(html, /ไม่เปลี่ยน state/);
+    assert.match(html, /ไม่เปิด\/ปิดสิทธิ์/);
+    assert.match(html, /ไม่บล็อกทาง/);
     assert.equal((html.match(/data-dressing-core/g) || []).length, 5);
     assert.match(html, /data-dressing-lesson/);
     assert.match(html, /data-dressing-add/);
