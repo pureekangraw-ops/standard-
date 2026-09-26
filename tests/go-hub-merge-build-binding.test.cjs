@@ -33,12 +33,12 @@ test("Build requires a verified Merge Gate and binds Artifact to verified main S
 
 test("CodeTask cannot enter Build until PR CI merge and post-merge main truth are sealed", async () => {
   const { createCodeTask } = await import(`${taskUrl}?merge=${Date.now()}`);
-  let task = createCodeTask({ id: "merge-task", repository: "repo" }).setWorkbenchTruth({ blueprint: { ref: "spec.md" } }).setWorkPackage({ id: "wp", title: "piece", purpose: "build", blueprintRef: "spec.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "app" });
+  let task = createCodeTask({ id: "merge-task", repository: "repo" }).setWorkbenchTruth({ blueprint: { ref: "spec.md" } }).setWorkPackage({ id: "wp", title: "piece", purpose: "build", blueprintRef: "spec.md", inputs: [], expectedOutputs: [], dependencies: [], assemblyTarget: "app", version: "OWNER.19" });
   task = productionToPiece(task)
     .addEvidence({ id: "pev", scope: "piece", claim: "piece-correct", kind: "test", headSha: "piece-head" })
     .recordPieceQc({ status: "pass", checkedHeadSha: "piece-head", checks: {}, evidenceIds: ["pev"], checkedAt: "now" })
-    .recordGateHandoff({ status: "READY_FOR_ASSEMBLY", pieceId: "p", workPackageId: "wp", blueprintRef: "spec.md", headSha: "piece-head", evidenceIds: ["pev"] })
-    .recordAssembly({ id: "a1", blueprintRef: "spec.md", pieceIds: ["p"], sourceHeads: ["piece-head"], repository: "repo", integrationBranch: "integration", integrationHeadSha: "assembly-head", status: "ASSEMBLED" })
+    .recordGateHandoff({ status: "READY_FOR_ASSEMBLY", pieceId: "p", workPackageId: "wp", blueprintRef: "spec.md", headSha: "piece-head", evidenceIds: ["pev"], completionStamp: { name: "p", version: "OWNER.19" } })
+    .recordAssembly({ id: "a1", blueprintRef: "spec.md", pieceIds: ["p"], sourceHeads: ["piece-head"], repository: "repo", integrationBranch: "integration", integrationHeadSha: "assembly-head", version: "OWNER.19", completionStamps: [{ name: "p", version: "OWNER.19" }], status: "ASSEMBLED" })
     .addEvidence({ id: "aev", scope: "assembly", claim: "assembly-correct", kind: "test", headSha: "assembly-head" })
     .recordAssemblyQc({ status: "pass", checkedHeadSha: "assembly-head", checks: {}, evidenceIds: ["aev"], checkedAt: "now" });
   assert.throws(() => task.recordBuildArtifact({ id: "artifact", kind: "web", assemblyId: "a1", sourceHeadSha: "assembly-head", blueprintRef: "spec.md", digest: "digest", location: "x", builtAt: "now", status: "BUILT" }), /Merge Gate/);
