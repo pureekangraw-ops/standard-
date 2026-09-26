@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-const moduleUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-mission-card.mjs")).href;
+const moduleUrl = pathToFileURL(path.resolve(__dirname, "..", "go-hub-runtime.js")).href;
 
 function cardInput() {
   return {
