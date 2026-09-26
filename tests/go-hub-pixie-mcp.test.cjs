@@ -105,9 +105,10 @@ test("registry publishes PIXIE command and result with correct mutation hints", 
   });
   const registry = createMcpRegistry({ lifecycle });
   const tools = registry.listTools().filter(tool => tool.name.startsWith("go_hub_pixie_"));
-  assert.deepEqual(tools.map(tool => tool.name), ["go_hub_pixie_command", "go_hub_pixie_result"]);
+  assert.deepEqual(tools.map(tool => tool.name), ["go_hub_pixie_command", "go_hub_pixie_debug_factory_action", "go_hub_pixie_result"]);
   assert.equal(tools[0].annotations.readOnlyHint, false);
-  assert.equal(tools[1].annotations.readOnlyHint, true);
+  assert.equal(tools[1].annotations.readOnlyHint, false);
+  assert.equal(tools[2].annotations.readOnlyHint, true);
 });
 
 test("Factory MCP PIXIE command keeps GitHub token server-side", async () => {
@@ -140,4 +141,112 @@ test("Factory MCP PIXIE command keeps GitHub token server-side", async () => {
   assert.equal(payload.result.structuredContent.status, "QUEUED");
   assert.equal(auth, "Bearer github-runtime-secret");
   assert.doesNotMatch(JSON.stringify(payload), /github-runtime-secret/);
+});
+
+
+test("PIXIE ROOM-D direct Factory bridge requires live Maintenance/Emergency Pass from Centre", async () => {
+  const { createFactoryMcpWorker } = await import(workerUrl + "?debug-factory=" + Date.now());
+  const { createTestAccessToken } = await import(oauthUrl + "?debug-factory-token=" + Date.now());
+  const signingKey = "test-signing-key-with-enough-entropy";
+  const accessToken = await createTestAccessToken({ issuer:"https://hub.example", signingKey });
+
+  let savedFactory = null;
+  const centreWork = {
+    workId:"WORK-PIXIE-DEBUG",
+    checkpointId:"CP-PIXIE-DEBUG",
+    name:"PIXIE Debug Room",
+    command:"debug",
+    expectedResult:"factory handoff",
+    status:"ON PROCESS",
+    holder:"GO",
+    pass:{ kind:"WORK", state:"ACTIVE", holder:"GO", allowedDestinations:["factory"] },
+  };
+  const centreState = {
+    getByName(name) {
+      assert.equal(name, "WORK-PIXIE-DEBUG");
+      return {
+        async fetch(request) {
+          const input = await request.json();
+          assert.equal(input.action, "v4_inspect");
+          return new Response(JSON.stringify({ ok:true, v4:true, work:structuredClone(centreWork) }), {
+            headers:{ "content-type":"application/json" },
+          });
+        },
+      };
+    },
+  };
+  const factoryState = {
+    getByName(name) {
+      assert.equal(name, "v4:WORK-PIXIE-DEBUG");
+      return {
+        async load() { return savedFactory; },
+        async save(input) {
+          savedFactory = { revision:Number(input.expectedRevision || 0) + 1, task:structuredClone(input.task) };
+          return structuredClone(savedFactory);
+        },
+      };
+    },
+  };
+
+  const worker = createFactoryMcpWorker({ fetchImpl:async () => { throw new Error("network not expected"); } });
+  const env = {
+    GITHUB_TOKEN:"github-runtime-secret",
+    GOHUB_MASTER_KEY:signingKey,
+    GOHUB_OWNER_PASSCODE:"owner-passcode",
+    GO_HUB_CENTRE_STATE:centreState,
+    GO_HUB_FACTORY_STATE:factoryState,
+  };
+  const args = {
+    action:"start",
+    roomId:"ROOM-D",
+    factoryInput:{
+      form:{
+        goal:"Debug a verified PIXIE finding",
+        repository:"pureekangraw-ops/Go-Calalog-",
+        branch:"debug/finding",
+        expectedOutput:"Factory investigation",
+        criticalChecklist:[],
+        outputType:"REF",
+      },
+    },
+    workContext:{ workId:"WORK-PIXIE-DEBUG", checkpointId:"CP-PIXIE-DEBUG" },
+  };
+
+  const normal = await worker.fetch(rpc(accessToken, "go_hub_pixie_debug_factory_action", args), env);
+  const normalPayload = await normal.json();
+  assert.match(JSON.stringify(normalPayload), /PIXIE_DEBUG_FACTORY_MAINTENANCE_OR_EMERGENCY_REQUIRED/);
+  assert.equal(savedFactory, null);
+
+  centreWork.pass = { kind:"MAINTENANCE", state:"ACTIVE", holder:"GO", allowedDestinations:["destination://factory"] };
+  const maintenance = await worker.fetch(rpc(accessToken, "go_hub_pixie_debug_factory_action", args), env);
+  const maintenancePayload = await maintenance.json();
+  assert.equal(maintenance.status, 200);
+  assert.equal(maintenancePayload.result.structuredContent.stage, "PLAN");
+  assert.equal(maintenancePayload.result.structuredContent.workId, "WORK-PIXIE-DEBUG");
+  assert.equal(savedFactory.task.stage, "PLAN");
+
+  savedFactory = null;
+  centreWork.pass = { kind:"EMERGENCY", state:"ACTIVE", holder:"GO", allowedDestinations:["factory"], expiresAt:"2000-01-01T00:00:00Z" };
+  const expired = await worker.fetch(rpc(accessToken, "go_hub_pixie_debug_factory_action", args), env);
+  assert.match(JSON.stringify(await expired.json()), /PIXIE_DEBUG_FACTORY_EMERGENCY_PASS_EXPIRED/);
+  assert.equal(savedFactory, null);
+});
+
+test("PIXIE direct Factory bridge is locked to ROOM-D", async () => {
+  const { createFactoryMcpWorker } = await import(workerUrl + "?debug-room=" + Date.now());
+  const { createTestAccessToken } = await import(oauthUrl + "?debug-room-token=" + Date.now());
+  const signingKey = "test-signing-key-with-enough-entropy";
+  const accessToken = await createTestAccessToken({ issuer:"https://hub.example", signingKey });
+  const worker = createFactoryMcpWorker({ fetchImpl:async () => { throw new Error("network not expected"); } });
+  const response = await worker.fetch(rpc(accessToken, "go_hub_pixie_debug_factory_action", {
+    action:"inspect",
+    roomId:"ROOM-A",
+    factoryInput:{},
+    workContext:{ workId:"WORK-X", checkpointId:"CP-X" },
+  }), {
+    GITHUB_TOKEN:"github-runtime-secret",
+    GOHUB_MASTER_KEY:signingKey,
+    GOHUB_OWNER_PASSCODE:"owner-passcode",
+  });
+  assert.match(JSON.stringify(await response.json()), /PIXIE_DEBUG_ROOM_REQUIRED/);
 });
