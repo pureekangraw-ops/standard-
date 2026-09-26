@@ -7,7 +7,7 @@ function clone(value){return value==null?value:structuredClone(value);}
 function freeze(value){if(value&&typeof value==="object"&&!Object.isFrozen(value)){Object.values(value).forEach(freeze);Object.freeze(value);}return value;}
 function snap(value){return freeze(clone(value));}
 
-export const WORK_CARD_STATUS=Object.freeze({WORK:"WORK",RESUME:"RESUME",DONE:"DONE",CANCEL:"CANCEL"});
+export const WORK_CARD_STATUS=Object.freeze({WORK:"Work",RESUME:"Resume",DONE:"Done",CANCEL:"Cancel"});
 export const WORK_CARD_TYPE=Object.freeze({NORMAL:"NORMAL",URGENT:"URGENT",MAINTENANCE:"MAINTENANCE",SOS:"SOS"});
 export const HEIMDALL_HEALTH=Object.freeze({NORMAL:"NORMAL",CAUTION:"CAUTION"});
 
@@ -36,9 +36,17 @@ function hash4(value){
   return hash.toString(36).toUpperCase().padStart(4,"0").slice(-4);
 }
 function date4(value){
-  const date=new Date(text(value));
+  const raw=text(value);
+  const direct=raw.match(/^(?:20\d{2})-(\d{2})-(\d{2})/);
+  if(direct)return direct[2]+direct[1];
+  const date=new Date(raw);
   if(!Number.isFinite(date.getTime()))return "0000";
   return String(date.getUTCDate()).padStart(2,"0")+String(date.getUTCMonth()+1).padStart(2,"0");
+}
+function workIdDate4(workId){
+  const matches=[...String(workId||"").matchAll(/(20\d{2})(\d{2})(\d{2})/g)];
+  const match=matches.at(-1);
+  return match?match[3]+match[2]:null;
 }
 export function normalizeJobCode(value){
   const code=text(value).toUpperCase();
@@ -51,7 +59,7 @@ export function deriveJobCode(work={}){
   if(explicit)return explicit;
   const workId=text(work.workId);
   if(!workId)throw new Error("Work ID is required");
-  return date4(work.createdAt)+"-"+hash4(workId);
+  return (workIdDate4(workId)||date4(work.createdAt))+"-"+hash4(workId);
 }
 export function workCardStatus(status){
   const normalized=text(status).toUpperCase();
