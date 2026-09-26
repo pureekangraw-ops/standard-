@@ -1,4 +1,4 @@
-import { planCloseout } from "./go-hub-housekeeper.js";
+import { planCloseout as planProductCloseout } from "./go-hub-housekeeper.js";
 import { correlateControlRoomTruth } from "./go-hub-control-room.js";
 
 function json(payload,status=200){return new Response(JSON.stringify(payload),{status,headers:{"content-type":"application/json; charset=utf-8"}});}
@@ -7,6 +7,25 @@ const BREAKING=new Set(["FAIL","BLOCKED","WAIT"]);
 const OBSERVED_STATUS=new Set(["PASS","FAIL","BLOCKED","WAIT","UNKNOWN"]);
 function text(v){return String(v??"").trim();}
 function clone(v){return v==null?v:structuredClone(v);}
+function maintenanceCloseoutPlan(state={},input={}){
+  const probe=state.lastProbe||null;
+  if(!probe?.traceId||!Array.isArray(probe.routes))throw new Error("maintenance system check is required before closeout");
+  const attention=probe.routes.filter(route=>route?.status!=="PASS");
+  return Object.freeze({
+    status:attention.length?"CLOSEOUT_REPROBE_REQUIRED":"CLOSEOUT_READY",
+    traceId:String(probe.traceId),
+    checkedAt:String(probe.checkedAt||""),
+    routeCount:probe.routes.length,
+    verifiedRouteCount:probe.routes.length-attention.length,
+    attentionRoutes:Object.freeze(attention.map(route=>String(route.routeId||"")).filter(Boolean)),
+    mapSource:String(probe.report?.mapSource||state.map?.source||""),
+    outcome:String(input.outcome||""),
+    pullRequest:input.pullRequest??null,
+    exactHeadSha:String(input.exactHeadSha||"")||null,
+    ci:String(input.ci||"")||null,
+    remaining:Object.freeze([...(Array.isArray(input.remaining)?input.remaining:[])].map(String)),
+  });
+}
 function requireWork(input={}){
   const w=input.work||{};
   if(text(w.status)!=="ON PROCESS"||!text(w.holder))return{ok:false,code:"MAINTENANCE_ACTIVE_WORK_REQUIRED"};
@@ -186,7 +205,7 @@ export function createMaintenanceV4({readValue=async()=>({available:false,reason
       }
 
       if(action==="repair_context")return json({status:"REPAIR_CONTEXT",...work,projectId:state.projectId,servicePath:"ALL_GO_HUB_OWNED_AREAS",routeId:text(input.routeId)||null,checkpointId:text(input.checkpointId)||null,next:"GO_REPAIR_THEN_REPROBE",autoRepair:false,lastProbe:clone(state.lastProbe)});
-      if(action==="plan_closeout")return json({status:"PLAN_READY",...work,projectId:state.projectId,next:"REPROBE_AFFECTED_ROUTE_THEN_FULL_SYSTEM_CHECK",plan:planCloseout(input.input||{}),autoRepair:false});
+      if(action==="plan_closeout"){try{const plan=maintenanceCloseoutPlan(state,input.input||{});return json({status:"PLAN_READY",...work,projectId:state.projectId,next:plan.status==="CLOSEOUT_READY"?"RETURN_CENTRE":"REPROBE_AFFECTED_ROUTE_THEN_FULL_SYSTEM_CHECK",plan,autoRepair:false});}catch(error){return json({code:"MAINTENANCE_PLAN_REFUSED",message:error?.message||"plan refused"},409);}}
       return json({code:"MAINTENANCE_ACTION_UNAVAILABLE"},400);
     },
   });
@@ -200,7 +219,7 @@ export function createMaintenanceService(options={}){
     const target=text(input.target),action=text(input.action).toLowerCase();
     if(target!=="factory")return json({code:"MAINTENANCE_TARGET_UNAVAILABLE"},400);
     if(action==="inspect")return json({status:"MAINTENANCE_READY",authority:"HEALTH_CLASSIFICATION_ROUTE_ONLY",mutates:false,actions:["inspect","plan_closeout"],nextRoute:"destination://factory",compatibility:"QUARANTINED"});
-    if(action==="plan_closeout"){try{return json({status:"MAINTENANCE_PLAN_READY",authority:"HEALTH_CLASSIFICATION_ROUTE_ONLY",delegatedAuthority:"factory",nextRoute:"destination://factory",plan:planCloseout(input.input||{}),mutates:false,compatibility:"QUARANTINED"});}catch(error){return json({code:"MAINTENANCE_PLAN_REFUSED",message:error?.message||"plan refused"},409);}}
+    if(action==="plan_closeout"){try{return json({status:"MAINTENANCE_PLAN_READY",authority:"HEALTH_CLASSIFICATION_ROUTE_ONLY",delegatedAuthority:"factory",nextRoute:"destination://factory",plan:planProductCloseout(input.input||{}),mutates:false,compatibility:"QUARANTINED"});}catch(error){return json({code:"MAINTENANCE_PLAN_REFUSED",message:error?.message||"plan refused"},409);}}
     return json({code:"MAINTENANCE_ACTION_UNAVAILABLE"},400);
   }});
 }
