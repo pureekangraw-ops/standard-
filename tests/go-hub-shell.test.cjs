@@ -279,7 +279,7 @@ test("Factory work plate exposes exactly one stateless pending-card parking slot
     }
   }
 
-  assert.match(source, /import \{ workCardView \} from ".\/go-hub-work-card\.js"/);
+  assert.doesNotMatch(source, /go-hub-work-card\.js/);
   assert.match(source, /function renderMissionCardParking/);
   assert.match(source, /renderMissionCardParking\(\)/);
   assert.match(source, /new Set\(\["COMPLETE", "RETURNED", "CANCEL", "CANCELLED", "CANCELED"\]\)/);
@@ -287,5 +287,6 @@ test("Factory work plate exposes exactly one stateless pending-card parking slot
   const end = source.indexOf("\nfunction field(name)", start);
   const parking = source.slice(start, end);
   assert.doesNotMatch(parking, /localStorage|save|history/i);
-  assert.match(parking, /workCardView\(centreWork\)/);
+  assert.match(parking, /centreWork\.workId/);
+  assert.match(parking, /centreWork\.checkpointId/);
 });
