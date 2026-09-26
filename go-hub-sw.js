@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "go-hub-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v12-pixie-visual-workbench`;
+const CACHE_NAME = `${CACHE_PREFIX}v11-heimdall-authority-boundary`;
 const APP_SHELL = [
   "./",
   "./index.html",
