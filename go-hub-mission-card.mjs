@@ -1,40 +1,5 @@
-export { createTrafficSummary, createTrafficSnapshot } from "./go-hub-traffic.js";
-export { createTrafficDashboard, getTrafficDashboardStation } from "./go-hub-dashboard-model.js";
-export {
-  createFactoryStationMonitor,
-  createLibraryStationMonitor,
-  createLibraryTrafficSummary,
-  createVerificationStationMonitor,
-  createVerificationTrafficSummary,
-} from "./go-hub-station-monitors.js";
+"use strict";
 
-export function createHubRuntime() {
-  const entries = new Map();
-
-  return {
-    register(name, capability) {
-      const key = String(name || '').trim();
-      if (!key) throw new Error('capability name is required');
-      if (!capability || typeof capability !== 'object') throw new TypeError('capability must be an object');
-      if (entries.has(key)) throw new Error(`capability already registered: ${key}`);
-      entries.set(key, capability);
-      return capability;
-    },
-
-    get(name) {
-      return entries.get(String(name || '').trim()) || null;
-    },
-
-    list() {
-      return [...entries.entries()].map(([name, capability]) => ({ name, capability }));
-    },
-
-    unregister(name) {
-      return entries.delete(String(name || '').trim());
-    },
-  };
-}
-// Mission Card / Card Counter read-only briefing primitives.
 export const COMPARISON_STATUSES = Object.freeze([
   "MATCH",
   "DIFFERENT",
@@ -308,4 +273,3 @@ export async function rebrief(card, { counter, lightIntel, comparisons = [], pre
 }
 
 export const __private = Object.freeze({ NON_LIVE });
-

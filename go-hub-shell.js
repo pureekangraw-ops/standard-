@@ -1,4 +1,4 @@
-import { createHubRuntime } from "./go-hub-runtime.js";
+import { createHubRuntime, createMissionCard, createCardCounter, composeDressingBrief, compareOneToOne } from "./go-hub-runtime.js";
 import { createCodeCapability, createCodeTaskSession } from "./go-hub-code-module.js";
 import { createLocalStorageKeyValueStore, createStatePersistence } from "./go-hub-persistence.js";
 import { createGitHubWorkspace } from "./go-hub-github-workspace.js";
@@ -135,6 +135,7 @@ function readDressingState() {
 }
 
 let dressingState = readDressingState();
+let latestMissionBrief = null;
 
 function saveDressingState() {
   globalThis.localStorage?.setItem(DRESSING_STORAGE_KEY, JSON.stringify(dressingState));
@@ -164,6 +165,144 @@ function addDressingLesson(value) {
   saveDressingState();
   if (dressingLesson) dressingLesson.value = "";
   renderDressingRoom();
+}
+
+function mountMissionBriefingRoom() {
+  const room = document.querySelector("[data-dressing-room]");
+  if (!room || room.querySelector("[data-mission-card-reader]")) return;
+
+  const panel = document.createElement("div");
+  panel.className = "dressing-briefing-room";
+  panel.dataset.missionCardReader = "true";
+  panel.innerHTML = `
+    <p class="hub-kicker">MISSION BRIEFING ROOM</p>
+    <p class="counter-hint">Mission Card เป็น pointer ของ Work เท่านั้น — ทุก observation อ่านใหม่จาก owner source</p>
+    <label>Work ID<input data-mission-card-work placeholder="WORK-…"></label>
+    <label>Checkpoint ID<input data-mission-card-checkpoint placeholder="CP-…"></label>
+    <label>Job Code <span class="counter-hint">(optional)</span><input data-mission-card-job placeholder="JOB-…"></label>
+    <div class="dressing-briefing-actions">
+      <button type="button" data-mission-card-tap>ทาบ Mission Card</button>
+      <button type="button" data-mission-card-remove>ยกบัตรออก</button>
+    </div>
+    <p class="counter-result" data-mission-card-status role="status">ยังไม่มีบัตร</p>
+    <pre class="dressing-briefing-output" data-mission-card-output>ยังไม่มี Brief</pre>
+  `;
+  room.append(panel);
+
+  const workInput = panel.querySelector("[data-mission-card-work]");
+  const checkpointInput = panel.querySelector("[data-mission-card-checkpoint]");
+  const jobInput = panel.querySelector("[data-mission-card-job]");
+  const tapButton = panel.querySelector("[data-mission-card-tap]");
+  const removeButton = panel.querySelector("[data-mission-card-remove]");
+  const statusNode = panel.querySelector("[data-mission-card-status]");
+  const output = panel.querySelector("[data-mission-card-output]");
+
+  if (centreWork) {
+    workInput.value = centreWork.workId || "";
+    checkpointInput.value = centreWork.checkpointId || "";
+  }
+
+  const readRemote = async (endpoint, context) => {
+    const params = new URLSearchParams({ workId: context.card.workId, checkpointId: context.card.checkpointId });
+    const response = await fetch(`${endpoint}?${params}`);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body?.code || `${endpoint} unavailable`);
+    return body;
+  };
+
+  const cardCounter = createCardCounter({
+    resolveWork: async ({ workId, checkpointId }) => {
+      const currentWork = centreWork;
+      if (currentWork && currentWork.workId === workId && currentWork.checkpointId === checkpointId) {
+        return { status: "LIVE", ownerSource: "Centre", data: structuredClone(currentWork), sourceRef: `centre://${workId}` };
+      }
+      return readRemote("/hub/api/centre/inspect", { card: { workId, checkpointId } });
+    },
+    projections: [
+      { source: "CENTRE", read: async ({ resolved }) => ({ status: "LIVE", ownerSource: "Centre", data: resolved.work, sourceRef: `centre://${resolved.card.workId}` }) },
+      { source: "HEIMDALL", read: async ({ work }) => ({ status: "LIVE", ownerSource: "Heimdall", data: { targetId: work?.data?.targetId || work?.targetId || null } }) },
+      { source: "BOARD", read: context => readRemote("/hub/api/board/read", context) },
+      { source: "FACTORY", read: context => readRemote("/hub/api/factory/status", context) },
+      { source: "GITHUB", read: context => readRemote("/hub/api/github-workspace/status", context) },
+      { source: "CLOUDFLARE", read: context => readRemote("/hub/api/cloudflare/status", context) },
+      { source: "CONTROL ROOM", read: context => readRemote("/hub/api/centre/control-room", context) },
+    ],
+  });
+
+  const lightIntel = async ({ card, projection }) => {
+    try {
+      const body = await postCounterAction("/hub/api/counter/ask", {
+        question: `Work ${card.workId} / Checkpoint ${card.checkpointId}: มี decision, architecture note, constraint, prior discussion, related document หรือ open question อะไรเกี่ยวข้องกับงานนี้`,
+        workId: card.workId,
+        checkpointId: card.checkpointId,
+        context: { kind: "MISSION_BRIEF_INTEL", observationCount: projection.observations.length },
+      });
+      return { status: "LIVE", ownerSource: "LIGHT / Notion AI", data: body, sourceRef: body?.sourceRef || null };
+    } catch (error) {
+      return { status: "UNKNOWN", ownerSource: "LIGHT / Notion AI", data: null, sourceRef: null, error: error instanceof Error ? error.message : String(error) };
+    }
+  };
+
+  const renderBrief = brief => {
+    const lines = [
+      `DRESSING ROOM BRIEF · ${brief.workId} · ${brief.checkpointId}`,
+      `MODE: ${brief.mode} · LENS: ${brief.lens}`,
+      "",
+      "OWNER-SOURCE OBSERVATIONS",
+      ...brief.observations.map(item => `${item.source}: ${item.status} · ${item.ownerSource}${item.sourceRef ? ` · ${item.sourceRef}` : ""}`),
+      "",
+      "1:1 CROSSCHECK",
+      ...(brief.comparisons.length ? brief.comparisons.map(item => `${item.topic}: ${item.status}`) : ["UNKNOWN: no comparable pair"]),
+      "",
+      "DOUBT ENGINE",
+      ...(brief.doubts.length ? brief.doubts.map(item => `${item.label} · ${item.topic}: ${item.status}`) : ["NONE OBSERVED"]),
+      "",
+      "LIGHT INTEL",
+      `LIGHT: ${brief.light.status}${brief.light.optional ? " · optional" : ""}`,
+      "",
+      "SINCE LAST BRIEF",
+      ...(brief.sinceLastBrief.length ? brief.sinceLastBrief.map(item => `${item.source}: CHANGED`) : ["NO PRIOR BRIEF"]),
+    ];
+    output.textContent = lines.join("\n");
+  };
+
+  tapButton.addEventListener("click", async () => {
+    statusNode.textContent = "กำลังอ่าน owner sources สด…";
+    tapButton.disabled = true;
+    try {
+      const card = createMissionCard({
+        workId: workInput.value,
+        checkpointId: checkpointInput.value,
+        jobCode: jobInput.value,
+      });
+      const projection = await cardCounter.tap(card, { lens: "dressing-room" });
+      const sourceMap = new Map(projection.observations.map(item => [item.source, item]));
+      const comparisons = [
+        compareOneToOne({ topic: "Centre status ↔ Board status", left: sourceMap.get("CENTRE"), right: sourceMap.get("BOARD") }),
+        compareOneToOne({ topic: "GitHub SHA ↔ Cloudflare evidence", left: sourceMap.get("GITHUB"), right: sourceMap.get("CLOUDFLARE") }),
+        compareOneToOne({ topic: "Factory phase ↔ Control Room runtime", left: sourceMap.get("FACTORY"), right: sourceMap.get("CONTROL ROOM") }),
+      ];
+      latestMissionBrief = composeDressingBrief({
+        counterProjection: projection,
+        lightIntel: await lightIntel({ card, projection }),
+        comparisons,
+        previousBrief: latestMissionBrief,
+      });
+      renderBrief(latestMissionBrief);
+      statusNode.textContent = "อ่าน Brief ใหม่แล้ว · ไม่มีการ mutate Work / Pass / Route";
+    } catch (error) {
+      statusNode.textContent = error instanceof Error ? error.message : String(error);
+      output.textContent = "UNKNOWN — Brief unavailable";
+    } finally {
+      tapButton.disabled = false;
+    }
+  });
+
+  removeButton.addEventListener("click", () => {
+    latestMissionBrief = null;
+    statusNode.textContent = "ยกบัตรออกแล้ว · ไม่มีการเปลี่ยน Work";
+    output.textContent = "ยังไม่มี Brief";
+  });
 }
 
 function field(name) {
@@ -526,6 +665,7 @@ dressingLesson?.addEventListener("keydown", event => {
 });
 
 renderDressingRoom();
+mountMissionBriefingRoom();
 
 controlRoomRefresh?.addEventListener("click", () => { void refreshControlRoom(); });
 
