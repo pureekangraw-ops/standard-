@@ -22,8 +22,10 @@ jobs:
           node-version: 22
       - name: Run tests A-F
         run: node --test tests/[a-fA-F]*.test.cjs
-      - name: Run tests G-M
-        run: node --test tests/[g-mG-M]*.test.cjs
+      - name: Run tests G
+        run: node --test tests/[gG]*.test.cjs
+      - name: Run tests H-M
+        run: node --test tests/[h-mH-M]*.test.cjs
       - name: Run tests N-Z
         run: node --test tests/[n-zN-Z]*.test.cjs
       - name: Check syntax
