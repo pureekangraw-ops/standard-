@@ -16,7 +16,7 @@ import { createLighthouseControlPortMcpService } from "./go-hub-lighthouse-contr
 import { createGoogleDriveService } from "./go-hub-google-drive-service.mjs";
 import { createGoogleWorkspaceService } from "./go-hub-google-workspace-service.mjs";
 import { createWorkflowArtifactService } from "./go-hub-workflow-artifact-service.mjs";
-import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";
+import { createProjectStatusReadService } from "./go-hub-project-status-service.mjs";\nimport { createPixieCommandService } from "./go-hub-pixie-service.mjs";
 import { createBoardPinRouteReadService } from "./go-hub-board-pin-route.js";
 import { createGlobalAuditService } from "./go-hub-global-audit.mjs";
 import { createCounterService } from "./go-hub-counter.mjs";
@@ -58,7 +58,7 @@ const LIGHT_MUTATION_TOOL_NAMES = new Set([
   "go_hub_drive_rename_item",
 ]);
 
-const LIGHT_DIRECT_TOOL_NAMES = new Set([
+const LIGHT_DENIED_TOOL_NAMES = new Set(["go_hub_pixie_command", "go_hub_pixie_result"]);\n\nconst LIGHT_DIRECT_TOOL_NAMES = new Set([
   "go_hub_gmail_send_message",
   "go_hub_calendar_create_event",
   "go_hub_drive_create_folder",
@@ -70,7 +70,7 @@ const LIGHT_DIRECT_TOOL_NAMES = new Set([
 function lightAllowedTools(registry) {
   const allowed = new Set(LIGHT_MUTATION_TOOL_NAMES);
   for (const tool of registry.listTools()) {
-    if (tool?.annotations?.readOnlyHint === true) allowed.add(tool.name);
+    if (tool?.annotations?.readOnlyHint === true && !LIGHT_DENIED_TOOL_NAMES.has(tool.name)) allowed.add(tool.name);
   }
   return allowed;
 }
@@ -95,7 +95,7 @@ function workText(value) {
 
 function operationDestination(operation) {
   const current = workText(operation);
-  if (current.startsWith("github.") || current.startsWith("factory.")) return "destination://factory";
+  if (current.startsWith("github.") || current.startsWith("factory.") || current.startsWith("pixie.")) return "destination://factory";
   if (current.startsWith("maintenance.")) return "destination://maintenance";
   if (current.startsWith("heimdall.")) return "destination://heimdall";
   if (current.startsWith("linear.")) return "destination://linear";
@@ -697,7 +697,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
       const counterDispatch = createCounterDispatchLifecycle({ counter, dispatch, notionLight, hubOrigin:url.origin });
       const lighthouseControlPort = createLighthouseControlPortMcpService({ namespace:env?.LIGHTHOUSE_CONTROL_PORT_SESSIONS });
       const projectStatus = createProjectStatusReadService({ lifecycle, factoryBinding:env?.GO_HUB_FACTORY_STATE });
-      const boardPinRoute = createBoardPinRouteReadService();
+      const boardPinRoute = createBoardPinRouteReadService();\n      const pixie = createPixieCommandService({ fetchImpl, token:env.GITHUB_TOKEN });
       const drive = createGoogleDriveService({
         fetchImpl,
         accessToken: firstEnv(env, ["GOOGLE_DRIVE_ACCESS_TOKEN", "DRIVE_ACCESS_TOKEN", "GDRIVE_ACCESS_TOKEN", "GOOGLE_ACCESS_TOKEN", "GOOGLE_OAUTH_ACCESS_TOKEN", "GDRIVE_OAUTH_ACCESS_TOKEN"]),
@@ -881,7 +881,7 @@ export function createFactoryMcpWorker({ fetchImpl = fetch } = {}) {
           lighthouseControlPortCommand: input => lighthouseControlPort.command(input),
           projectStatus: async input => json(await projectStatus.read(input)),
           boardRead: () => lighthouseControlPort.boardRead(),
-          boardPinRoute: input => json(boardPinRoute.read(input)),
+          boardPinRoute: input => json(boardPinRoute.read(input)),\n          pixieCommand: input => runMutation("pixie.command", input, () => pixie.command(input)),\n          pixieResult: input => pixie.result(input),
           counterCreate: input => {
             const fromActor = lightMcp ? "LIGHT" : "GO";
             const toActor = lightMcp ? "GO" : "LIGHT";
