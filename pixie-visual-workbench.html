@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111318">
+  <title>PIXIE Visual Workbench</title>
+  <link rel="manifest" href="./go-hub.webmanifest">
+  <link rel="stylesheet" href="./pixie-visual-workbench.css">
+</head>
+<body>
+  <header class="visual-header">
+    <a class="visual-back" href="./go-hub.html">← GO Hub</a>
+    <div>
+      <p class="visual-kicker">PIXIE LAB · GO IMAGE SUPPORT DESK</p>
+      <h1>Visual Workbench</h1>
+      <p class="visual-subtitle">Reference + Idea → Brief / Prompt → Main Canvas</p>
+    </div>
+    <strong class="visual-local-badge">LOCAL DESK</strong>
+  </header>
+
+  <main class="visual-shell" data-visual-workbench>
+    <section class="visual-clipboards" aria-label="Pinned visual preparation">
+      <article class="visual-clipboard" data-visual-clipboard="reference" aria-labelledby="visual-reference-title">
+        <span class="visual-clip" aria-hidden="true"></span>
+        <div class="visual-panel-heading">
+          <div>
+            <p class="visual-kicker">PIN BOARD</p>
+            <h2 id="visual-reference-title">IDEA / REFERENCE</h2>
+          </div>
+          <span class="visual-count" data-reference-count>0</span>
+        </div>
+        <p class="visual-help">หนีบของไว้ดู — ยังไม่ใช่คำสั่งสร้างภาพ</p>
+
+        <div class="visual-toolbar visual-toolbar--compact">
+          <label class="visual-button visual-button--quiet">
+            + Image
+            <input type="file" accept="image/png,image/jpeg,image/webp" multiple data-reference-files hidden>
+          </label>
+          <button type="button" class="visual-button visual-button--quiet" data-selection-to-brief>Selection → Brief</button>
+        </div>
+
+        <form class="visual-note-form" data-reference-note-form>
+          <label>
+            <span>Quick note</span>
+            <textarea rows="3" maxlength="6000" data-reference-note placeholder="ภาพอ้างอิง, visual rule, mood, ประโยคเด็ด…"></textarea>
+          </label>
+          <button type="submit" class="visual-button visual-button--quiet">Pin note</button>
+        </form>
+
+        <div class="visual-reference-list" data-reference-list aria-live="polite">
+          <p class="visual-empty" data-reference-empty>ยังไม่มี reference — วางภาพหรือโน้ตไว้ตรงนี้</p>
+        </div>
+      </article>
+
+      <article class="visual-clipboard" data-visual-clipboard="brief" aria-labelledby="visual-brief-title">
+        <span class="visual-clip" aria-hidden="true"></span>
+        <div class="visual-panel-heading">
+          <div>
+            <p class="visual-kicker">WORKING BRIEF</p>
+            <h2 id="visual-brief-title">BRIEF / PROMPT</h2>
+          </div>
+          <span class="visual-state-pill" data-packet-state>NOT READY</span>
+        </div>
+        <p class="visual-help">แก้โจทย์ตรงนี้ได้เรื่อย ๆ โดยไม่แตะ reference ต้นฉบับ</p>
+
+        <form class="visual-brief-form" data-brief-form>
+          <label>Intent
+            <textarea rows="2" maxlength="1200" name="intent" data-brief-field="intent" placeholder="อยากให้คนเห็นอะไรเป็นอย่างแรก"></textarea>
+          </label>
+          <label>Prompt / Requested result
+            <textarea rows="5" maxlength="6000" name="prompt" data-brief-field="prompt" placeholder="สิ่งที่จะทำกับภาพนี้"></textarea>
+          </label>
+          <div class="visual-brief-grid">
+            <label>Must keep
+              <textarea rows="3" maxlength="2400" name="mustKeep" data-brief-field="mustKeep" placeholder="หนึ่งรายการต่อบรรทัด"></textarea>
+            </label>
+            <label>Must remove
+              <textarea rows="3" maxlength="2400" name="mustRemove" data-brief-field="mustRemove" placeholder="หนึ่งรายการต่อบรรทัด"></textarea>
+            </label>
+          </div>
+          <label>Constraints
+            <textarea rows="3" maxlength="2400" name="constraints" data-brief-field="constraints" placeholder="องค์ประกอบ, ความแม่นยำ, สิ่งที่ห้ามเดา…"></textarea>
+          </label>
+        </form>
+
+        <div class="visual-toolbar">
+          <button type="button" class="visual-button" data-copy-packet>Copy render packet</button>
+          <span class="visual-inline-status" data-packet-status role="status">ต้องมี source + intent + prompt</span>
+        </div>
+      </article>
+    </section>
+
+    <section class="visual-main" data-visual-main aria-labelledby="visual-main-title">
+      <div class="visual-main-heading">
+        <div>
+          <p class="visual-kicker">MAIN WORKSPACE</p>
+          <h2 id="visual-main-title">Canvas</h2>
+        </div>
+        <div class="visual-main-actions">
+          <label class="visual-button visual-button--quiet">
+            Import render
+            <input type="file" accept="image/png,image/jpeg,image/webp" data-render-file hidden>
+          </label>
+          <button type="button" class="visual-button visual-button--quiet" data-verify>Verify</button>
+          <strong class="visual-state-pill" data-verify-state>IDLE</strong>
+        </div>
+      </div>
+
+      <div class="visual-canvas" data-main-dropzone tabindex="0" aria-label="Main image workspace. Drop a reference image here to use it as source.">
+        <div class="visual-canvas-placeholder" data-canvas-placeholder>
+          <strong>Drop reference → source</strong>
+          <span>หรือ import ผล render กลับมาที่โต๊ะ</span>
+        </div>
+        <img data-main-image alt="" hidden>
+        <div class="visual-source-chip" data-source-chip hidden>SOURCE</div>
+        <p class="visual-canvas-caption" data-canvas-caption>ยังไม่มีภาพบนโต๊ะ</p>
+      </div>
+
+      <div class="visual-history" data-visual-history aria-label="Version history">
+        <div class="visual-history-label">
+          <span>HISTORY</span>
+          <small>บาง ๆ พอ — ไม่ใช่จอที่สี่</small>
+        </div>
+        <div class="visual-history-track" data-history-track>
+          <span class="visual-history-empty" data-history-empty>V1 · V2 · V3 จะอยู่ตรงนี้เมื่อมีผล render</span>
+        </div>
+      </div>
+    </section>
+
+    <p class="visual-footnote">
+      โต๊ะนี้เตรียม source, brief, render packet และ local verification เท่านั้น · การสร้างภาพจริงยังเป็นงานของ GO image tool
+      <span data-storage-status role="status"></span>
+    </p>
+  </main>
+
+  <script type="module" src="./pixie-visual-workbench.js"></script>
+</body>
+</html>
