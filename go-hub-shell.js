@@ -1,4 +1,4 @@
-import { createHubRuntime } from "./go-hub-runtime.js";
+import { createHubRuntime, createMissionCard, createCardCounter, composeDressingBrief, compareOneToOne } from "./go-hub-runtime.js";
 import { createCodeCapability, createCodeTaskSession } from "./go-hub-code-module.js";
 import { createLocalStorageKeyValueStore, createStatePersistence } from "./go-hub-persistence.js";
 import { createGitHubWorkspace } from "./go-hub-github-workspace.js";
@@ -11,7 +11,6 @@ import { CENTRE_STATES, admitDestination } from "./go-hub-centre.js";
 import { createCentreLiveClient } from "./go-hub-centre-client.js";
 import { getWorkTarget } from "./go-hub-work-targets.js";
 import { correlateControlRoomTruth } from "./go-hub-control-room.js";
-import { createMissionCard, createCardCounter, composeDressingBrief, compareOneToOne } from "./go-hub-mission-card.mjs";
 
 const FACTORY_DESTINATION = "destination://factory";
 const cityRoute = createCityRoute();
