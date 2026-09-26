@@ -100,8 +100,8 @@ jobs:
           if (!Number.isInteger(runAttempt) || runAttempt < 1 || runAttempt > 65535) throw new Error("OBSERVER_VERSION_RUN_ATTEMPT_INVALID");
           const version = `0.1.${runNumber}.${runAttempt}`;
           manifest.version = version;
-          fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\\n");
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\\n`);
+          fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
           console.log(`Observer AMO version: ${version}`);
           NODE
 
