@@ -3,7 +3,6 @@ import { createCodeCapability, createCodeTaskSession } from "./go-hub-code-modul
 import { createLocalStorageKeyValueStore, createStatePersistence } from "./go-hub-persistence.js";
 import { createGitHubWorkspace } from "./go-hub-github-workspace.js";
 import { createWorkbenchView } from "./go-hub-workbench-model.js";
-import { workCardView } from "./go-hub-work-card.js";
 import { createOperatorView } from "./go-hub-operator-model.js";
 import { createFactoryRealityReturn, createFactoryWorkContext } from "./go-hub-factory-return.js";
 import { createCityRoute, routeInbound } from "./go-hub-city-route.js";
@@ -182,7 +181,7 @@ function mountMissionCardStation() {
   if (centreWork) {
     workInput.value = centreWork.workId || "";
     checkpointInput.value = centreWork.checkpointId || "";
-    try { jobInput.value = workCardView(centreWork).jobCode || ""; } catch {}
+    jobInput.value = centreWork.jobCode || "";
   }
 
   const readRemote = async (endpoint, context) => {
@@ -315,19 +314,13 @@ function renderMissionCardParking() {
     return;
   }
 
-  try {
-    const card = workCardView(centreWork);
-    stateNode.textContent = "1 / 1";
-    jobNode.textContent = card.jobCode || "—";
-    statusNode.textContent = card.status || rawStatus || "UNKNOWN";
-    workNode.textContent = card.workId || "—";
-    checkpointNode.textContent = centreWork.checkpointId || "—";
-    routeNode.textContent = card.destinations.join(" · ") || FACTORY_DESTINATION;
-    noteNode.textContent = `${card.title} · ยังไม่จบ — เก็บใบเดิมไว้หยิบต่อ`;
-  } catch (error) {
-    stateNode.textContent = "UNKNOWN";
-    noteNode.textContent = error instanceof Error ? error.message : String(error);
-  }
+  stateNode.textContent = "1 / 1";
+  jobNode.textContent = centreWork.jobCode || "—";
+  statusNode.textContent = rawStatus || "UNKNOWN";
+  workNode.textContent = centreWork.workId || "—";
+  checkpointNode.textContent = centreWork.checkpointId || "—";
+  routeNode.textContent = destinations.join(" · ") || FACTORY_DESTINATION;
+  noteNode.textContent = `${centreWork.name || centreWork.task || centreWork.workId} · ยังไม่จบ — เก็บใบเดิมไว้หยิบต่อ`;
 }
 
 function field(name) {
