@@ -138,5 +138,5 @@ test("GO Hub exposes the dedicated desk without embedding another dashboard and 
   ]) {
     assert.equal(sw.includes(asset), true, `service worker must cache ${asset}`);
   }
-  assert.match(sw, /v12-pixie-visual-workbench/);
+  assert.match(sw, /go-hub-app-/);
 });
